@@ -1,0 +1,274 @@
+// Segment theme: a segment-display instrument face. Pale grey-green reflective LCD ground,
+// near-black ink, huge seven-segment speed digits over faint ghost segments, and a printed
+// small-caps legend rail. Fixed 1280x768 layout. The host strip is on TOP (48 px, contract v6).
+// Patterns to copy: the seven-segment kit in segment.slint (SegNumber, SegDigit, SegDot),
+// the unit-of-measure legend rows, the 10-cell SOC bar, and the mode row with one filled key.
+import { Vehicle, Media, Actions, Battery, Ride, DriveMode, VehicleState, Navigation, Plugins, OverlayPlacement, OverlayStyle, Telltale } from "vehicle.slint";
+import { SegDigit, SegNumber, SegDot } from "segment.slint";
+import "fonts/BarlowCondensed-SemiBold.ttf";
+import "fonts/BarlowCondensed-Regular.ttf";
+
+// Re-exported so the host can set these on the instance.
+export { Vehicle, Media, Actions, DriveMode, Battery, Ride, Navigation, Plugins }
+
+// A printed legend key. Active keys are filled; the trunk key is passive when open.
+component Key inherits Rectangle {
+    in property <string> label;
+    in property <string> icon: "";
+    in property <bool> active: false;
+    in property <bool> dimmed: false;
+    in property <color> ink: #1d201c;
+    in property <color> ground: #bac3b1;
+
+    border-width: root.active ? 0px : 2px;
+    border-color: root.ink;
+    border-radius: 6px;
+    background: root.active ? root.ink : transparent;
+    opacity: root.dimmed ? 0.35 : 1;
+    // Optional glyph (28 x 28 path) above the label.
+    Path {
+        visible: root.icon != "";
+        x: (parent.width - 28px) / 2;
+        y: 14px;
+        width: 28px;
+        height: 28px;
+        viewbox-width: 28;
+        viewbox-height: 28;
+        fill: root.ink;
+        commands: root.icon;
+    }
+    Text {
+        width: parent.width - 8px;
+        height: root.icon == "" ? parent.height : parent.height - 52px;
+        x: 4px;
+        y: root.icon == "" ? 0px : 48px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        wrap: word-wrap;
+        text: root.label;
+        color: root.active ? root.ground : root.ink;
+        font-size: 24px;
+        font-weight: 600;
+        letter-spacing: 0.8px;
+    }
+    @children
+}
+
+export component Dash inherits Window {
+    width: 1280px;
+    height: 768px;
+    background: #bac3b1;
+    default-font-family: "Barlow Condensed";
+
+    out property <color> ink: #1d201c;
+
+    // ---- state the centre readout switches on ----
+    property <bool> charge-view: Vehicle.charging || Vehicle.state == VehicleState.charging;
+    // Charging wins: a charging scooter reports park mode too.
+    property <bool> parked: !charge-view && (Vehicle.state == VehicleState.park || Vehicle.mode == DriveMode.park);
+    property <bool> reversing: Vehicle.mode == DriveMode.reverse;
+    property <bool> easy-parking: Vehicle.mode == DriveMode.easy-park;
+    property <bool> trunk-ready: Vehicle.state == VehicleState.park && Vehicle.speed-kmh < 1 && !Vehicle.trunk-open;
+
+    // ---- host overlay settings (contract v6): top strip, dark, indicators first ----
+    out property <OverlayPlacement> overlay-placement: OverlayPlacement.top;
+    out property <[Telltale]> telltale-order: [
+        Telltale.left-indicator, Telltale.right-indicator, Telltale.high-beam,
+        Telltale.headlight, Telltale.ready, Telltale.side-stand,
+        Telltale.fault, Telltale.locked, Telltale.charging,
+    ];
+    out property <OverlayStyle> overlay-style: {
+        background: #101211,
+        foreground: #e8ece4,
+        corner-radius: 6px,
+        show-labels: true,
+    };
+
+    // ---- integer readings for the segment digits (-1 = ghost only) ----
+    property <int> speed-int: round(Vehicle.speed-kmh);
+    property <int> soc-int: Vehicle.battery-pct < 0 ? -1 : round(Battery.soc-pct < 0 ? Vehicle.battery-pct : Battery.soc-pct);
+    property <int> range-int: Vehicle.range-km < 0 ? -1 : Vehicle.range-km;
+    property <int> temp-int: Battery.temp-max-c < 0 ? -1 : round(Battery.temp-max-c);
+    property <int> odo-int: round(Vehicle.odometer-km);
+    // Trip and current in tenths: 2.4 km is 24. The decimal point sits between cells 2 and 3.
+    property <int> trip-tenths: round(Vehicle.trip-km * 10);
+    property <int> amps-tenths: round(abs(Battery.current-a) * 10);
+    property <int> tenths: charge-view ? amps-tenths : trip-tenths;
+    // Clock "10:24" becomes 1024; hours = /100, minutes = mod 100. Empty text = ghost.
+    property <int> clock-val: Vehicle.clock-text == "" ? -1 : round(Vehicle.clock-text.replace-all(":", "").to-float());
+    property <int> clock-h: clock-val < 0 ? -1 : floor(clock-val / 100);
+    property <int> clock-m: clock-val < 0 ? -1 : Math.mod(clock-val, 100);
+
+    // ---- horizontal dividers and rules ----
+    Rectangle { x: 676px; y: 92px; width: 2px; height: 488px; background: root.ink; opacity: 0.55; }
+    Rectangle { x: 20px; y: 592px; width: 1240px; height: 2px; background: root.ink; opacity: 0.55; }
+
+    // ---- speed block: 3 cells, 190 x 380 each ----
+    SegNumber {
+        x: 28px; y: 92px;
+        value: charge-view ? soc-int : (parked || reversing) ? -1 : speed-int;
+        cells: 3;
+        cell-w: 190px;
+        cell-h: 380px;
+        gap: 14px;
+        ink: root.ink;
+    }
+    // Park and reverse: one large letter over the ghost cells.
+    SegDigit { x: 252px; y: 120px; width: 150px; height: 300px; visible: parked; mask: 115; ink: root.ink; }
+    SegDigit { x: 252px; y: 120px; width: 150px; height: 300px; visible: reversing && !parked; mask: 80; ink: root.ink; }
+    Text {
+        x: 28px; y: 432px; width: 598px; height: 34px;
+        visible: parked;
+        horizontal-alignment: center;
+        text: "Press the power button to start";
+        color: root.ink;
+        font-size: 28px;
+        font-weight: 600;
+    }
+    Text {
+        x: 28px; y: 476px; width: 598px; height: 36px;
+        horizontal-alignment: right;
+        text: charge-view ? "CHARGING"
+            : parked ? ""
+            : reversing ? "REVERSE"
+            : easy-parking ? "EASY PARK"
+            : "KM/H";
+        color: root.ink;
+        font-size: 30px;
+        font-weight: 600;
+        letter-spacing: 1.5px;
+    }
+
+    // ---- media / navigation line, and up to three plugin widgets as printed text ----
+    Text {
+        x: 28px; y: 514px; width: 598px; height: 36px;
+        visible: !Navigation.active;
+        text: Media.title == "" ? "Nothing playing"
+            : Media.artist == "" ? Media.title
+            : Media.title + "  -  " + Media.artist;
+        color: root.ink;
+        font-size: 28px;
+        font-weight: 600;
+        overflow: elide;
+    }
+    Rectangle {
+        x: 28px; y: 508px; width: 598px; height: 44px;
+        visible: !Navigation.active;
+        background: transparent;
+        TouchArea { clicked => { Media.play-pause(); } }
+    }
+    Text {
+        x: 28px; y: 508px; width: 598px; height: 40px;
+        visible: Navigation.active;
+        text: Navigation.instruction;
+        color: root.ink;
+        font-size: 32px;
+        font-weight: 600;
+        overflow: elide;
+    }
+    Text {
+        x: 28px; y: 550px; width: 598px; height: 30px;
+        visible: Navigation.active;
+        text: Navigation.distance + "   " + Navigation.eta;
+        color: root.ink;
+        font-size: 24px;
+        font-weight: 400;
+        overflow: elide;
+    }
+    for w[i] in Plugins.widgets : Text {
+        x: 28px + 200px * i;
+        y: 556px;
+        width: 190px;
+        height: 26px;
+        visible: i < 3;
+        text: w.title + " " + w.value + w.unit;
+        color: root.ink;
+        font-size: 22px;
+        font-weight: 400;
+        overflow: elide;
+    }
+
+    // ---- legend rail: range, SOC bar, trip or current, odometer ----
+    Text { x: 704px; y: 94px; text: "RANGE KM"; color: root.ink; font-size: 28px; font-weight: 600; letter-spacing: 1.5px; }
+    SegNumber { x: 1040px; y: 100px; value: range-int; cells: 2; cell-w: 52px; cell-h: 104px; gap: 8px; ink: root.ink; }
+    Rectangle { x: 700px; y: 208px; width: 556px; height: 2px; background: root.ink; opacity: 0.55; }
+
+    Text { x: 704px; y: 224px; text: "SOC %"; color: root.ink; font-size: 28px; font-weight: 600; letter-spacing: 1.5px; }
+    // 10-cell bar: each cell lights at 10 % steps. Unknown SOC = all cells empty.
+    for c[i] in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] : Rectangle {
+        x: 800px + 28px * i;
+        y: 240px;
+        width: 22px;
+        height: 40px;
+        border-width: 3px;
+        border-color: root.ink;
+        background: (soc-int >= (i + 1) * 10) ? root.ink : transparent;
+        border-radius: 2px;
+    }
+    Rectangle { x: 1080px; y: 252px; width: 8px; height: 16px; background: root.ink; }
+    SegNumber { x: 1172px; y: 234px; value: soc-int; cells: 2; cell-w: 30px; cell-h: 46px; gap: 4px; ink: root.ink; }
+    Rectangle { x: 700px; y: 332px; width: 556px; height: 2px; background: root.ink; opacity: 0.55; }
+
+    Text {
+        x: 704px; y: 350px;
+        text: charge-view ? "CURRENT A" : "TRIP KM";
+        color: root.ink;
+        font-size: 28px;
+        font-weight: 600;
+        letter-spacing: 1.5px;
+    }
+    SegNumber { x: 1070px; y: 350px; value: tenths; cells: 4; cell-w: 32px; cell-h: 64px; gap: 14px; ink: root.ink; }
+    SegDot { x: 1195px; y: 402px; ink: root.ink; }
+    Rectangle { x: 700px; y: 448px; width: 556px; height: 2px; background: root.ink; opacity: 0.55; }
+
+    Text { x: 704px; y: 466px; text: "ODO KM"; color: root.ink; font-size: 28px; font-weight: 600; letter-spacing: 1.5px; }
+    SegNumber { x: 1010px; y: 470px; value: odo-int; cells: 6; cell-w: 34px; cell-h: 80px; gap: 6px; ink: root.ink; }
+
+    // ---- bottom band: mode, pack temperature, clock, keys ----
+    Text { x: 36px; y: 604px; text: "MODE"; color: root.ink; font-size: 22px; font-weight: 600; letter-spacing: 1.5px; }
+    Key { x: 36px; y: 634px; width: 96px; height: 66px; label: "ECO"; active: Vehicle.mode == DriveMode.eco; ink: root.ink; ground: #bac3b1; }
+    Key { x: 140px; y: 634px; width: 128px; height: 66px; label: "NORMAL"; active: Vehicle.mode == DriveMode.normal; ink: root.ink; ground: #bac3b1; }
+    Key { x: 276px; y: 634px; width: 104px; height: 66px; label: "SPORT"; active: Vehicle.mode == DriveMode.sport; ink: root.ink; ground: #bac3b1; }
+    Key {
+        x: 388px; y: 634px; width: 120px; height: 66px;
+        label: Vehicle.hyper-available ? "HYPER" : "CUSTOM";
+        active: Vehicle.hyper-available ? Vehicle.mode == DriveMode.hyper : Vehicle.mode == DriveMode.custom;
+        ink: root.ink; ground: #bac3b1;
+    }
+    Rectangle { x: 530px; y: 604px; width: 2px; height: 140px; background: root.ink; opacity: 0.55; }
+
+    Text { x: 556px; y: 604px; text: "PACK TEMP"; color: root.ink; font-size: 22px; font-weight: 600; letter-spacing: 1.5px; }
+    SegNumber { x: 556px; y: 634px; value: temp-int; cells: 2; cell-w: 28px; cell-h: 56px; gap: 4px; ink: root.ink; }
+    Text { x: 624px; y: 646px; text: "\u{00B0}C"; color: root.ink; font-size: 26px; font-weight: 600; }
+    Rectangle { x: 686px; y: 604px; width: 2px; height: 140px; background: root.ink; opacity: 0.55; }
+
+    Text { x: 704px; y: 604px; text: "CLOCK"; color: root.ink; font-size: 22px; font-weight: 600; letter-spacing: 1.5px; }
+    SegNumber { x: 704px; y: 634px; value: clock-h; cells: 2; cell-w: 28px; cell-h: 56px; gap: 4px; ink: root.ink; }
+    SegDot { x: 772px; y: 650px; size: 9px; ink: root.ink; }
+    SegDot { x: 772px; y: 672px; size: 9px; ink: root.ink; }
+    SegNumber { x: 786px; y: 634px; value: clock-m; cells: 2; cell-w: 28px; cell-h: 56px; gap: 4px; ink: root.ink; }
+    Rectangle { x: 866px; y: 604px; width: 2px; height: 140px; background: root.ink; opacity: 0.55; }
+
+    // ---- keys: trunk (enabled parked and stopped), Android Auto, settings ----
+    Key {
+        x: 880px; y: 612px; width: 112px; height: 116px;
+        label: Vehicle.trunk-open ? "Trunk open" : "Open trunk";
+        active: Vehicle.trunk-open;
+        dimmed: !(trunk-ready || Vehicle.trunk-open);
+        ink: root.ink; ground: #bac3b1;
+        trunk-ta := TouchArea { width: parent.width; height: parent.height; enabled: trunk-ready; clicked => { Actions.open-trunk(); } }
+    }
+    Key {
+        x: 1000px; y: 612px; width: 128px; height: 116px;
+        label: "Android Auto";
+        icon: "M 14 0 L 28 28 L 14 20 L 0 28 Z";
+        ink: root.ink; ground: #bac3b1;
+        aa-ta := TouchArea { width: parent.width; height: parent.height; clicked => { Actions.open-android-auto(); } }
+    }
+    Key {
+        x: 1136px; y: 612px; width: 116px; height: 116px;
+        label: "Settings";
+        ink: root.ink; ground: #bac3b1;
+        set-ta := TouchArea { width: parent.width; height: parent.height; clicked => { Actions.open-settings(); } }
+    }
+}

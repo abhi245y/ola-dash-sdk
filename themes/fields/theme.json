@@ -1,0 +1,10 @@
+{
+  "id": "fields",
+  "name": "Data Fields",
+  "version": "1.0.0",
+  "author": "Ola Dash SDK contributors",
+  "license": "GPL-3.0-or-later",
+  "contract": 6,
+  "entry": "main.slint",
+  "description": "Cycling-computer data page: giant speed field, a 2 x 3 labelled grid with hairline dividers and one amber accent. Telltales on the left rail."
+}

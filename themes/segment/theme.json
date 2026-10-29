@@ -1,0 +1,10 @@
+{
+  "id": "segment",
+  "name": "Segment",
+  "version": "1.0.0",
+  "author": "Ola Dash SDK contributors",
+  "license": "GPL-3.0-or-later",
+  "contract": 6,
+  "entry": "main.slint",
+  "description": "Segment-display instrument face: seven-segment speed digits over ghost segments, printed legend rail and a top telltale strip. Reference for the segment kit."
+}

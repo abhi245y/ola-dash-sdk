@@ -9,7 +9,24 @@ An unofficial, open-source dash platform for the Ola S1 Pro Gen 1 electric scoot
 
 **This project is not affiliated with, endorsed by, or supported by Ola Electric.** See the [disclaimer](#disclaimer).
 
-![Default theme, sim at 75 s (riding, then charging)](docs/img/default-t75.png)
+## Reference themes
+
+Three themes ship as copyable references, each matching a design comp. The images are riding captures from `sim`.
+
+<table>
+<tr>
+<td><a href="docs/themes.md#default-themesdefault"><img src="docs/img/themes/default-riding.png" alt="Default theme, riding" width="310"></a></td>
+<td><a href="docs/themes.md#segment-themessegment"><img src="docs/img/themes/segment-riding.png" alt="Segment theme, riding" width="310"></a></td>
+<td><a href="docs/themes.md#data-fields-themesfields"><img src="docs/img/themes/fields-riding.png" alt="Data Fields theme, riding" width="310"></a></td>
+</tr>
+<tr>
+<td><b>Default</b>: arc gauge, battery ring, mode pills</td>
+<td><b>Segment</b>: seven-segment digits drawn in code</td>
+<td><b>Data Fields</b>: cycling-computer grid, left telltales</td>
+</tr>
+</table>
+
+Each theme also has park, charging, alert and trunk-open captures in [docs/img/themes/](docs/img/themes/). The gallery and the patterns to copy are in [docs/themes.md](docs/themes.md#reference-themes).
 
 ![Host build: safety overlay (TEST DATA banner, side-stand alert) drawn over the default theme in several drive modes](docs/img/grid-modes.png)
 

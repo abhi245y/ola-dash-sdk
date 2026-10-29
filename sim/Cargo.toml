@@ -17,6 +17,6 @@ serde_json = "1"
 slint = { version = "=1.18.1", default-features = false, features = ["std", "compat-1-2", "renderer-software", "backend-winit"] }
 slint-interpreter = { version = "=1.18.1", default-features = false, features = ["std", "compat-1-2", "renderer-software"] }
 # Headless PNG output for --screenshot.
-png = "0.17"
+png = "0.18"
 # Drives the async compiler without a runtime.
 pollster = "0.4"

@@ -13,7 +13,7 @@ jobs:
     name: Themes (sim check)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: System libraries for sim (fontconfig, xkbcommon)
         run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev
@@ -35,7 +35,7 @@ jobs:
     needs: themes
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: System libraries for sim (fontconfig, xkbcommon)
         run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev
@@ -73,7 +73,7 @@ jobs:
     name: Host (cargo check, aarch64)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: System libraries
         run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev

@@ -1,0 +1,46 @@
+name: Plugin submission
+description: Propose a plugin, or a change to the plugin API (API v1 is a specification)
+labels: [plugin]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Plugins are display-only and must be enabled by the owner. Plugins that need to send vehicle commands will not be accepted. See docs/plugins.md. The host implementation is in progress, so plugin work is proposed here first.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What is this?
+      options:
+        - A plugin (APK) you want to publish or link
+        - A change to plugin API v1
+        - A reference plugin idea
+    validations:
+      required: true
+  - type: textarea
+    id: slots
+    attributes:
+      label: Slots used
+      description: Which of widgets, media, navigation does it publish? What data?
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: Source or link
+      description: Repository, APK, or a description of the data source. Name any third-party service and its terms.
+  - type: textarea
+    id: api
+    attributes:
+      label: API change (if any)
+      description: Proposed method or field, additive only. Explain why an existing method is not enough.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: The plugin only displays data. It has no path to a vehicle command.
+          required: true
+        - label: It does not hide, cover, or move the host safety overlay.
+          required: true
+        - label: It works only after the owner enables it.
+          required: true

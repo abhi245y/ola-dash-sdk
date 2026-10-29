@@ -1,0 +1,56 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste passcodes, account data, or unredacted logs (they can contain vehicle identifiers). Security issues go to SECURITY.md, not here.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Host (Android app)
+        - Theme loader / contract
+        - sim
+        - tools/check-themes.sh
+        - Docs
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: "0.1.0 or a git commit"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. ...\n2. ..."
+  - type: dropdown
+    id: hardware
+    attributes:
+      label: Tested on
+      options:
+        - Desktop (sim) only
+        - Real scooter (Ola S1 Pro Gen 1)
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Diagnostics
+      description: Sim output, check-themes output, or the relevant lines of a calls log (redacted).
+      render: text

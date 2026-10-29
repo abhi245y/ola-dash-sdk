@@ -1,0 +1,38 @@
+name: Feature request
+description: Suggest a change that is not a theme or plugin submission
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Requests that would let a theme or plugin command the vehicle, hide the safety overlay, or bypass the owner's passcode or the scooter's interlocks will be declined. See docs/safety.md.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+    validations:
+      required: true
+  - type: dropdown
+    id: contract
+    attributes:
+      label: Does this need a contract change?
+      description: Contract changes must be additive and bump contract-version (docs/contract.md).
+      options:
+        - "No"
+        - "Yes, additive"
+        - "Not sure"
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: This does not let a theme or plugin send a vehicle command or hide the safety overlay.
+          required: true

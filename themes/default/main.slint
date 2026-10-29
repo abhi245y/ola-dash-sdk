@@ -1,0 +1,419 @@
+// Default theme: dark, high-contrast, built for sunlight. Original design.
+// Fixed 1280x768 layout. The top 48 px belong to the host safety bar and are
+// left as plain background. Telltales are not drawn here (host does that);
+// the turn arrows in the gauge are the one exception the contract allows.
+import { Vehicle, Media, Actions, Battery, DriveMode, Navigation, Plugins } from "vehicle.slint";
+import { Arc, GaugeTicks, TurnArrow } from "parts.slint";
+import "fonts/Inter-Regular.ttf";
+import "fonts/Inter-SemiBold.ttf";
+import "fonts/Inter-Bold.ttf";
+
+// Re-exported so the host can set these on the instance.
+export { Vehicle, Media, Actions, DriveMode, Navigation, Plugins }
+
+component ModePill inherits Rectangle {
+    in property <DriveMode> which;
+    in property <string> label;
+    in property <color> tint;
+    property <bool> active: Vehicle.mode == root.which;
+
+    height: 56px;
+    border-radius: 28px;
+    // No own animation: `tint` already eases, and animating this too would restart on every step.
+    background: active ? tint : #0e131b;
+    border-width: active ? 0px : 1px;
+    border-color: #1c2431;
+
+    Text {
+        width: parent.width;
+        height: parent.height;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        text: root.label;
+        font-size: 22px;
+        font-weight: 600;
+        letter-spacing: 1.5px;
+        color: root.active ? #05070b : #9ba6b6;
+        animate color { duration: 300ms; }
+    }
+}
+
+component IconButton inherits Rectangle {
+    in property <string> glyph;
+    in property <bool> primary: false;
+    callback clicked();
+
+    width: 76px;
+    height: 76px;
+    border-radius: 38px;
+    background: primary ? root.accent-fill : #1a2230;
+
+    in property <color> accent-fill: #ffffff;
+    in property <color> icon-color: #f4f6fa;
+
+    // Press feedback as an overlay, so the accent fill is never animated twice.
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        border-radius: parent.border-radius;
+        background: #ffffff;
+        opacity: ta.pressed ? 0.18 : 0;
+        animate opacity { duration: 120ms; }
+    }
+
+    Path {
+        x: 23px;
+        y: 23px;
+        width: 30px;
+        height: 30px;
+        viewbox-width: 30;
+        viewbox-height: 30;
+        fill: root.primary ? #05070b : root.icon-color;
+        commands: root.glyph;
+    }
+    ta := TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+export component Dash inherits Window {
+    width: 1280px;
+    height: 768px;
+    background: #05070b;
+    default-font-family: "Inter";
+
+    // ---- mode accent: animates whenever the mode changes ----
+    out property <color> accent: Vehicle.mode == DriveMode.eco ? #2ee6a6
+        : Vehicle.mode == DriveMode.normal ? #3fb8ff
+        : Vehicle.mode == DriveMode.sport ? #ffb020
+        : Vehicle.mode == DriveMode.hyper ? #ff4f6b
+        : Vehicle.mode == DriveMode.custom ? #a78bfa
+        : #7d8799;
+    animate accent { duration: 450ms; easing: ease-in-out; }
+
+    // ---- eased readings ----
+    out property <float> speed-shown: Vehicle.speed-kmh;
+    animate speed-shown { duration: 500ms; easing: ease-out; }
+    // -1 = not reported: start the sweep from empty, show "--" below.
+    out property <float> battery-shown: max(0, Vehicle.battery-pct);
+    animate battery-shown { duration: 900ms; easing: ease-in-out; }
+
+    // ---- continuous motion: blink, idle breathing, charge sweep ----
+    property <bool> blink-on: Math.mod(round(animation-tick() / 1ms), 800) < 400;
+    property <float> breath: 0.5 + 0.5 * Math.sin(animation-tick() / 3000ms * 360deg);
+    property <float> sweep-pos: 0.5 - 0.5 * Math.cos(animation-tick() / 2000ms * 360deg);
+
+    property <float> gauge-fraction: clamp(speed-shown / 120, 0, 1);
+    property <float> battery-fraction: clamp(battery-shown / 100, 0, 1);
+    // Charge marker travels along the filled battery arc while charging.
+    property <angle> spark-angle: 135deg + 270deg * battery-fraction * sweep-pos;
+
+    // Soft accent halo behind the gauge, clipped to the content area.
+    Rectangle {
+        x: 0px;
+        y: 48px;
+        width: 1280px;
+        height: 720px;
+        clip: true;
+        Rectangle {
+            x: -80px;
+            y: -64px;
+            width: 840px;
+            height: 840px;
+            background: @radial-gradient(circle, root.accent.with-alpha(0.20) 0%, transparent 60%);
+            opacity: 0.6 + 0.3 * breath;
+        }
+    }
+
+    // ---- plugin widgets: up to three small cards above the gauge; none when empty ----
+    for w[i] in Plugins.widgets : Rectangle {
+        x: 40px + 196px * i;
+        y: 56px;
+        width: 184px;
+        height: 60px;
+        visible: i < 3;
+        border-radius: 14px;
+        background: wa-ta.pressed ? #243044 : #0e131b;
+        border-width: 1px;
+        border-color: #1c2431;
+        Text {
+            x: 14px; y: 8px; width: parent.width - 28px;
+            text: w.title;
+            color: #9ba6b6;
+            font-size: 16px;
+            font-weight: 600;
+            overflow: elide;
+        }
+        Text {
+            x: 14px; y: 28px; width: parent.width - 28px;
+            text: w.value + " " + w.unit;
+            color: #f4f6fa;
+            font-size: 26px;
+            font-weight: 700;
+            overflow: elide;
+        }
+        wa-ta := TouchArea { clicked => { Plugins.widget-clicked(w.id); } }
+    }
+
+    // ---- main gauge (centre 340, 404; radius 255) ----
+    GaugeTicks {}
+    Arc { cx: 340; cy: 404; radius: 255; fraction: 1; stroke: #1a2230; stroke-width: 26px; stroke-line-cap: round; }
+    Arc { cx: 340; cy: 404; radius: 255; fraction: gauge-fraction; stroke: root.accent.with-alpha(0.16); stroke-width: 50px; stroke-line-cap: round; }
+    Arc { cx: 340; cy: 404; radius: 255; fraction: gauge-fraction; stroke: root.accent; stroke-width: 26px; stroke-line-cap: round; }
+
+    TurnArrow { x: 210px; y: 229px; left: true; tint: (Vehicle.left-indicator && blink-on) ? #5cff9d : #223041; }
+    TurnArrow { x: 414px; y: 229px; tint: (Vehicle.right-indicator && blink-on) ? #5cff9d : #223041; }
+
+    Text {
+        x: 80px;
+        y: 254px;
+        width: 520px;
+        height: 180px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        text: "" + round(speed-shown);
+        color: #f4f6fa;
+        font-size: 200px;
+        font-weight: 700;
+    }
+    Text {
+        x: 220px;
+        y: 442px;
+        width: 240px;
+        height: 36px;
+        horizontal-alignment: center;
+        text: Vehicle.mode == DriveMode.reverse ? "REVERSE"
+            : Vehicle.mode == DriveMode.easy-park ? "EASY PARK" : "km/h";
+        color: Vehicle.mode == DriveMode.reverse || Vehicle.mode == DriveMode.easy-park ? #ffb020 : #9ba6b6;
+        font-size: 30px;
+        font-weight: 600;
+    }
+    Text {
+        x: 60px;
+        y: 668px;
+        width: 560px;
+        horizontal-alignment: center;
+        text: "ODO " + round(Vehicle.odometer-km) + " km     TRIP " + round(Vehicle.trip-km) + " km";
+        color: #9ba6b6;
+        font-size: 24px;
+        font-weight: 600;
+    }
+
+    // ---- header: clock ----
+    Text {
+        x: 940px;
+        y: 64px;
+        width: 300px;
+        height: 52px;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+        text: Vehicle.clock-text;
+        color: #f4f6fa;
+        font-size: 42px;
+        font-weight: 600;
+    }
+
+    // ---- battery card ----
+    Rectangle {
+        x: 660px;
+        y: 128px;
+        width: 580px;
+        height: 228px;
+        border-radius: 24px;
+        background: #0e131b;
+        border-width: 1px;
+        border-color: #1c2431;
+    }
+    Arc { cx: 784; cy: 242; radius: 92; fraction: 1; stroke: #1a2230; stroke-width: 16px; stroke-line-cap: round; }
+    Arc { cx: 784; cy: 242; radius: 92; fraction: battery-fraction; stroke: #f4f6fa; stroke-width: 16px; stroke-line-cap: round; }
+    Rectangle {
+        visible: Vehicle.charging;
+        x: 784px + 92px * Math.cos(spark-angle) - 9px;
+        y: 242px + 92px * Math.sin(spark-angle) - 9px;
+        width: 18px;
+        height: 18px;
+        border-radius: 9px;
+        background: root.accent;
+    }
+    Text {
+        x: 704px;
+        y: 206px;
+        width: 160px;
+        height: 72px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        text: Vehicle.battery-pct < 0 ? "--" : "" + round(battery-shown) + "%";
+        color: #f4f6fa;
+        font-size: 44px;
+        font-weight: 700;
+    }
+    Text {
+        x: 930px;
+        y: 166px;
+        text: "RANGE";
+        color: #9ba6b6;
+        font-size: 20px;
+        font-weight: 600;
+        letter-spacing: 2px;
+    }
+    Text {
+        x: 930px;
+        y: 190px;
+        text: Vehicle.range-km < 0 ? "-- km" : Vehicle.range-km + " km";
+        color: #f4f6fa;
+        font-size: 60px;
+        font-weight: 700;
+    }
+    Rectangle {
+        x: 930px;
+        y: 300px;
+        width: 14px;
+        height: 14px;
+        border-radius: 7px;
+        background: Vehicle.charging ? root.accent : #9ba6b6;
+        opacity: Vehicle.charging ? 0.5 + 0.5 * breath : 1;
+    }
+    Text {
+        x: 954px;
+        y: 286px;
+        height: 40px;
+        vertical-alignment: center;
+        text: Vehicle.charging ? "Charging" : "On battery";
+        color: Vehicle.charging ? root.accent : #9ba6b6;
+        font-size: 26px;
+        font-weight: 600;
+    }
+    // Hottest pack cell, when the parser reports it (-1 = not reported).
+    Text {
+        x: 930px;
+        y: 326px;
+        width: 290px;
+        height: 26px;
+        visible: Battery.temp-max-c != -1;
+        text: "Pack " + round(Battery.temp-max-c) + " \u{00B0}C";
+        color: #9ba6b6;
+        font-size: 22px;
+        font-weight: 600;
+    }
+
+    // ---- drive mode ----
+    ModePill { x: 660px; y: 380px; width: 136px; which: DriveMode.eco; label: "ECO"; tint: root.accent; }
+    ModePill { x: 808px; y: 380px; width: 136px; which: DriveMode.normal; label: "NORMAL"; tint: root.accent; }
+    ModePill { x: 956px; y: 380px; width: 136px; which: DriveMode.sport; label: "SPORT"; tint: root.accent; }
+    ModePill {
+        x: 1104px; y: 380px; width: 136px; tint: root.accent;
+        which: Vehicle.hyper-available ? DriveMode.hyper : DriveMode.custom;
+        label: Vehicle.hyper-available ? "HYPER" : "CUSTOM";
+    }
+
+    // ---- media card (replaced by the navigation card while navigation is active) ----
+    Rectangle {
+        x: 660px;
+        y: 452px;
+        width: 580px;
+        height: 204px;
+        border-radius: 24px;
+        background: #0e131b;
+        border-width: 1px;
+        border-color: #1c2431;
+        visible: !Navigation.active;
+    }
+    Text {
+        x: 692px;
+        y: 478px;
+        width: 516px;
+        height: 36px;
+        visible: !Navigation.active;
+        text: Media.title;
+        color: #f4f6fa;
+        font-size: 30px;
+        font-weight: 600;
+        overflow: elide;
+    }
+    Text {
+        x: 692px;
+        y: 516px;
+        width: 516px;
+        height: 30px;
+        text: Media.artist;
+        color: #9ba6b6;
+        font-size: 24px;
+        overflow: elide;
+        visible: !Navigation.active;
+    }
+    IconButton { x: 692px; y: 566px; visible: !Navigation.active; glyph: "M 24 4 L 10 15 L 24 26 Z M 6 4 L 10 4 L 10 26 L 6 26 Z"; clicked => { Media.previous(); } }
+    IconButton {
+        x: 788px;
+        y: 566px;
+        visible: !Navigation.active;
+        primary: true;
+        accent-fill: root.accent;
+        glyph: Media.playing ? "M 6 4 L 12 4 L 12 26 L 6 26 Z M 18 4 L 24 4 L 24 26 L 18 26 Z" : "M 8 4 L 26 15 L 8 26 Z";
+        clicked => { Media.play-pause(); }
+    }
+    IconButton { x: 884px; y: 566px; visible: !Navigation.active; glyph: "M 6 4 L 20 15 L 6 26 Z M 24 4 L 20 4 L 20 26 L 24 26 Z"; clicked => { Media.next(); } }
+
+    // ---- navigation (from a navigation plugin): same place as the media card ----
+    Rectangle {
+        x: 660px;
+        y: 452px;
+        width: 580px;
+        height: 204px;
+        border-radius: 24px;
+        background: #0e131b;
+        border-width: 1px;
+        border-color: root.accent.with-alpha(0.55);
+        visible: Navigation.active;
+    }
+    Text {
+        x: 692px;
+        y: 486px;
+        width: 516px;
+        height: 80px;
+        visible: Navigation.active;
+        text: Navigation.instruction;
+        color: #f4f6fa;
+        font-size: 34px;
+        font-weight: 700;
+        wrap: word-wrap;
+        overflow: elide;
+    }
+    Text {
+        x: 692px;
+        y: 586px;
+        width: 516px;
+        height: 36px;
+        visible: Navigation.active;
+        text: Navigation.distance + "   " + Navigation.eta;
+        color: root.accent;
+        font-size: 28px;
+        font-weight: 600;
+        overflow: elide;
+    }
+
+    // ---- actions ----
+    Rectangle {
+        x: 660px;
+        y: 672px;
+        width: 372px;
+        height: 72px;
+        border-radius: 36px;
+        background: aa-ta.pressed ? #243044 : #0e131b;
+        border-width: 1px;
+        border-color: #1c2431;
+        Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "Android Auto"; color: #f4f6fa; font-size: 26px; font-weight: 600; }
+        aa-ta := TouchArea { clicked => { Actions.open-android-auto(); } }
+    }
+    Rectangle {
+        x: 1048px;
+        y: 672px;
+        width: 192px;
+        height: 72px;
+        border-radius: 36px;
+        background: set-ta.pressed ? #243044 : #0e131b;
+        border-width: 1px;
+        border-color: #1c2431;
+        Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "Settings"; color: #f4f6fa; font-size: 26px; font-weight: 600; }
+        set-ta := TouchArea { clicked => { Actions.open-settings(); } }
+    }
+}

@@ -1,0 +1,51 @@
+# Changelog
+
+All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/) for the host app. The theme contract has its own integer version (`contract-version` in `contract/vehicle.slint`).
+
+## [Unreleased]
+
+### Added
+
+- Plugin host (API v1). Owner-enabled plugin APKs are bound through `files/plugins/enabled` and publish widgets, media and navigation. Each plugin gets its own `IDashHost`. Limits: 4 widgets per plugin, string lengths cut. A plugin that dies is rebound with backoff.
+- Plugin data reaches the UI as one JSON snapshot per change, coalesced on the UI thread.
+- Built-in media source (`StockMediaService`): the active media session feeds the Media card, and its play, pause, next and previous controls. Needs the notification listener grant, see [docs/plugins.md](docs/plugins.md).
+- Example plugin `plugins/example-sysinfo`: free RAM, CPU temperature and uptime widgets, with its own build script and a README on the plugin anatomy.
+- `sim` with `SIM_PLUGINS=1` shows mock plugin widgets and a navigation card, for theme work without a plugin.
+- Default theme: plugin widget cards above the gauge and a navigation card in place of the media card while navigation is active. The minimal theme shows the first widget.
+
+### Changed
+
+- Keep-alive also counts media playing in PARK or charging, as the stock HMI does. Only the built-in media source counts, never a plugin. Each reason change is logged (`keep-alive <bool> reason=<touch|media|none>`).
+- `docs/plugins.md` is no longer a specification only: the host implements it.
+
+## [0.1.0] - unreleased
+
+First public snapshot. Experimental, in field testing on one rooted scooter.
+
+### Added
+
+- Android host app with a Rust and Slint runtime that loads themes at runtime, with a fallback chain (active theme, bundled default, last-resort placeholder).
+- Theme contract, versions 1 to 5:
+  - v2: park and reverse drive modes.
+  - v3: custom drive mode and `hyper-available`.
+  - v4: easy-park drive mode.
+  - v5: `VehicleState`, `Battery`, `Ride` (brakes, regen, motor and MCU temperature), `Navigation`, `Plugins`. `-1` means "not reported yet".
+- Bundled themes: `default` (arc gauge, battery ring, mode pills, media card, Android Auto and Settings buttons) and `minimal` (smallest theme using every field).
+- `sim`: desktop mock-data runner with a live window and deterministic headless PNG output, used to design and screenshot themes.
+- `sim --check` and `tools/check-themes.sh`: validate `theme.json` and compile every theme.
+- Host-owned safety overlay for telltales and alerts, drawn above every theme. Debug builds show a TEST DATA banner when injected data is active.
+- Keep-alive for the vehicle-parser service, matching the stock HMI's one-second cadence.
+- Session logging: every vehicle callback with its arguments (`calls-*.log`) and raw CAN traffic (`can-*.log`), capped at 1 GiB.
+- Debug-only test channel (`dev.olatool.dash.TEST`, `TEST_OFF`) with automatic timeout.
+- Optional unlock module: passcode entry passed to the stock profile service. It does not bypass the service's attempt limit or cooldown.
+- Development helpers for the home-screen swap (`host/test/hmi-swap.sh`) and test injection (`host/test/inject.sh`).
+- Plugin API v1 specification (AIDL under `sdk/plugin-api/`). The host implementation is listed under Unreleased.
+- Project documentation, Contributor Covenant 2.1 code of conduct, security policy, issue and PR templates, and CI.
+
+### Known issues
+
+- Building the host needs the vendor interface classes, which are not distributed. The public build does not work yet without them.
+- The host build is debuggable, so the test channel is present in the only APK produced so far. A release flavor is needed.
+- The host README and the bundled themes disagree on whether `Dash` should inherit `Window`. See [docs/themes.md](docs/themes.md).
+
+[0.1.0]: https://github.com/OWNER/REPO/releases/tag/v0.1.0

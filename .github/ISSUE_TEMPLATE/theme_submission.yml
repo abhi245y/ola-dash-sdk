@@ -1,0 +1,57 @@
+name: Theme submission
+description: Propose a theme for inclusion in the repository or the future theme index
+labels: [theme]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form to propose a theme. Themes already in your own folder need no approval. For a PR, follow CONTRIBUTING.md and attach the screenshots.
+  - type: input
+    id: theme-id
+    attributes:
+      label: Theme id
+      description: Matches the theme.json id and folder name (a-z, 0-9, -).
+      placeholder: my-theme
+    validations:
+      required: true
+  - type: input
+    id: contract
+    attributes:
+      label: Minimum contract version
+      description: The "contract" value in theme.json.
+    validations:
+      required: true
+  - type: input
+    id: license
+    attributes:
+      label: License
+      placeholder: GPL-3.0-or-later
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What the theme looks like
+      description: One paragraph. Link a repository or attach a zip, if it is not in a PR.
+    validations:
+      required: true
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Sim screenshots
+      description: Attach sim screenshots at 20 s and 75 s, or describe why not.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: tools/check-themes.sh passes for this theme.
+          required: true
+        - label: The top 48 px are left empty, and no telltales or alerts are drawn.
+          required: true
+        - label: The theme uses only the allowed callbacks (Media.*, Actions.*).
+          required: true
+        - label: Fonts are bundled with their license file, and the folder is under 2 MB.
+          required: true

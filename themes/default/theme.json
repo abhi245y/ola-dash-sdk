@@ -1,0 +1,10 @@
+{
+  "id": "default",
+  "name": "Default",
+  "version": "1.0.0",
+  "author": "Ola Dash SDK contributors",
+  "license": "GPL-3.0-or-later",
+  "contract": 5,
+  "entry": "main.slint",
+  "description": "Dark arc gauge with battery ring, mode pills, media card and Android Auto button."
+}

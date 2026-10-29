@@ -1,0 +1,110 @@
+// Ola Dash SDK theme contract.
+//
+// The host app writes `in` properties; themes only read them and may invoke the
+// allowlisted callbacks. Rules for changing this file (see docs/contract.md):
+//   - additive only: never rename or remove a field, enum value or callback;
+//   - append new enum values at the end;
+//   - bump `contract-version` and add a line to the history below.
+// The host wraps each theme and re-exports these globals, so a theme's main.slint
+// only needs to export `Dash`.
+//
+// History: v2 park, reverse | v3 custom, hyper-available | v4 easy-park |
+//          v5 VehicleState, Battery, Ride, Navigation, Plugins; -1 = not reported yet
+
+export enum DriveMode { eco, normal, sport, hyper, unknown, park, reverse, custom, easy-park }
+
+// Vehicle power state as reported by the BCM.
+// sleep: locked, ECUs off | idle: woken while locked | park: unlocked, not ready |
+// drive: ready to ride | charging: charger session active.
+export enum VehicleState { unknown, sleep, idle, park, drive, charging }
+
+export enum Regen { none, coast, brake }
+
+export global Vehicle {
+    out property <int> contract-version: 5;
+
+    in property <float> speed-kmh;
+    // -1 until the vehicle reports a value; themes should show "--".
+    in property <int> battery-pct: -1;
+    in property <int> range-km: -1;
+    in property <DriveMode> mode: DriveMode.unknown;
+    // False when the owner app revoked Hyper (mode button then cycles to Custom).
+    in property <bool> hyper-available: true;
+    in property <bool> charging;
+    in property <float> odometer-km;
+    // Distance since the last unlock.
+    in property <float> trip-km;
+    in property <VehicleState> state: VehicleState.unknown;
+
+    // Stay true while the stalk is on; themes do the blinking.
+    in property <bool> left-indicator;
+    in property <bool> right-indicator;
+    in property <bool> high-beam;
+    in property <bool> headlight;
+
+    in property <bool> locked;
+    // Same as state == drive; kept for v1 themes.
+    in property <bool> ready-to-ride;
+
+    // Clock as preformatted text so themes don't do time math.
+    in property <string> clock-text;
+}
+
+// Battery pack detail. -1 = not reported yet.
+export global Battery {
+    // Fine-grained state of charge (Vehicle.battery-pct is the rounded display value).
+    in property <float> soc-pct: -1;
+    // Pack current in amperes, as reported: negative while discharging.
+    in property <float> current-a;
+    in property <float> voltage-v: -1;
+    in property <float> temp-min-c: -1;
+    in property <float> temp-max-c: -1;
+    in property <int> health-pct: -1;
+}
+
+// Live riding detail.
+export global Ride {
+    in property <bool> front-brake;
+    in property <bool> rear-brake;
+    in property <Regen> regen: Regen.none;
+    in property <float> motor-temp-c: -1;
+    in property <float> mcu-temp-c: -1;
+}
+
+export global Media {
+    in property <string> title;
+    in property <string> artist;
+    in property <bool> playing;
+    callback play-pause();
+    callback next();
+    callback previous();
+}
+
+// Turn-by-turn from a navigation plugin. Empty strings when inactive.
+export global Navigation {
+    in property <bool> active;
+    in property <string> instruction;
+    in property <string> distance;
+    in property <string> eta;
+}
+
+// A small value card published by a plugin (see docs/plugins.md).
+export struct Widget {
+    id: string,
+    title: string,
+    value: string,
+    unit: string,
+}
+
+export global Plugins {
+    in property <[Widget]> widgets;
+    // Tell the owning plugin its widget was tapped.
+    callback widget-clicked(string /* widget id */);
+}
+
+// Harmless actions only. Vehicle commands (lock, seat, lights) are never
+// exposed to themes; they live in host-owned screens.
+export global Actions {
+    callback open-android-auto();
+    callback open-settings();
+}

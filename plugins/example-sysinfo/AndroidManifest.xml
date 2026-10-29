@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="dev.olatool.dash.plugin.sysinfo"
+    android:versionCode="1"
+    android:versionName="0.1.0">
+
+    <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="34" />
+
+    <application
+        android:label="Dash Sysinfo"
+        android:allowBackup="false">
+        <service
+            android:name=".SysinfoService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="dev.olatool.dash.plugin.PLUGIN" />
+            </intent-filter>
+            <meta-data
+                android:name="dev.olatool.dash.plugin.slots"
+                android:value="widgets" />
+        </service>
+    </application>
+</manifest>

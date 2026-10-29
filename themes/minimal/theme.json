@@ -1,0 +1,10 @@
+{
+  "id": "minimal",
+  "name": "Minimal",
+  "version": "1.0.0",
+  "author": "Ola Dash SDK contributors",
+  "license": "GPL-3.0-or-later",
+  "contract": 5,
+  "entry": "main.slint",
+  "description": "Plain text layout. Reference for the smallest working theme."
+}

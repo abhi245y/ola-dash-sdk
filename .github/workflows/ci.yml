@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  themes:
+    name: Themes (sim check)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System libraries for sim (fontconfig, xkbcommon)
+        run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            sim/target
+          key: cargo-sim-${{ runner.os }}-${{ hashFiles('sim/Cargo.lock') }}
+
+      - name: Check every theme
+        run: tools/check-themes.sh
+
+  sim-screens:
+    name: Sim screenshots
+    needs: themes
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System libraries for sim (fontconfig, xkbcommon)
+        run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            sim/target
+          key: cargo-sim-${{ runner.os }}-${{ hashFiles('sim/Cargo.lock') }}
+
+      - name: Build sim
+        run: cargo build --release --manifest-path sim/Cargo.toml
+
+      - name: Render headless screenshots
+        run: |
+          mkdir -p out
+          for dir in themes/*/; do
+            name=$(basename "$dir")
+            for at in 20 75; do
+              sim/target/release/sim "$dir" --screenshot "out/$name-t$at.png" --at "$at"
+            done
+          done
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: sim-screens
+          path: out/
+          if-no-files-found: error
+
+  host:
+    name: Host (cargo check, aarch64)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System libraries
+        run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev
+
+      - name: Add Android target
+        run: rustup target add aarch64-linux-android
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            host/target
+          key: cargo-host-${{ runner.os }}-${{ hashFiles('host/Cargo.lock') }}
+
+      # The runner's Android SDK ships an NDK; use its API 29 clang for C build scripts.
+      # Not verified in a run yet: the first run may need the NDK path adjusted.
+      - name: cargo check for aarch64-linux-android
+        run: |
+          NDK_BIN="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          export CC_aarch64_linux_android="$NDK_BIN/aarch64-linux-android29-clang"
+          export CXX_aarch64_linux_android="$NDK_BIN/aarch64-linux-android29-clang++"
+          export AR_aarch64_linux_android="$NDK_BIN/llvm-ar"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$NDK_BIN/aarch64-linux-android29-clang"
+          cargo check --manifest-path host/Cargo.toml --target aarch64-linux-android
+
+      # The vendor interface classes are not in the repository. Without them the APK cannot be built.
+      - name: Build APK (only with vendor classes present)
+        run: |
+          if [ -d private/ola-interface ]; then
+            JDK_HOME="$JAVA_HOME" ANDROID_HOME="$ANDROID_HOME" host/build.sh
+          else
+            echo "::notice title=APK build skipped::private/ola-interface/ is not in this checkout. Vendor interface classes are not distributed, so only cargo check ran."
+          fi

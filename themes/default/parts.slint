@@ -1,0 +1,59 @@
+// Drawing helpers for the default theme. Pure geometry: no globals, no state.
+// Coordinates are absolute window pixels; each element covers its parent.
+
+// Clockwise arc on a circle, starting at the lower-left (135 deg, y-down) and
+// sweeping up to 270 deg. `fraction` is 0..1 of that sweep.
+export component Arc inherits Path {
+    in property <float> cx: 0;
+    in property <float> cy: 0;
+    in property <float> radius: 100;
+    in property <float> fraction: 0;
+
+    x: 0px;
+    y: 0px;
+    width: 1280px;
+    height: 768px;
+    viewbox-x: 0;
+    viewbox-y: 0;
+    viewbox-width: 1280;
+    viewbox-height: 768;
+    fill: transparent;
+    visible: fraction > 0.003;
+
+    property <float> a0: 135;
+    property <float> a1: 135 + 270 * fraction;
+    commands: "M " + (cx + radius * Math.cos(a0 * 1deg)) + " " + (cy + radius * Math.sin(a0 * 1deg))
+        + " A " + radius + " " + radius + " 0 " + (fraction > 0.667 ? "1" : "0") + " 1 "
+        + (cx + radius * Math.cos(a1 * 1deg)) + " " + (cy + radius * Math.sin(a1 * 1deg));
+}
+
+// Speed scale ticks around the outside of the main gauge (every 10 km/h,
+// longer every 20). Static geometry for a 0..120 km/h scale centred at (340, 404).
+export component GaugeTicks inherits Path {
+    x: 0px;
+    y: 0px;
+    width: 1280px;
+    height: 768px;
+    viewbox-x: 0;
+    viewbox-y: 0;
+    viewbox-width: 1280;
+    viewbox-height: 768;
+    fill: transparent;
+    stroke: #3a4658;
+    stroke-width: 3px;
+    commands: "M 146.3 597.7 L 133.5 610.5 M 81.3 511.2 L 75.8 513.4 M 66.0 404.0 L 48.0 404.0 M 81.3 296.8 L 75.8 294.6 M 146.3 210.3 L 133.5 197.5 M 232.8 145.3 L 230.6 139.8 M 340.0 130.0 L 340.0 112.0 M 447.2 145.3 L 449.4 139.8 M 533.7 210.3 L 546.5 197.5 M 598.7 296.8 L 604.2 294.6 M 614.0 404.0 L 632.0 404.0 M 598.7 511.2 L 604.2 513.4 M 533.7 597.7 L 546.5 610.5";
+}
+
+// Turn arrow, 56x28. Tip at x=56 for right, x=0 for left.
+export component TurnArrow inherits Path {
+    in property <bool> left: false;
+    in property <color> tint: #5cff9d;
+    width: 56px;
+    height: 28px;
+    viewbox-width: 56;
+    viewbox-height: 28;
+    fill: tint;
+    commands: left
+        ? "M 0 14 L 26 0 L 26 9 L 56 9 L 56 19 L 26 19 L 26 28 Z"
+        : "M 56 14 L 30 0 L 30 9 L 0 9 L 0 19 L 30 19 L 30 28 Z";
+}

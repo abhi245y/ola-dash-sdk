@@ -1,0 +1,67 @@
+// Last-resort placeholder. Used only if the theme and the bundled default both fail.
+// Shows the contract values as plain text. Never replaced; keep it compiling.
+import { Vehicle, Actions, DriveMode } from "vehicle.slint";
+
+export component Dash inherits Window {
+    background: #000000;
+    // -1 = not reported yet.
+    property <string> battery-text: Vehicle.battery-pct < 0 ? "--" : "\{Vehicle.battery-pct}%";
+    property <string> range-text: Vehicle.range-km < 0 ? "--" : "\{Vehicle.range-km} km";
+
+    // The top 48 px belong to the host telltale bar: leave them empty.
+    VerticalLayout {
+        y: 48px;
+        height: parent.height - 48px;
+        padding: 32px;
+        spacing: 14px;
+
+        Text {
+            text: Vehicle.clock-text;
+            color: #bbbbbb;
+            font-size: 36px;
+        }
+        Text {
+            text: "\{Math.round(Vehicle.speed-kmh)} km/h";
+            color: #ffffff;
+            font-size: 150px;
+            font-weight: 700;
+        }
+        Text {
+            text: Vehicle.mode == DriveMode.eco ? "ECO"
+                : Vehicle.mode == DriveMode.normal ? "NORMAL"
+                : Vehicle.mode == DriveMode.sport ? "SPORT"
+                : Vehicle.mode == DriveMode.hyper ? "HYPER" : "";
+            color: #34c759;
+            font-size: 40px;
+        }
+        Text {
+            text: "Battery \{battery-text}   Range \{range-text}";
+            color: #dddddd;
+            font-size: 34px;
+        }
+        Text {
+            text: "Odo \{Math.round(Vehicle.odometer-km)} km   Trip \{Math.round(Vehicle.trip-km)} km";
+            color: #dddddd;
+            font-size: 34px;
+        }
+        HorizontalLayout {
+            spacing: 24px;
+            Rectangle {
+                height: 84px;
+                min-width: 320px;
+                border-radius: 12px;
+                background: #202020;
+                Text { text: "Android Auto"; color: #ffffff; font-size: 30px; horizontal-alignment: center; vertical-alignment: center; }
+                TouchArea { clicked => { Actions.open-android-auto(); } }
+            }
+            Rectangle {
+                height: 84px;
+                min-width: 320px;
+                border-radius: 12px;
+                background: #202020;
+                Text { text: "Settings"; color: #ffffff; font-size: 30px; horizontal-alignment: center; vertical-alignment: center; }
+                TouchArea { clicked => { Actions.open-settings(); } }
+            }
+        }
+    }
+}

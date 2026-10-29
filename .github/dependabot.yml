@@ -1,0 +1,21 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /sim
+    schedule:
+      interval: weekly
+    # Slint is pinned to =1.18.1 on purpose. Bump it deliberately, with a theme re-check.
+    ignore:
+      - dependency-name: slint
+      - dependency-name: slint-interpreter
+  - package-ecosystem: cargo
+    directory: /host
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: slint
+      - dependency-name: slint-interpreter
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

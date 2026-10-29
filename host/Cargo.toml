@@ -1,0 +1,25 @@
+[package]
+name = "oladash"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "GPL-3.0-or-later"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# Slint 1.18: the Android backend is Skia-only (i-slint-renderer-skia is not optional).
+slint = { version = "=1.18.1", default-features = false, features = ["std", "compat-1-18", "backend-android-activity-06", "renderer-skia-opengl"] }
+slint-interpreter = { version = "=1.18.1", default-features = false, features = ["compat-1-18", "renderer-skia-opengl"] }
+android-activity = { version = "0.6", features = ["native-activity"] }
+jni = "0.22"
+log = "0.4"
+android_logger = "0.15"
+spin_on = "0.1"
+# Already in the lock file (slint dependency); parses theme.json only.
+serde_json = "1"
+
+[profile.release]
+lto = "thin"
+strip = true

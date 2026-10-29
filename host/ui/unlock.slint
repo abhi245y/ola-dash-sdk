@@ -1,0 +1,121 @@
+// Host-only controls. PIN digits stay in Java; Slint receives only their count.
+component Key inherits Rectangle {
+    in property <string> label;
+    in property <bool> enabled: true;
+    callback pressed();
+    border-radius: 12px;
+    background: !enabled ? #10151d : touch.pressed ? #243348 : #17212e;
+    accessible-role: button;
+    accessible-label: label;
+    accessible-enabled: enabled;
+    accessible-action-default => { if root.enabled { root.pressed(); } }
+    Text {
+        text: root.label;
+        color: root.enabled ? #f4f6fa : #68778c;
+        font-size: root.label == "Delete" || root.label == "Clear" ? 22px : 34px;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.pressed(); }
+    }
+}
+
+export component UnlockScreen inherits Rectangle {
+    in property <int> phase;
+    in property <int> pin-length;
+    in property <int> attempts: -1;
+    in property <int> error;
+    in property <int> cooldown;
+    in property <bool> available;
+    in property <bool> test-mode;
+    in property <bool> side-stand;
+    callback key(int);
+    background: #070b10;
+
+    // Block theme interaction whenever authentication or PARK is in front.
+    TouchArea { }
+
+    Text {
+        x: 80px; y: 158px; width: 520px; height: 84px;
+        text: root.phase == 4 ? "PARKED"
+            : root.phase == 0 ? (root.error == 2 ? "Connection unavailable" : "Connecting")
+            : root.phase == 3 ? "Unlocking"
+            : root.phase == 2 ? "Checking passcode"
+            : root.attempts == 0 ? "Try again shortly"
+            : "Enter passcode";
+        color: root.phase == 4 ? #3fb8ff : #f4f6fa;
+        font-size: root.phase == 4 ? 72px : 46px;
+        font-weight: 700;
+        vertical-alignment: center;
+    }
+
+    Text {
+        x: 80px; y: 262px; width: 480px; height: 94px;
+        text: root.phase == 4 ? "Press the handlebar power button to start."
+            : root.phase == 0 ? (root.error == 2 ? "Cannot reach the passcode service. Retry the connection." : "Waiting for vehicle status.")
+            : root.phase == 3 ? "Waiting for the scooter to confirm unlock."
+            : root.phase == 2 ? (root.error == 2 ? "Verification is taking longer than expected. Please wait." : "Please wait.")
+            : root.test-mode ? "Exit test mode before unlocking."
+            : root.attempts == 0 ? (root.cooldown > 0 ? "Try again in " + root.cooldown + " seconds." : "Waiting for passcode access to reset.")
+            : "Use your existing scooter passcode.";
+        color: #aebbd0;
+        font-size: 28px;
+        wrap: word-wrap;
+    }
+
+    if root.phase == 1 || root.phase == 2 : HorizontalLayout {
+        x: 80px; y: 386px; width: 296px; height: 28px;
+        spacing: 22px;
+        for i in 6 : Rectangle {
+            width: 26px; height: 26px;
+            border-radius: 13px;
+            background: i < root.pin-length ? #3fb8ff : #263344;
+        }
+    }
+
+    if root.phase == 1 : Text {
+        x: 80px; y: 456px; width: 500px; height: 80px;
+        text: root.error == 1 ? "Incorrect passcode. " + root.attempts + " attempts remaining."
+            : root.error == 2 ? "Passcode service unavailable. Retry the connection."
+            : root.error == 3 ? "Unlock was not confirmed. Check the scooter, then retry."
+            : root.attempts > 0 ? root.attempts + " attempts remaining" : "";
+        color: root.error != 0 ? #ffb020 : #aebbd0;
+        font-size: 24px;
+        wrap: word-wrap;
+    }
+
+    if root.phase == 1 || root.phase == 2 : VerticalLayout {
+        x: 700px; y: 164px; width: 488px; height: 424px;
+        spacing: 12px;
+        for row in 3 : HorizontalLayout {
+            spacing: 12px;
+            for col in 3 : Key {
+                label: "" + (row * 3 + col + 1);
+                enabled: root.available && !root.test-mode;
+                pressed => { root.key(row * 3 + col + 1); }
+            }
+        }
+        HorizontalLayout {
+            spacing: 12px;
+            Key { label: "Clear"; enabled: root.available; pressed => { root.key(11); } }
+            Key { label: "0"; enabled: root.available; pressed => { root.key(0); } }
+            Key { label: "Delete"; enabled: root.available; pressed => { root.key(10); } }
+        }
+    }
+
+    if (root.phase == 0 || root.phase == 1) && root.error == 2 : Key {
+        x: 80px; y: 558px; width: 300px; height: 72px;
+        label: "Retry connection";
+        pressed => { root.key(12); }
+    }
+
+    if root.phase == 4 && root.side-stand : Text {
+        x: 80px; y: 400px; width: 650px; height: 56px;
+        text: "Close the side stand before starting.";
+        color: #ffb020;
+        font-size: 28px;
+    }
+}

@@ -1,0 +1,113 @@
+// Minimal example theme. Proves a theme swaps in at runtime with no rebuild.
+// Uses the platform default font, draws nothing in the top 48px host bar.
+import { Vehicle, Media, Actions, DriveMode, Plugins } from "vehicle.slint";
+// Re-exported so the host can reach the globals on the instance.
+export { Vehicle, Media, Actions, DriveMode, Plugins }
+
+export component Dash inherits Window {
+    width: 1280px;
+    height: 768px;
+    background: #000000;
+
+    property <string> mode-name: Vehicle.mode == DriveMode.eco ? "ECO"
+        : Vehicle.mode == DriveMode.normal ? "NORMAL"
+        : Vehicle.mode == DriveMode.sport ? "SPORT"
+        : Vehicle.mode == DriveMode.hyper ? "HYPER" : "--";
+
+    // Content area starts below the host bar.
+    Rectangle {
+        y: 48px;
+        width: parent.width;
+        height: parent.height - 48px;
+
+        Text {
+            x: 0px;
+            y: 110px;
+            width: parent.width;
+            horizontal-alignment: center;
+            text: round(Vehicle.speed-kmh) + "";
+            color: #ffffff;
+            font-size: 240px;
+            font-weight: 700;
+        }
+        Text {
+            x: 0px;
+            y: 370px;
+            width: parent.width;
+            horizontal-alignment: center;
+            text: "km/h   " + mode-name;
+            color: #b0b0b0;
+            font-size: 36px;
+        }
+        Text {
+            x: 40px;
+            y: 450px;
+            text: (Vehicle.battery-pct < 0 ? "--" : "" + Vehicle.battery-pct + "%") + "   "
+                + (Vehicle.range-km < 0 ? "--" : "" + Vehicle.range-km) + " km"
+                + (Vehicle.charging ? "  charging" : "");
+            color: #ffffff;
+            font-size: 48px;
+        }
+        Text {
+            x: 40px;
+            y: 520px;
+            text: (Vehicle.left-indicator ? "<  " : "") + "trip " + round(Vehicle.trip-km) + " km" + (Vehicle.right-indicator ? "  >" : "");
+            color: #ffffff;
+            font-size: 36px;
+        }
+        Text {
+            x: parent.width - 320px;
+            y: 20px;
+            width: 300px;
+            horizontal-alignment: right;
+            text: Vehicle.clock-text;
+            color: #ffffff;
+            font-size: 40px;
+        }
+
+        // First plugin widget, if any (see docs/plugins.md).
+        if Plugins.widgets.length > 0 : Text {
+            x: 280px;
+            y: 36px;
+            width: 400px;
+            text: Plugins.widgets[0].title + " " + Plugins.widgets[0].value + " " + Plugins.widgets[0].unit;
+            color: #ffffff;
+            font-size: 30px;
+            overflow: elide;
+        }
+
+        Rectangle {
+            x: 40px; y: 20px; width: 200px; height: 64px;
+            background: #2a2a2a; border-radius: 12px;
+            Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "Settings"; color: #fff; font-size: 26px; }
+            TouchArea { clicked => { Actions.open-settings(); } }
+        }
+
+        // Media row
+        Rectangle {
+            x: 40px; y: 600px; width: 520px; height: 120px;
+            background: #1a1a1a;
+            border-radius: 12px;
+            Text { x: 24px; y: 16px; text: Media.title; color: #fff; font-size: 30px; }
+            Text { x: 24px; y: 60px; text: Media.artist; color: #888; font-size: 24px; }
+        }
+        Rectangle {
+            x: 580px; y: 600px; width: 160px; height: 120px;
+            background: #2a2a2a; border-radius: 12px;
+            Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: Media.playing ? "Pause" : "Play"; color: #fff; font-size: 30px; }
+            TouchArea { clicked => { Media.play-pause(); } }
+        }
+        Rectangle {
+            x: 760px; y: 600px; width: 160px; height: 120px;
+            background: #2a2a2a; border-radius: 12px;
+            Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "Next"; color: #fff; font-size: 30px; }
+            TouchArea { clicked => { Media.next(); } }
+        }
+        Rectangle {
+            x: 940px; y: 600px; width: 300px; height: 120px;
+            background: #2a2a2a; border-radius: 12px;
+            Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "Android Auto"; color: #fff; font-size: 30px; }
+            TouchArea { clicked => { Actions.open-android-auto(); } }
+        }
+    }
+}

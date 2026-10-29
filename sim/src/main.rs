@@ -1,0 +1,498 @@
+//! Desktop mock-data runner for ola-dash themes.
+//!
+//!   sim <theme-dir>                              interactive window
+//!   sim <theme-dir> --screenshot out.png --at 30 headless PNG at sim time 30 s
+//!   sim --check <theme-dir>                      validate theme.json and compile (no window)
+//!   options: --contract <dir>  (default: <theme>/../../contract)
+//!
+//! The fake vehicle is a pure function of time (`sim_at`), so a screenshot at
+//! `--at T` is reproducible: the headless path steps a mock clock from 0 to T
+//! at 60 Hz so animations settle the way they would on a real device.
+
+use slint::platform::software_renderer::{
+    MinimalSoftwareWindow, PremultipliedRgbaColor, RepaintBufferType,
+};
+use slint::platform::{Platform, PlatformError, WindowAdapter};
+use slint::{ComponentHandle, Timer, TimerMode};
+use slint_interpreter::{ComponentDefinition, ComponentInstance, Compiler, Value};
+use std::cell::{Cell, RefCell};
+use std::collections::HashSet;
+use std::error::Error;
+use std::f64::consts::PI;
+use std::path::{Path, PathBuf};
+use std::rc::Rc;
+use std::time::{Duration, Instant};
+
+/// Keys every theme.json must carry (see docs/themes.md).
+const REQUIRED_STR_KEYS: [&str; 7] = ["id", "name", "version", "author", "license", "entry", "description"];
+
+const WIDTH: u32 = 1280;
+const HEIGHT: u32 = 768;
+const TRACKS: [(&str, &str); 3] = [
+    ("Harbor Lights", "Mira Vale"),
+    ("Cold Current", "Oslo Static"),
+    ("Low Orbit", "The Cartographers"),
+];
+
+/// Vehicle state as the host would publish it. Indicators are solid on/off;
+/// blinking is the theme's job.
+#[derive(Clone, Debug)]
+struct Sim {
+    speed: f64,
+    battery: i64,
+    range: i64,
+    mode: &'static str,
+    charging: bool,
+    odo: f64,
+    trip: f64,
+    left: bool,
+    right: bool,
+    high_beam: bool,
+    headlight: bool,
+    locked: bool,
+    ready: bool,
+    state: &'static str,
+    clock: String,
+}
+
+/// 120 s loop: 60 s riding (mode cycles eco->normal->sport->hyper every 15 s,
+/// battery drains 100->60), then 60 s stopped and charging back to 100.
+fn sim_at(t: f64) -> Sim {
+    let loop_t = t % 120.0;
+    let riding = loop_t < 60.0;
+    let (mode, top) = if riding {
+        match (loop_t / 15.0) as u32 {
+            0 => ("eco", 45.0),
+            1 => ("normal", 70.0),
+            2 => ("sport", 95.0),
+            _ => ("hyper", 120.0),
+        }
+    } else {
+        ("eco", 0.0)
+    };
+    // Accelerate/brake wave: 0 .. top, 9 s period.
+    let speed = top * (0.5 - 0.5 * (2.0 * PI * t / 9.0).cos());
+    let battery_f = if riding {
+        100.0 - (40.0 / 60.0) * loop_t
+    } else {
+        60.0 + 40.0 * (loop_t - 60.0) / 60.0
+    };
+    let battery = battery_f.round() as i64;
+    let minutes = (10 * 60 + 24 + (t / 60.0) as i64) % (24 * 60);
+    Sim {
+        speed,
+        battery,
+        range: (battery_f * 1.05).round() as i64,
+        mode,
+        charging: !riding,
+        odo: 1234.5 + t * 0.01,
+        trip: (t % 3600.0) * 0.02,
+        left: (t % 40.0) >= 10.0 && (t % 40.0) < 16.0,
+        right: (t % 40.0) >= 25.0 && (t % 40.0) < 31.0,
+        high_beam: (t % 60.0) >= 40.0 && (t % 60.0) < 45.0,
+        headlight: true,
+        locked: false,
+        ready: true,
+        state: if riding { "drive" } else { "charging" },
+        clock: format!("{:02}:{:02}", minutes / 60, minutes % 60),
+    }
+}
+
+/// Media state the theme can change through callbacks.
+#[derive(Default)]
+struct MediaState {
+    playing: Cell<bool>,
+    /// Added to the time-based track index; moved by next/previous.
+    track_offset: Cell<usize>,
+}
+
+impl MediaState {
+    fn new() -> Rc<Self> {
+        let m = Self::default();
+        m.playing.set(true);
+        Rc::new(m)
+    }
+    fn track(&self, t: f64) -> (&'static str, &'static str) {
+        let idx = (t / 30.0) as usize + self.track_offset.get();
+        TRACKS[idx % TRACKS.len()]
+    }
+}
+
+/// Pushes sim state into the Vehicle and Media globals of an instance.
+struct Feeder {
+    media: Rc<MediaState>,
+    warned: RefCell<HashSet<String>>,
+    /// Set with SIM_PLUGINS=1: mock plugin widgets and an active navigation card.
+    plugins: bool,
+}
+
+impl Feeder {
+    fn new() -> Self {
+        let plugins = std::env::var_os("SIM_PLUGINS").is_some();
+        Self { media: MediaState::new(), warned: Default::default(), plugins }
+    }
+
+    fn push_plugins(&self, inst: &ComponentInstance) {
+        let card = |pairs: [(&str, &str); 4]| {
+            Value::Struct(
+                pairs.iter().map(|(k, v)| (k.to_string(), Value::String((*v).into()))).collect(),
+            )
+        };
+        let widgets = vec![
+            card([("id", "ram"), ("title", "Free RAM"), ("value", "1793"), ("unit", "MB")]),
+            card([("id", "temp"), ("title", "CPU"), ("value", "41"), ("unit", "C")]),
+            card([("id", "uptime"), ("title", "Uptime"), ("value", "3h 12m"), ("unit", "")]),
+        ];
+        self.set(inst, "Plugins", "widgets", Value::Model(slint::ModelRc::new(slint::VecModel::from(widgets))));
+        self.set(inst, "Navigation", "active", Value::Bool(true));
+        self.set(inst, "Navigation", "instruction", Value::String("Turn left onto Harbour Road".into()));
+        self.set(inst, "Navigation", "distance", Value::String("320 m".into()));
+        self.set(inst, "Navigation", "eta", Value::String("14:32".into()));
+    }
+
+    fn set(&self, inst: &ComponentInstance, global: &str, prop: &str, v: Value) {
+        if let Err(e) = inst.set_global_property(global, prop, v) {
+            let key = format!("{global}.{prop}");
+            if self.warned.borrow_mut().insert(key.clone()) {
+                eprintln!("sim: cannot set {key}: {e}");
+            }
+        }
+    }
+
+    fn push(&self, inst: &ComponentInstance, t: f64) {
+        let s = sim_at(t);
+        let (title, artist) = self.media.track(t);
+        self.set(inst, "Vehicle", "speed-kmh", Value::Number(s.speed));
+        self.set(inst, "Vehicle", "battery-pct", Value::Number(s.battery as f64));
+        self.set(inst, "Vehicle", "range-km", Value::Number(s.range as f64));
+        self.set(inst, 
+            "Vehicle",
+            "mode",
+            Value::EnumerationValue("DriveMode".into(), s.mode.into()),
+        );
+        self.set(inst, "Vehicle", "charging", Value::Bool(s.charging));
+        self.set(inst, "Vehicle", "odometer-km", Value::Number(s.odo));
+        self.set(inst, "Vehicle", "trip-km", Value::Number(s.trip));
+        self.set(inst, "Vehicle", "left-indicator", Value::Bool(s.left));
+        self.set(inst, "Vehicle", "right-indicator", Value::Bool(s.right));
+        self.set(inst, "Vehicle", "high-beam", Value::Bool(s.high_beam));
+        self.set(inst, "Vehicle", "headlight", Value::Bool(s.headlight));
+        self.set(inst, "Vehicle", "locked", Value::Bool(s.locked));
+        self.set(inst, "Vehicle", "ready-to-ride", Value::Bool(s.ready));
+        self.set(inst, "Vehicle", "clock-text", Value::String(s.clock.into()));
+        self.set(
+            inst,
+            "Vehicle",
+            "state",
+            Value::EnumerationValue("VehicleState".into(), s.state.into()),
+        );
+        self.set(inst, "Media", "title", Value::String(title.into()));
+        self.set(inst, "Media", "artist", Value::String(artist.into()));
+        self.set(inst, "Media", "playing", Value::Bool(self.media.playing.get()));
+        if self.plugins {
+            self.push_plugins(inst);
+        }
+    }
+
+    /// Logs Actions and wires Media callbacks to the local media state.
+    fn wire_callbacks(&self, inst: &ComponentInstance) {
+        let m = self.media.clone();
+        let _ = inst.set_global_callback("Media", "play-pause", move |_| {
+            m.playing.set(!m.playing.get());
+            println!("media: play-pause -> playing={}", m.playing.get());
+            Value::Void
+        });
+        let m = self.media.clone();
+        let _ = inst.set_global_callback("Media", "next", move |_| {
+            m.track_offset.set(m.track_offset.get() + 1);
+            println!("media: next");
+            Value::Void
+        });
+        let m = self.media.clone();
+        let _ = inst.set_global_callback("Media", "previous", move |_| {
+            m.track_offset.set(m.track_offset.get() + TRACKS.len() - 1);
+            println!("media: previous");
+            Value::Void
+        });
+        let _ = inst.set_global_callback("Actions", "open-android-auto", |_| {
+            println!("action: open-android-auto (sim: no-op)");
+            Value::Void
+        });
+        let _ = inst.set_global_callback("Actions", "open-settings", |_| {
+            println!("action: open-settings (sim: no-op)");
+            Value::Void
+        });
+    }
+}
+
+/// Headless platform: window is a software-rendered buffer, time is a mock clock.
+struct Headless {
+    window: Rc<MinimalSoftwareWindow>,
+    clock: Rc<Cell<Duration>>,
+}
+
+impl Platform for Headless {
+    fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, PlatformError> {
+        Ok(self.window.clone())
+    }
+    fn duration_since_start(&self) -> Duration {
+        self.clock.get()
+    }
+}
+
+struct Args {
+    theme: PathBuf,
+    contract: PathBuf,
+    screenshot: Option<PathBuf>,
+    at: f64,
+    check: bool,
+}
+
+fn parse_args() -> Result<Args, String> {
+    let mut theme = None;
+    let mut contract = None;
+    let mut screenshot = None;
+    let mut at = 5.0;
+    let mut check = false;
+    let mut it = std::env::args().skip(1);
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--check" => check = true,
+            "--contract" => contract = it.next().map(PathBuf::from),
+            "--screenshot" => screenshot = it.next().map(PathBuf::from),
+            "--at" => {
+                at = it
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .ok_or("--at needs seconds")?
+            }
+            "-h" | "--help" => {
+                println!("usage: sim <theme-dir> [--screenshot out.png --at SECS] [--contract DIR]");
+                println!("       sim --check <theme-dir> [--contract DIR]");
+                std::process::exit(0);
+            }
+            _ if theme.is_none() => theme = Some(PathBuf::from(a)),
+            _ => return Err(format!("unexpected argument: {a}")),
+        }
+    }
+    let theme = theme.ok_or("usage: sim <theme-dir> [...]")?;
+    // Default: the repo layout themes/<name>/ next to contract/.
+    let contract = contract.unwrap_or_else(|| theme.join("../../contract"));
+    // The compiler wants absolute include paths.
+    let contract = std::fs::canonicalize(&contract)
+        .map_err(|e| format!("contract dir {}: {e}", contract.display()))?;
+    let theme = std::fs::canonicalize(&theme).map_err(|e| format!("theme {}: {e}", theme.display()))?;
+    Ok(Args { theme, contract, screenshot, at, check })
+}
+
+fn load(main: &Path, contract: &Path) -> Result<ComponentDefinition, Box<dyn Error>> {
+    let mut compiler = Compiler::default();
+    compiler.set_include_paths(vec![contract.to_path_buf()]);
+    let result = pollster::block_on(compiler.build_from_path(&main));
+    for d in result.diagnostics() {
+        eprintln!("{d}");
+    }
+    if result.has_errors() {
+        return Err(format!("{} failed to compile", main.display()).into());
+    }
+    result
+        .component("Dash")
+        .ok_or_else(|| format!("{} must export component Dash", main.display()).into())
+}
+
+/// Contract version the SDK ships: `contract-version: N;` in contract/vehicle.slint.
+fn current_contract(contract: &Path) -> Result<i64, String> {
+    let path = contract.join("vehicle.slint");
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let key = "contract-version:";
+    let at = text
+        .find(key)
+        .ok_or_else(|| format!("{}: no `contract-version: N` line", path.display()))?;
+    let digits: String = text[at + key.len()..]
+        .trim_start()
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
+    digits
+        .parse()
+        .map_err(|_| format!("{}: contract-version is not an integer", path.display()))
+}
+
+/// Validates theme.json. Pushes every problem into `errors`; returns the entry file when it exists.
+fn check_manifest(theme: &Path, current: i64, errors: &mut Vec<String>) -> Option<PathBuf> {
+    let path = theme.join("theme.json");
+    let text = match std::fs::read_to_string(&path) {
+        Ok(t) => t,
+        Err(e) => {
+            errors.push(format!("{}: {e}", path.display()));
+            return None;
+        }
+    };
+    let json: serde_json::Value = match serde_json::from_str(&text) {
+        Ok(v) => v,
+        Err(e) => {
+            errors.push(format!("{}: invalid JSON: {e}", path.display()));
+            return None;
+        }
+    };
+    let Some(obj) = json.as_object() else {
+        errors.push(format!("{}: top level must be an object", path.display()));
+        return None;
+    };
+    for key in REQUIRED_STR_KEYS {
+        match obj.get(key).and_then(|v| v.as_str()) {
+            Some(s) if !s.trim().is_empty() => {}
+            Some(_) => errors.push(format!("theme.json: \"{key}\" is empty")),
+            None => errors.push(format!("theme.json: missing string key \"{key}\"")),
+        }
+    }
+    match obj.get("contract").and_then(|v| v.as_i64()) {
+        None => errors.push("theme.json: \"contract\" must be an integer".into()),
+        Some(n) if n < 1 => errors.push(format!("theme.json: \"contract\" must be >= 1, got {n}")),
+        Some(n) if n > current => errors.push(format!(
+            "theme.json: needs contract {n}, this SDK ships contract {current}; lower the value or update the SDK"
+        )),
+        Some(_) => {}
+    }
+    if let Some(id) = obj.get("id").and_then(|v| v.as_str()) {
+        let ok = id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+        let dir = theme.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if !ok {
+            errors.push(format!("theme.json: \"id\" must use only a-z, 0-9, '-': {id:?}"));
+        } else if id != dir {
+            errors.push(format!("theme.json: \"id\" {id:?} must match the folder name {dir:?}"));
+        }
+    }
+    let entry = obj.get("entry").and_then(|v| v.as_str())?;
+    let entry_path = theme.join(entry);
+    if entry_path.is_file() {
+        Some(entry_path)
+    } else {
+        errors.push(format!("theme.json: entry {entry:?} not found in {}", theme.display()));
+        None
+    }
+}
+
+/// `sim --check <theme>`: manifest + compile. Prints each problem; exit status 1 on any.
+fn run_check(args: &Args) -> bool {
+    let mut errors = Vec::new();
+    let current = match current_contract(&args.contract) {
+        Ok(v) => v,
+        Err(e) => {
+            errors.push(e);
+            0
+        }
+    };
+    let entry = check_manifest(&args.theme, current, &mut errors);
+    if let (true, Some(entry)) = (errors.is_empty(), entry) {
+        match load(&entry, &args.contract) {
+            Ok(_) => println!("ok: {} (sim contract {current})", args.theme.display()),
+            Err(e) => errors.push(e.to_string()),
+        }
+    }
+    for e in &errors {
+        eprintln!("error: {}: {e}", args.theme.display());
+    }
+    errors.is_empty()
+}
+
+fn write_png(path: &Path, buf: &[PremultipliedRgbaColor]) -> Result<(), Box<dyn Error>> {
+    let mut data = Vec::with_capacity(buf.len() * 4);
+    for p in buf {
+        // Theme backgrounds are opaque; un-premultiply anyway for translucent pixels.
+        let a = p.alpha as u32;
+        let un = |c: u8| -> u8 {
+            if a == 0 { 0 } else { ((c as u32 * 255 + a / 2) / a).min(255) as u8 }
+        };
+        data.extend_from_slice(&[un(p.red), un(p.green), un(p.blue), p.alpha]);
+    }
+    let file = std::io::BufWriter::new(std::fs::File::create(path)?);
+    let mut enc = png::Encoder::new(file, WIDTH, HEIGHT);
+    enc.set_color(png::ColorType::Rgba);
+    enc.set_depth(png::BitDepth::Eight);
+    enc.write_header()?.write_image_data(&data)?;
+    Ok(())
+}
+
+fn run_screenshot(args: &Args, out: &Path) -> Result<(), Box<dyn Error>> {
+    let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
+    let clock = Rc::new(Cell::new(Duration::ZERO));
+    slint::platform::set_platform(Box::new(Headless {
+        window: window.clone(),
+        clock: clock.clone(),
+    }))?;
+    let def = load(&args.theme.join("main.slint"), &args.contract)?;
+    let inst = def.create()?;
+    let feeder = Feeder::new();
+    feeder.wire_callbacks(&inst);
+    inst.show()?;
+    window.set_size(slint::PhysicalSize::new(WIDTH, HEIGHT));
+
+    // Step the mock clock at 60 Hz so easings and blink phases match a live run.
+    // Slint only starts an animation when a property is evaluated, and that
+    // happens on render, so the last 1.5 s before `--at` are rendered per step
+    // (the longest easing in the default theme is 900 ms).
+    let mut buf = vec![PremultipliedRgbaColor::default(); (WIDTH * HEIGHT) as usize];
+    let steps = (args.at * 60.0).round() as u64;
+    let warm_from = args.at - 1.5;
+    for i in 0..=steps {
+        let t = i as f64 / 60.0;
+        clock.set(Duration::from_secs_f64(t));
+        feeder.push(&inst, t);
+        slint::platform::update_timers_and_animations();
+        if t >= warm_from {
+            window.request_redraw();
+            window.draw_if_needed(|r| {
+                r.render(&mut buf, WIDTH as usize);
+            });
+        }
+    }
+    window.request_redraw();
+    window.draw_if_needed(|r| {
+        r.render(&mut buf, WIDTH as usize);
+    });
+    write_png(out, &buf)?;
+    println!("wrote {} (sim t={:.2}s)", out.display(), args.at);
+    Ok(())
+}
+
+fn run_live(args: &Args) -> Result<(), Box<dyn Error>> {
+    let def = load(&args.theme.join("main.slint"), &args.contract)?;
+    let inst = def.create()?;
+    let feeder = Rc::new(Feeder::new());
+    feeder.wire_callbacks(&inst);
+    let start = Instant::now();
+    feeder.push(&inst, 0.0);
+    let f = feeder.clone();
+    let weak = inst.as_weak();
+    let timer = Timer::default();
+    timer.start(TimerMode::Repeated, Duration::from_millis(16), move || {
+        if let Some(i) = weak.upgrade() {
+            f.push(&i, start.elapsed().as_secs_f64());
+        }
+    });
+    inst.run()?;
+    drop(timer);
+    Ok(())
+}
+
+fn main() {
+    let args = match parse_args() {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("sim: {e}");
+            std::process::exit(2);
+        }
+    };
+    if args.check {
+        std::process::exit(if run_check(&args) { 0 } else { 1 });
+    }
+    let result = match &args.screenshot {
+        Some(out) => run_screenshot(&args, out),
+        None => run_live(&args),
+    };
+    if let Err(e) = result {
+        eprintln!("sim: {e}");
+        std::process::exit(1);
+    }
+}

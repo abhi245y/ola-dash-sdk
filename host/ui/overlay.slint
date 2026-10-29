@@ -1,9 +1,72 @@
 // Host-owned overlay. Painted after the theme's Dash, so no theme can cover it.
-// Top 48 px is the telltale bar; alerts are centred modal cards that also
-// swallow touches underneath them. Values come from the host bridge.
-import { Vehicle } from "vehicle.slint";
+// Placement, telltale order, style and alert position come from the theme's
+// OPTIONAL Dash properties (contract v6). The host reads them and writes
+// OverlayConfig (see host/src/theme_root.rs). Host-fixed rules are marked
+// "host-fixed" below and enforced in code: themes cannot lower them.
+import { Vehicle, OverlayPlacement, Telltale, AlertPosition } from "vehicle.slint";
 import { UnlockScreen } from "unlock.slint";
 
+// ---- design tokens: restyle here, logic stays put ----
+export global OverlayTokens {
+    // host-fixed minimums (applied with max() where used)
+    out property <length> icon-min: 28px;
+    out property <length> alert-text-min: 32px;
+    // strip geometry, host-fixed by contract: top/bottom 48 px tall, left/right 72 px wide
+    out property <length> strip-h: 48px;
+    out property <length> strip-w: 72px;
+
+    // telltale slots
+    out property <length> disc: 40px;
+    out property <length> slot-pad: 16px;
+    out property <length> slot-pitch: 56px;
+    out property <length> slot-pitch-labels: 120px;
+    out property <length> slot-pitch-labels-v: 72px;
+
+    // telltale semantic colours: host-fixed (themes only style strip, background, labels)
+    out property <color> disc-fill: #1a1a1a;
+    out property <color> ind-color: #5cff9d;
+    out property <color> beam-color: #3da5ff;
+    out property <color> lock-color: #d0d0d0;
+    out property <color> amber: #ffb020;
+    out property <color> red: #ff3b30;
+    out property <color> test-fill: #ff2fd2;
+
+    // alert cards
+    out property <color> scrim: #000000d9;
+    out property <color> card-fill: #141414;
+    out property <color> card-text: #ffffff;
+    out property <color> card-hint: #c8c8c8;
+    out property <length> card-w: 880px;
+    out property <length> card-h: 240px;
+    out property <length> card-radius: 16px;
+    out property <length> card-frame: 3px;
+    out property <length> alert-title-size: 40px;
+    out property <length> alert-hint-size: 32px;
+
+    // motion
+    out property <duration> fade: 250ms;
+    // blink period for indicators (host-fixed sync); pulse period for critical frames
+    out property <float> blink-ms: 800;
+    out property <float> pulse-ms: 1600;
+}
+
+// Written by the host from the theme's optional Dash properties (or defaults).
+export global OverlayConfig {
+    in property <OverlayPlacement> placement: OverlayPlacement.top;
+    in property <AlertPosition> alert-position: AlertPosition.center;
+    in property <color> background: #0a0a0a;
+    in property <color> foreground: #f4f6fa;
+    in property <length> corner-radius: 8px;
+    in property <bool> show-labels: false;
+    // Always 9 entries, every telltale once (the host normalises the theme's list).
+    in property <[Telltale]> telltale-order: [
+        Telltale.left-indicator, Telltale.right-indicator, Telltale.high-beam,
+        Telltale.headlight, Telltale.ready, Telltale.locked,
+        Telltale.side-stand, Telltale.fault, Telltale.charging,
+    ];
+}
+
+// Global state, set by the host from Vehicle/HostState values.
 export global HostState {
     // 0 none, 1 fall/accident, 2 tow/theft, 3 side stand, 4 steering lock,
     // 5 vehicle fault, 6 low battery.
@@ -22,19 +85,156 @@ export global HostState {
     in property <bool> auth-available: false;
 }
 
-component Chip inherits Rectangle {
-    in property <string> label;
-    in property <color> tint;
-    height: 34px;
-    min-width: 110px;
-    border-radius: 6px;
-    background: tint;
+// Placeholder glyphs in a 28x28 viewbox. Host-owned: themes cannot supply icons.
+export component TelltaleIcon inherits Path {
+    in property <Telltale> kind;
+    in property <length> size: 28px;
+    // host-fixed minimum icon size
+    width: max(OverlayTokens.icon-min, root.size);
+    height: max(OverlayTokens.icon-min, root.size);
+    viewbox-width: 28;
+    viewbox-height: 28;
+    property <color> tint: root.kind == Telltale.left-indicator || root.kind == Telltale.right-indicator
+            || root.kind == Telltale.headlight || root.kind == Telltale.ready || root.kind == Telltale.charging
+        ? OverlayTokens.ind-color
+        : root.kind == Telltale.high-beam ? OverlayTokens.beam-color
+        : root.kind == Telltale.side-stand ? OverlayTokens.amber
+        : root.kind == Telltale.fault ? OverlayTokens.red
+        : OverlayTokens.lock-color;
+    fill: root.tint;
+    commands: root.kind == Telltale.left-indicator ? "M 2 14 L 12 5 L 12 10 L 26 10 L 26 18 L 12 18 L 12 23 Z"
+        : root.kind == Telltale.right-indicator ? "M 26 14 L 16 5 L 16 10 L 2 10 L 2 18 L 16 18 L 16 23 Z"
+        : root.kind == Telltale.high-beam ? "M 2 8 L 9 8 L 9 10 L 2 10 Z M 2 14 L 9 14 L 9 16 L 2 16 Z M 2 20 L 9 20 L 9 22 L 2 22 Z M 12 6 L 18 6 L 25 11 L 25 19 L 18 24 L 12 24 Z"
+        : root.kind == Telltale.headlight ? "M 2 16 L 9 16 L 9 18 L 2 18 Z M 12 6 L 18 6 L 25 11 L 25 19 L 18 24 L 12 24 Z"
+        : root.kind == Telltale.ready ? "M 14 3 A 11 11 0 1 0 14.01 3 Z"
+        : root.kind == Telltale.locked ? "M 7 13 L 21 13 L 21 25 L 7 25 Z M 10 13 L 10 9 A 4 4 0 0 1 18 9 L 18 13 L 16 13 L 16 9 A 2 2 0 0 0 12 9 L 12 13 Z"
+        : root.kind == Telltale.side-stand ? "M 10 3 L 14 3 L 14 17 L 19 21 L 19 24 L 15 24 L 10 19 Z"
+        : root.kind == Telltale.fault ? "M 14 3 L 26 25 L 2 25 Z"
+        : "M 16 3 L 7 16 L 13 16 L 11 25 L 21 11 L 15 11 Z";
+}
+
+// Telltale row or column. Slots are fixed positions in the theme's order; an
+// inactive telltale fades out in place.
+component TelltaleStrip inherits Rectangle {
+    in property <bool> vertical;
+    in property <bool> labels;
+    background: OverlayConfig.background;
+
+    // Phase-locked to the host's 800 ms blink period; read only by indicator slots.
+    property <bool> blink-on: Math.mod(animation-tick() / 1ms, OverlayTokens.blink-ms) < OverlayTokens.blink-ms / 2;
+
+    function is-on(t: Telltale) -> bool {
+        t == Telltale.left-indicator ? Vehicle.left-indicator
+            : t == Telltale.right-indicator ? Vehicle.right-indicator
+            : t == Telltale.high-beam ? Vehicle.high-beam
+            : t == Telltale.headlight ? Vehicle.headlight
+            : t == Telltale.ready ? Vehicle.ready-to-ride
+            : t == Telltale.locked ? Vehicle.locked
+            : t == Telltale.side-stand ? HostState.side-stand
+            : t == Telltale.fault ? HostState.fault
+            : Vehicle.charging
+    }
+    function is-blinker(t: Telltale) -> bool {
+        t == Telltale.left-indicator || t == Telltale.right-indicator
+    }
+    function label-of(t: Telltale) -> string {
+        t == Telltale.left-indicator ? "LEFT"
+            : t == Telltale.right-indicator ? "RIGHT"
+            : t == Telltale.high-beam ? "HIGH"
+            : t == Telltale.headlight ? "LAMP"
+            : t == Telltale.ready ? "READY"
+            : t == Telltale.locked ? "LOCK"
+            : t == Telltale.side-stand ? "STAND"
+            : t == Telltale.fault ? "FAULT"
+            : "CHARGE"
+    }
+
+    // Absorbs touches under the strip.
+    TouchArea { }
+
+    for t[i] in OverlayConfig.telltale-order : Rectangle {
+        property <length> pitch: root.vertical
+            ? (root.labels ? OverlayTokens.slot-pitch-labels-v : OverlayTokens.slot-pitch)
+            : (root.labels ? OverlayTokens.slot-pitch-labels : OverlayTokens.slot-pitch);
+        x: root.vertical ? (root.width - self.width) / 2 : OverlayTokens.slot-pad + i * pitch;
+        y: root.vertical ? OverlayTokens.slot-pad + i * pitch : (root.height - self.height) / 2;
+        width: OverlayTokens.disc;
+        height: OverlayTokens.disc;
+        border-radius: min(OverlayConfig.corner-radius, OverlayTokens.disc / 2);
+        background: OverlayTokens.disc-fill;
+        opacity: !root.is-on(t) ? 0 : (root.is-blinker(t) ? (root.blink-on ? 1 : 0.25) : 1);
+        animate opacity { duration: OverlayTokens.fade; }
+
+        TelltaleIcon {
+            kind: t;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+        }
+        if root.labels && !root.vertical : Text {
+            x: OverlayTokens.disc + 6px;
+            width: root.labels ? 74px : 0px;
+            height: parent.height;
+            text: root.label-of(t);
+            color: OverlayConfig.foreground;
+            font-size: 16px;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+        if root.labels && root.vertical : Text {
+            x: (parent.width - self.width) / 2;
+            y: OverlayTokens.disc + 2px;
+            width: 72px;
+            text: root.label-of(t);
+            color: OverlayConfig.foreground;
+            font-size: 13px;
+            font-weight: 600;
+            horizontal-alignment: center;
+        }
+    }
+}
+
+// Alert card: scrim is drawn by the parent. Title and hint are host strings.
+component AlertCard inherits Rectangle {
+    in property <string> title;
+    in property <string> hint;
+    in property <int> code;
+    in property <Telltale> icon;
+    background: OverlayTokens.card-fill;
+    border-radius: OverlayTokens.card-radius;
+    border-width: OverlayTokens.card-frame;
+
+    // Critical alerts (fall/accident, tow/theft) pulse their frame.
+    property <bool> critical: root.code == 1 || root.code == 2;
+    property <float> pulse: 0.5 + 0.5 * Math.sin(animation-tick() / 1ms / OverlayTokens.pulse-ms * 360deg);
+    border-color: root.critical ? OverlayTokens.red.with-alpha(0.4 + 0.6 * root.pulse) : OverlayTokens.red;
+
+    TelltaleIcon {
+        kind: root.icon;
+        size: 72px;
+        x: 40px;
+        y: (parent.height - self.height) / 2;
+    }
     Text {
-        text: root.label;
-        color: #000000;
-        font-size: 18px;
+        x: 144px;
+        y: 40px;
+        width: root.width - 176px;
+        height: 96px;
+        text: root.title;
+        color: OverlayTokens.card-text;
+        font-size: max(OverlayTokens.alert-text-min, OverlayTokens.alert-title-size);
         font-weight: 700;
-        horizontal-alignment: center;
+        wrap: word-wrap;
+        vertical-alignment: center;
+    }
+    Text {
+        x: 144px;
+        y: 144px;
+        width: root.width - 176px;
+        height: 56px;
+        text: root.hint;
+        color: OverlayTokens.card-hint;
+        font-size: max(OverlayTokens.alert-text-min, OverlayTokens.alert-hint-size);
+        overflow: elide;
         vertical-alignment: center;
     }
 }
@@ -43,11 +243,37 @@ export component HostOverlay inherits Rectangle {
     callback unlock-key(int);
     property <bool> unlock-visible: HostState.auth-phase != 5 && HostState.auth-phase != 6 && !HostState.test-mode;
     property <bool> keypad-visible: root.unlock-visible && HostState.auth-phase != 4;
-    property <string> alert-text: HostState.alert-code == 1 ? "FALL OR ACCIDENT DETECTED"
+    property <string> alert-title: HostState.alert-code == 1 ? "FALL OR ACCIDENT DETECTED"
         : HostState.alert-code == 2 ? "TOW / THEFT ALERT"
         : HostState.alert-code == 3 ? "SIDE STAND DOWN"
         : HostState.alert-code == 4 ? "STEERING LOCK ALERT"
         : HostState.alert-code == 5 ? "VEHICLE FAULT" : "LOW BATTERY";
+    property <string> alert-hint: HostState.alert-code == 1 ? "Fall detected — check rider and scooter"
+        : HostState.alert-code == 2 ? "Tow/theft alert"
+        : HostState.alert-code == 3 ? "Raise the side stand to ride"
+        : HostState.alert-code == 4 ? "Steering lock — unlock steering before riding"
+        : HostState.alert-code == 5 ? "Vehicle fault — stop when safe" : "Battery low — charge soon";
+    property <Telltale> alert-icon: HostState.alert-code == 3 ? Telltale.side-stand
+        : (HostState.alert-code == 2 || HostState.alert-code == 4) ? Telltale.locked
+        : HostState.alert-code == 6 ? Telltale.charging : Telltale.fault;
+
+    // Strip and content region, from the theme's placement (host-fixed sizes).
+    property <bool> vertical: OverlayConfig.placement == OverlayPlacement.left || OverlayConfig.placement == OverlayPlacement.right;
+    property <length> region-x: OverlayConfig.placement == OverlayPlacement.left ? OverlayTokens.strip-w : 0px;
+    property <length> region-y: OverlayConfig.placement == OverlayPlacement.top ? OverlayTokens.strip-h : 0px;
+    property <length> region-w: root.width - (root.vertical ? OverlayTokens.strip-w : 0px);
+    property <length> region-h: root.height - (root.vertical ? 0px : OverlayTokens.strip-h);
+
+    // Fault (5) and low battery (6) can be tapped away; they come back when the
+    // alert changes. Safety alerts (1-4) cannot be dismissed.
+    property <int> dismissed: 0;
+    property <int> code: HostState.alert-code;
+    changed code => {
+        if root.code == 0 {
+            root.dismissed = 0;
+        }
+    }
+    property <bool> scrim-visible: !root.unlock-visible && HostState.alert-code != 0 && HostState.alert-code != root.dismissed;
 
     if root.unlock-visible : UnlockScreen {
         width: parent.width;
@@ -62,70 +288,36 @@ export component HostOverlay inherits Rectangle {
         side-stand: HostState.side-stand;
         key(key) => { root.unlock-key(key); }
     }
-    // Fault (5) and low battery (6) can be tapped away; they come back when the
-    // alert changes. Safety alerts (1-4) cannot be dismissed.
-    property <int> dismissed: 0;
-    property <int> code: HostState.alert-code;
-    changed code => {
-        if root.code == 0 {
-            root.dismissed = 0;
-        }
-    }
 
-    // Telltale bar, 48 px reserved for the host.
-    Rectangle {
-        x: 0px;
-        y: 0px;
-        width: parent.width;
-        height: 48px;
-        background: #0a0a0a;
-        HorizontalLayout {
-            padding-left: 16px;
-            padding-right: 16px;
-            spacing: 12px;
-            alignment: start;
-            if Vehicle.left-indicator : Chip { label: "LEFT"; tint: #ffb000; }
-            if Vehicle.right-indicator : Chip { label: "RIGHT"; tint: #ffb000; }
-            if Vehicle.high-beam : Chip { label: "HIGH BEAM"; tint: #3da5ff; }
-            if Vehicle.headlight : Chip { label: "HEADLIGHT"; tint: #f2f2f2; }
-            if Vehicle.locked : Chip { label: "LOCKED"; tint: #d0d0d0; }
-            if Vehicle.ready-to-ride : Chip { label: "READY"; tint: #34c759; }
-            if HostState.side-stand : Chip { label: "SIDE STAND"; tint: #ff8a00; }
-            if HostState.fault : Chip { label: "FAULT"; tint: #ff3b30; }
-            if Vehicle.charging : Chip { label: "CHARGING"; tint: #34c759; }
-        }
-        if HostState.test-mode : Chip {
-            width: 150px;
-            x: parent.width - self.width - 16px;
-            y: 7px;
-            label: "TEST DATA";
-            tint: #ff2fd2;
-        }
-    }
-
-    // Modal alert. Touches under it are absorbed.
-    // While entering a PIN or parked, warnings stay visible without trapping the
-    // user behind a side-stand modal. Existing ride alerts retain their behavior.
+    // While entering a PIN or parked, warnings stay visible in a footer so they
+    // never trap the user behind the keypad.
     if root.unlock-visible && HostState.alert-code != 0 : Rectangle {
-        x: 32px; y: parent.height - 96px;
-        width: parent.width - 64px; height: 64px;
+        x: root.region-x + 32px;
+        y: root.region-y + root.region-h - 96px;
+        width: root.region-w - 64px;
+        height: 64px;
         border-radius: 12px;
         background: #3c1719;
         Text {
-            text: root.alert-text;
+            width: parent.width;
+            height: parent.height;
+            text: root.alert-title;
             color: #ffb9b4;
-            font-size: 28px;
+            font-size: max(OverlayTokens.alert-text-min, 32px);
             font-weight: 600;
             horizontal-alignment: center;
             vertical-alignment: center;
         }
     }
-    if !root.unlock-visible && HostState.alert-code != 0 && HostState.alert-code != root.dismissed : Rectangle {
+
+    // Modal alert scrim. Touches under it are absorbed. Drawn before the strip so
+    // telltales stay at full brightness while an alert is up.
+    if root.scrim-visible : Rectangle {
         x: 0px;
         y: 0px;
-        width: parent.width;
-        height: parent.height;
-        background: #000000d9;
+        width: root.width;
+        height: root.height;
+        background: OverlayTokens.scrim;
         TouchArea {
             clicked => {
                 if HostState.alert-code >= 5 {
@@ -133,26 +325,52 @@ export component HostOverlay inherits Rectangle {
                 }
             }
         }
-        Rectangle {
-            width: 720px;
-            height: 240px;
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            background: #141414;
-            border-color: #ff3b30;
-            border-width: 3px;
-            border-radius: 16px;
-            Text {
-                width: parent.width;
-                height: parent.height;
-                text: root.alert-text;
-                color: #ffffff;
-                font-size: 38px;
-                font-weight: 700;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-                wrap: word-wrap;
-            }
+    }
+
+    TelltaleStrip {
+        x: OverlayConfig.placement == OverlayPlacement.right ? root.width - OverlayTokens.strip-w : 0px;
+        y: OverlayConfig.placement == OverlayPlacement.bottom ? root.height - OverlayTokens.strip-h : 0px;
+        width: root.vertical ? OverlayTokens.strip-w : root.width;
+        height: root.vertical ? root.height : OverlayTokens.strip-h;
+        vertical: root.vertical;
+        labels: OverlayConfig.show-labels;
+    }
+
+    if root.scrim-visible : AlertCard {
+        width: min(OverlayTokens.card-w, root.region-w - 64px);
+        height: min(OverlayTokens.card-h, root.region-h - 32px);
+        x: root.region-x + (root.region-w - self.width) / 2;
+        y: root.region-y + (root.region-h - self.height)
+            * (OverlayConfig.alert-position == AlertPosition.upper ? 0.25
+               : OverlayConfig.alert-position == AlertPosition.lower ? 0.75 : 0.5);
+        title: root.alert-title;
+        hint: root.alert-hint;
+        code: HostState.alert-code;
+        icon: root.alert-icon;
+    }
+
+    // TEST DATA badge, in every placement, on top of everything.
+    if HostState.test-mode : Rectangle {
+        width: root.vertical ? OverlayTokens.strip-w - 8px : 150px;
+        height: root.vertical ? 40px : 34px;
+        x: root.vertical
+            ? (OverlayConfig.placement == OverlayPlacement.right ? root.width - OverlayTokens.strip-w + 4px : 4px)
+            : root.width - 166px;
+        y: root.vertical
+            ? root.height - 44px
+            : (OverlayConfig.placement == OverlayPlacement.bottom ? root.height - OverlayTokens.strip-h + 7px : 7px);
+        border-radius: 6px;
+        background: OverlayTokens.test-fill;
+        Text {
+            width: parent.width;
+            height: parent.height;
+            text: "TEST DATA";
+            color: #000000;
+            font-size: root.vertical ? 13px : 18px;
+            font-weight: 700;
+            wrap: word-wrap;
+            horizontal-alignment: center;
+            vertical-alignment: center;
         }
     }
 }

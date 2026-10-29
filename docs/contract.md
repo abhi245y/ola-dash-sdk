@@ -1,6 +1,6 @@
 # Theme contract reference
 
-The contract is `contract/vehicle.slint`, currently **`contract-version: 5`**. It is the only API a theme may use. Themes read `in` properties and invoke the callbacks listed here. The host writes the `in` properties; themes must never assign to them.
+The contract is `contract/vehicle.slint`, currently **`contract-version: 6`**. It is the only API a theme may use. Themes read `in` properties and invoke the callbacks listed here. The host writes the `in` properties; themes must never assign to them.
 
 Units: distances in km, speed in km/h, temperatures in °C, current in A, voltage in V. `-1` means "not reported yet" wherever a default of `-1` is listed. Themes should show `--`.
 
@@ -22,6 +22,7 @@ History (from the file's comment):
 | 3 | `DriveMode.custom`, `Vehicle.hyper-available` |
 | 4 | `DriveMode.easy-park` |
 | 5 | `VehicleState`, `Battery`, `Ride`, `Navigation`, `Plugins`; `Vehicle.state` |
+| 6 | Optional `Dash` properties for the host overlay: `overlay-placement`, `telltale-order`, `overlay-style`, `alert-position`; enums `OverlayPlacement`, `Telltale`, `AlertPosition`; struct `OverlayStyle` |
 
 ## Enums
 
@@ -50,7 +51,7 @@ History (from the file's comment):
 
 | Property | Type | Default | Notes |
 |---|---|---|---|
-| `contract-version` | `out int` | 5 | Read-only. The contract version the theme was compiled against. |
+| `contract-version` | `out int` | 6 | Read-only. The contract version the theme was compiled against. |
 | `speed-kmh` | `in float` | 0 | km/h |
 | `battery-pct` | `in int` | -1 | Rounded state of charge, %. Use `Battery.soc-pct` for the fine value. |
 | `range-km` | `in int` | -1 | Estimated range, km |
@@ -141,6 +142,44 @@ Harmless actions only. Vehicle commands (lock, seat, lights) are never exposed t
 |---|---|---|
 | `open-android-auto()` | callback | Launches Android Auto |
 | `open-settings()` | callback | Opens system settings |
+
+## Host overlay settings (v6)
+
+A theme may declare these four properties on its `Dash` component. They are **optional**: leave one out and the host uses its default. They are `out` properties; the host reads them once the theme loads and re-reads them when they change.
+
+| Property | Type | Default | Notes |
+|---|---|---|---|
+| `overlay-placement` | `out OverlayPlacement` | `top` | Where the telltale strip sits. See [themes.md](themes.md#overlay-placement-and-the-reserved-strip). |
+| `telltale-order` | `out [Telltale]` | host order | Order of the telltales in the strip. |
+| `overlay-style` | `out OverlayStyle` | host dark style, labels off | Strip background, label colour, corner radius, labels on or off. |
+| `alert-position` | `out AlertPosition` | `center` | Vertical position of alert cards. |
+
+The host never lets these hide, shrink or cover a warning. Rules that apply regardless of theme are in [safety.md](safety.md#host-owned-safety-overlay).
+
+### `OverlayPlacement` (v6)
+
+`top`, `bottom`, `left`, `right`. Reserved strip: top and bottom 48 px tall, full width; left and right 72 px wide, full height.
+
+### `Telltale` (v6)
+
+`left-indicator`, `right-indicator`, `high-beam`, `headlight`, `ready`, `locked`, `side-stand`, `fault`, `charging`. The host default order is the order listed here. New values are appended.
+
+The host normalises the theme's list: unknown and duplicate entries are ignored, and any telltale the theme leaves out is appended in default order. A theme can reorder telltales but cannot drop them.
+
+### `AlertPosition` (v6)
+
+`center`, `upper`, `lower`.
+
+### `OverlayStyle` (v6)
+
+| Field | Type | Notes |
+|---|---|---|
+| `background` | color | Strip background. Must contrast with `foreground` at 4.5:1 or more. |
+| `foreground` | color | Label colour |
+| `corner-radius` | length | Telltale disc corner radius |
+| `show-labels` | bool | Labels under or beside each telltale |
+
+If `background` and `foreground` fail the 4.5:1 contrast rule (WCAG 2.x), the host uses its own colours and logs the reason under `OlaDash` (`sim` prints it to stderr). Telltale icon colours are host-fixed and do not come from the theme.
 
 ## Re-exporting globals
 

@@ -52,14 +52,49 @@ export component Dash inherits Window {
 
 > **Open question:** the bundled themes use `export component Dash inherits Window`, and `sim` accepts that. `host/README.md` says the host generates its own root window and that `Dash` must **not** inherit `Window`. Only the bundled themes were tested in `sim`; a plain-element `Dash` was not tried. Until the host and sim agree, follow the bundled themes and expect the host path to need a change.
 
-## Reserved area
+## Overlay placement and the reserved strip
 
-The top 48 px belong to the host telltale bar, which is drawn over every theme. Keep that strip as plain background. Put nothing important there.
+The host draws the telltale strip over every theme. Its place depends on the theme's optional `overlay-placement` (contract v6, see [contract.md](contract.md#host-overlay-settings-v6)). The default is `top`.
+
+| Placement | Reserved strip | Notes |
+|---|---|---|
+| `top` | top 48 px, full width | Default. The minimal theme uses it. |
+| `bottom` | bottom 48 px, full width | |
+| `left` | left 72 px, full height | The default theme uses it. |
+| `right` | right 72 px, full height | |
+
+- Keep the reserved strip as plain background. The host paints its own background there, so nothing drawn by the theme shows through. Still, do not place anything important under it: a theme that does is hard to read and will be partly hidden.
+- Telltales and alert cards use the area outside the strip. Alert cards are centred there (or placed by `alert-position`).
+- A theme that declares no placement gets `top`, as in contract 5.
+- The theme's own layout is still yours. If a theme declares `bottom` or `right`, check that its controls stay clear of the strip.
+
+## Telltale order and style
+
+```slint
+out property <OverlayPlacement> overlay-placement: OverlayPlacement.left;
+out property <[Telltale]> telltale-order: [Telltale.left-indicator, Telltale.right-indicator, Telltale.ready];
+out property <OverlayStyle> overlay-style: {
+    background: #05070b,
+    foreground: #f4f6fa,
+    corner-radius: 16px,
+    show-labels: true,
+};
+out property <AlertPosition> alert-position: AlertPosition.upper;
+```
+
+Import the types from `vehicle.slint`. The host checks the rest:
+
+- **Order:** the list may be partial. Unknown entries and duplicates are dropped, and missing telltales are appended in host order.
+- **Contrast:** if `background` and `foreground` are below 4.5:1 (WCAG 2.x), the host uses its own colours and logs why.
+- **Semantic colours and icon sizes** are host-fixed. Labels take the theme's `foreground`.
+- **Wrong types** make the theme fail to compile, so it falls back to the bundled default, as any compile error does.
+
+Declare only what you need. A theme that omits all four properties works exactly as before.
 
 ## What a theme may draw
 
 - Speed, battery, range, mode, clock, trip and odometer, the media card, and the two buttons. Touch targets at least 64 px.
-- Telltales and safety alerts: **none.** The host draws them. The one exception is the turn arrows inside the main gauge, which are optional.
+- Telltales and safety alerts: **none.** The host draws them and can be placed and ordered by the theme (see above). The one exception is the turn arrows inside the main gauge, which are optional.
 - High beam, headlight and locked state are drawn by the host overlay. The default theme leaves them to it.
 - `DriveMode.unknown` is valid. Render it sensibly (the default theme uses a neutral grey accent).
 
@@ -116,6 +151,8 @@ These were checked by rendering in the software renderer used by `sim`. The devi
 
 - Live window with mock data (needs a display): `sim themes/default`, or `cargo run --release --manifest-path sim/Cargo.toml -- themes/default`.
 - Headless PNG at a given sim time: `sim themes/default --screenshot out.png --at 75`. The frame is the same every run.
+- `sim` loads the theme inside the host's `Host` root, so the overlay is drawn above it, as on the device. Mock telltales cycle (indicators, high beam, fault, a side-stand alert card at 100-110 s of each 120 s cycle).
+- `--placement top|bottom|left|right` previews another placement. `--alert 1..6` holds one host alert on screen.
 - `sim` looks for the contract at `<theme>/../../contract` by default. Pass `--contract <dir>` to override.
 - `sim --check themes/<id>` validates the manifest and compiles the theme without a window. `tools/check-themes.sh` runs it for every theme.
 - `slint-viewer -I contract themes/default/main.slint` gives a static preview, with globals at their defaults and no mock data. Not checked in this project.

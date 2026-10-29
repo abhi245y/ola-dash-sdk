@@ -9,7 +9,8 @@
 // only needs to export `Dash`.
 //
 // History: v2 park, reverse | v3 custom, hyper-available | v4 easy-park |
-//          v5 VehicleState, Battery, Ride, Navigation, Plugins; -1 = not reported yet
+//          v5 VehicleState, Battery, Ride, Navigation, Plugins; -1 = not reported yet |
+//          v6 overlay-placement, telltale-order, overlay-style, alert-position (optional Dash props)
 
 export enum DriveMode { eco, normal, sport, hyper, unknown, park, reverse, custom, easy-park }
 
@@ -20,8 +21,24 @@ export enum VehicleState { unknown, sleep, idle, park, drive, charging }
 
 export enum Regen { none, coast, brake }
 
+// Host safety overlay settings. Themes declare these as OPTIONAL `out` properties
+// on their `Dash` component; absent means the host default. See docs/contract.md.
+export enum OverlayPlacement { top, bottom, left, right }
+
+// Telltale kinds, in the host's default order. Append-only.
+export enum Telltale { left-indicator, right-indicator, high-beam, headlight, ready, locked, side-stand, fault, charging }
+
+export enum AlertPosition { center, upper, lower }
+
+export struct OverlayStyle {
+    background: color,
+    foreground: color,
+    corner-radius: length,
+    show-labels: bool,
+}
+
 export global Vehicle {
-    out property <int> contract-version: 5;
+    out property <int> contract-version: 6;
 
     in property <float> speed-kmh;
     // -1 until the vehicle reports a value; themes should show "--".

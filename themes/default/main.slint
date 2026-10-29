@@ -1,8 +1,8 @@
 // Default theme: dark, high-contrast, built for sunlight. Original design.
-// Fixed 1280x768 layout. The top 48 px belong to the host safety bar and are
-// left as plain background. Telltales are not drawn here (host does that);
-// the turn arrows in the gauge are the one exception the contract allows.
-import { Vehicle, Media, Actions, Battery, DriveMode, Navigation, Plugins } from "vehicle.slint";
+// Fixed 1280x768 layout. The host safety overlay is on the LEFT rail (contract v6,
+// 72 px wide, full height): keep x < 72 as plain background. Telltales are drawn by
+// the host; the turn arrows in the gauge are the one exception the contract allows.
+import { Vehicle, Media, Actions, Battery, DriveMode, Navigation, Plugins, OverlayPlacement, OverlayStyle, Telltale } from "vehicle.slint";
 import { Arc, GaugeTicks, TurnArrow } from "parts.slint";
 import "fonts/Inter-Regular.ttf";
 import "fonts/Inter-SemiBold.ttf";
@@ -125,9 +125,24 @@ export component Dash inherits Window {
         }
     }
 
+    // ---- host overlay settings (contract v6) ----
+    // Telltales on the left rail; the default order puts the indicators first.
+    out property <OverlayPlacement> overlay-placement: OverlayPlacement.left;
+    out property <[Telltale]> telltale-order: [
+        Telltale.left-indicator, Telltale.right-indicator, Telltale.high-beam,
+        Telltale.headlight, Telltale.ready, Telltale.side-stand,
+        Telltale.fault, Telltale.locked, Telltale.charging,
+    ];
+    out property <OverlayStyle> overlay-style: {
+        background: #05070b,
+        foreground: #f4f6fa,
+        corner-radius: 16px,
+        show-labels: true,
+    };
+
     // ---- plugin widgets: up to three small cards above the gauge; none when empty ----
     for w[i] in Plugins.widgets : Rectangle {
-        x: 40px + 196px * i;
+        x: 96px + 196px * i;
         y: 56px;
         width: 184px;
         height: 60px;

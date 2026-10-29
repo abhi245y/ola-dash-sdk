@@ -4,6 +4,11 @@
 //!   sim <theme-dir> --screenshot out.png --at 30 headless PNG at sim time 30 s
 //!   sim --check <theme-dir>                      validate theme.json and compile (no window)
 //!   options: --contract <dir>  (default: <theme>/../../contract)
+//!            --placement top|bottom|left|right   preview another overlay placement
+//!            --alert <code>                      hold a host alert (1-6) instead of the mock cycle
+//!
+//! The theme is loaded the way the device loads it: inside the host's `Host` root,
+//! with `HostOverlay` drawn above it (host/src/theme_root.rs, shared with the host).
 //!
 //! The fake vehicle is a pure function of time (`sim_at`), so a screenshot at
 //! `--at T` is reproducible: the headless path steps a mock clock from 0 to T
@@ -22,6 +27,10 @@ use std::f64::consts::PI;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
+
+// The host's root window and overlay settings, shared with the Android build.
+#[path = "../../host/src/theme_root.rs"]
+mod theme_root;
 
 /// Keys every theme.json must carry (see docs/themes.md).
 const REQUIRED_STR_KEYS: [&str; 7] = ["id", "name", "version", "author", "license", "entry", "description"];
@@ -51,6 +60,10 @@ struct Sim {
     headlight: bool,
     locked: bool,
     ready: bool,
+    side_stand: bool,
+    fault: bool,
+    /// Host alert code (0 none, 3 side stand) on the mock cycle.
+    alert: i64,
     state: &'static str,
     clock: String,
 }
@@ -79,7 +92,13 @@ fn sim_at(t: f64) -> Sim {
     };
     let battery = battery_f.round() as i64;
     let minutes = (10 * 60 + 24 + (t / 60.0) as i64) % (24 * 60);
+    // 120 s cycle: side-stand alert card for 10 s, fault telltale for 6 s before it.
+    let phase = t % 120.0;
+    let alert = if (100.0..110.0).contains(&phase) { 3 } else { 0 };
     Sim {
+        side_stand: alert == 3,
+        fault: (70.0..76.0).contains(&phase),
+        alert,
         speed,
         battery,
         range: (battery_f * 1.05).round() as i64,
@@ -124,12 +143,14 @@ struct Feeder {
     warned: RefCell<HashSet<String>>,
     /// Set with SIM_PLUGINS=1: mock plugin widgets and an active navigation card.
     plugins: bool,
+    /// `--alert <code>`: holds this host alert instead of the mock cycle.
+    alert_override: Option<i64>,
 }
 
 impl Feeder {
-    fn new() -> Self {
+    fn new(alert_override: Option<i64>) -> Self {
         let plugins = std::env::var_os("SIM_PLUGINS").is_some();
-        Self { media: MediaState::new(), warned: Default::default(), plugins }
+        Self { media: MediaState::new(), warned: Default::default(), plugins, alert_override }
     }
 
     fn push_plugins(&self, inst: &ComponentInstance) {
@@ -186,6 +207,12 @@ impl Feeder {
             "state",
             Value::EnumerationValue("VehicleState".into(), s.state.into()),
         );
+        // HostState: the unlock screen is hidden in DRIVE (auth-phase 5).
+        let alert = self.alert_override.unwrap_or(s.alert);
+        self.set(inst, "HostState", "auth-phase", Value::Number(5.0));
+        self.set(inst, "HostState", "alert-code", Value::Number(alert as f64));
+        self.set(inst, "HostState", "side-stand", Value::Bool(s.side_stand || alert == 3));
+        self.set(inst, "HostState", "fault", Value::Bool(s.fault || alert == 5));
         self.set(inst, "Media", "title", Value::String(title.into()));
         self.set(inst, "Media", "artist", Value::String(artist.into()));
         self.set(inst, "Media", "playing", Value::Bool(self.media.playing.get()));
@@ -246,6 +273,8 @@ struct Args {
     screenshot: Option<PathBuf>,
     at: f64,
     check: bool,
+    placement: Option<String>,
+    alert: Option<i64>,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -254,11 +283,22 @@ fn parse_args() -> Result<Args, String> {
     let mut screenshot = None;
     let mut at = 5.0;
     let mut check = false;
+    let mut placement = None;
+    let mut alert = None;
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
             "--check" => check = true,
             "--contract" => contract = it.next().map(PathBuf::from),
+            "--placement" => placement = it.next(),
+            "--alert" => {
+                alert = Some(
+                    it.next()
+                        .and_then(|v| v.parse().ok())
+                        .filter(|c| (1..=6).contains(c))
+                        .ok_or("--alert needs a code 1-6")?,
+                )
+            }
             "--screenshot" => screenshot = it.next().map(PathBuf::from),
             "--at" => {
                 at = it
@@ -268,6 +308,7 @@ fn parse_args() -> Result<Args, String> {
             }
             "-h" | "--help" => {
                 println!("usage: sim <theme-dir> [--screenshot out.png --at SECS] [--contract DIR]");
+                println!("       [--placement top|bottom|left|right] [--alert 1-6]");
                 println!("       sim --check <theme-dir> [--contract DIR]");
                 std::process::exit(0);
             }
@@ -282,13 +323,39 @@ fn parse_args() -> Result<Args, String> {
     let contract = std::fs::canonicalize(&contract)
         .map_err(|e| format!("contract dir {}: {e}", contract.display()))?;
     let theme = std::fs::canonicalize(&theme).map_err(|e| format!("theme {}: {e}", theme.display()))?;
-    Ok(Args { theme, contract, screenshot, at, check })
+    if let Some(p) = &placement {
+        if !["top", "bottom", "left", "right"].contains(&p.as_str()) {
+            return Err(format!("--placement needs top, bottom, left or right, got {p}"));
+        }
+    }
+    Ok(Args { theme, contract, screenshot, at, check, placement, alert })
 }
 
-fn load(main: &Path, contract: &Path) -> Result<ComponentDefinition, Box<dyn Error>> {
+/// Path of `to` relative to `from` (both absolute, same drive), with '/' separators.
+fn relative(from: &Path, to: &Path) -> String {
+    let f: Vec<_> = from.components().collect();
+    let t: Vec<_> = to.components().collect();
+    let common = f.iter().zip(&t).take_while(|(a, b)| a == b).count();
+    let mut parts = vec!["..".to_string(); f.len() - common];
+    parts.extend(t[common..].iter().map(|c| c.as_os_str().to_string_lossy().into_owned()));
+    parts.join("/")
+}
+
+/// Compiles the theme inside the host's `Host` root, as the device does.
+fn load(main: &Path, args: &Args) -> Result<ComponentDefinition, Box<dyn Error>> {
+    let include = vec![args.contract.clone()];
+    let host_ui = args.contract.parent().unwrap_or(Path::new(".")).join("host/ui");
+    let mut probe = Compiler::default();
+    probe.set_include_paths(include.clone());
+    let probed = pollster::block_on(probe.build_from_path(main));
+    for d in probed.diagnostics() {
+        eprintln!("{d}");
+    }
+    let declared = theme_root::declared(&probed).map_err(|e| format!("{}: {e}", main.display()))?;
+    let src = theme_root::root_source(&relative(&host_ui, main), &declared);
     let mut compiler = Compiler::default();
-    compiler.set_include_paths(vec![contract.to_path_buf()]);
-    let result = pollster::block_on(compiler.build_from_path(&main));
+    compiler.set_include_paths(include);
+    let result = pollster::block_on(compiler.build_from_source(src, host_ui.join("root.slint")));
     for d in result.diagnostics() {
         eprintln!("{d}");
     }
@@ -296,8 +363,21 @@ fn load(main: &Path, contract: &Path) -> Result<ComponentDefinition, Box<dyn Err
         return Err(format!("{} failed to compile", main.display()).into());
     }
     result
-        .component("Dash")
-        .ok_or_else(|| format!("{} must export component Dash", main.display()).into())
+        .component("Host")
+        .ok_or_else(|| "host root component missing".into())
+}
+
+/// Binds the host overlay and applies the sim-only placement override, if any.
+fn bind_overlay(inst: &ComponentInstance, args: &Args) -> Result<(), Box<dyn Error>> {
+    theme_root::bind(inst, sim_warn)?;
+    if let Some(p) = &args.placement {
+        inst.set_global_property("OverlayConfig", "placement", Value::EnumerationValue("OverlayPlacement".into(), p.clone()))?;
+    }
+    Ok(())
+}
+
+fn sim_warn(msg: &str) {
+    eprintln!("sim: {msg}");
 }
 
 /// Contract version the SDK ships: `contract-version: N;` in contract/vehicle.slint.
@@ -385,7 +465,7 @@ fn run_check(args: &Args) -> bool {
     };
     let entry = check_manifest(&args.theme, current, &mut errors);
     if let (true, Some(entry)) = (errors.is_empty(), entry) {
-        match load(&entry, &args.contract) {
+        match load(&entry, args) {
             Ok(_) => println!("ok: {} (sim contract {current})", args.theme.display()),
             Err(e) => errors.push(e.to_string()),
         }
@@ -421,9 +501,10 @@ fn run_screenshot(args: &Args, out: &Path) -> Result<(), Box<dyn Error>> {
         window: window.clone(),
         clock: clock.clone(),
     }))?;
-    let def = load(&args.theme.join("main.slint"), &args.contract)?;
+    let def = load(&args.theme.join("main.slint"), args)?;
     let inst = def.create()?;
-    let feeder = Feeder::new();
+    bind_overlay(&inst, args)?;
+    let feeder = Feeder::new(args.alert);
     feeder.wire_callbacks(&inst);
     inst.show()?;
     window.set_size(slint::PhysicalSize::new(WIDTH, HEIGHT));
@@ -457,9 +538,10 @@ fn run_screenshot(args: &Args, out: &Path) -> Result<(), Box<dyn Error>> {
 }
 
 fn run_live(args: &Args) -> Result<(), Box<dyn Error>> {
-    let def = load(&args.theme.join("main.slint"), &args.contract)?;
+    let def = load(&args.theme.join("main.slint"), args)?;
     let inst = def.create()?;
-    let feeder = Rc::new(Feeder::new());
+    bind_overlay(&inst, args)?;
+    let feeder = Rc::new(Feeder::new(args.alert));
     feeder.wire_callbacks(&inst);
     let start = Instant::now();
     feeder.push(&inst, 0.0);

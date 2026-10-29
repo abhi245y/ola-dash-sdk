@@ -15,6 +15,8 @@ use jni::{jni_sig, jni_str, EnvUnowned, JavaVM};
 use slint::{ModelRc, VecModel};
 use slint_interpreter::{Compiler, ComponentHandle, ComponentInstance, Value};
 
+mod theme_root;
+
 // Field ids. Must match VehicleBridge.java.
 const SPEED_KMH: usize = 1;
 const BATTERY_PCT: usize = 2;
@@ -65,26 +67,7 @@ const FALLBACK: &str = "fallback"; // bundled copy of themes/default
 const LAST_RESORT: &str = "last-resort"; // bundled placeholder, cannot fail to compile
 const HEADUNIT_PKG: &str = "com.andrerinas.headunitrevived";
 /// Highest contract version this host implements (contract/vehicle.slint `contract-version`).
-const HOST_CONTRACT: i64 = 5;
-
-// Generated root window. `{THEME}` is the theme's entry file, relative to files/host/.
-const ROOT: &str = r#"import { Dash } from "{THEME}";
-import { HostOverlay, HostState } from "overlay.slint";
-import { Vehicle, Media, Actions, Battery, Ride, Navigation, Plugins } from "vehicle.slint";
-export { Dash, Vehicle, Media, Actions, Battery, Ride, Navigation, Plugins, HostState }
-export component Host inherits Window {
-    callback unlock-key(int);
-    width: 1280px;
-    height: 768px;
-    background: #000000;
-    default-font-family: dash.default-font-family;
-    dash := Dash { width: parent.width; height: parent.height; }
-    HostOverlay {
-        width: parent.width; height: parent.height;
-        unlock-key(key) => { root.unlock-key(key); }
-    }
-}
-"#;
+const HOST_CONTRACT: i64 = 6;
 
 /// Latest value per field, coalesced until the UI thread applies it.
 static PENDING: Mutex<[Option<f64>; SLOTS]> = Mutex::new([None; SLOTS]);
@@ -316,16 +299,28 @@ fn build_root(files: &Path, theme: &str) -> Result<ComponentInstance, String> {
         LAST_RESORT => ("last-resort".to_string(), "main.slint".to_string()),
         t => (format!("themes/{t}"), theme_entry(files, &format!("themes/{t}"))?),
     };
-    let src = ROOT.replace("{THEME}", &format!("../{rel}/{entry}"));
+    let include = vec![files.join("contract")];
+    // Probe compile of the theme alone: which optional Dash properties it defines.
+    let mut probe = Compiler::new();
+    probe.set_include_paths(include.clone());
+    let probed = spin_on::spin_on(probe.build_from_path(files.join(&rel).join(&entry)));
+    let declared = theme_root::declared(&probed)?;
+    let src = theme_root::root_source(&format!("../{rel}/{entry}"), &declared);
     let mut compiler = Compiler::new();
-    compiler.set_include_paths(vec![files.join("contract")]);
+    compiler.set_include_paths(include);
     let result = spin_on::spin_on(compiler.build_from_source(src, files.join("host/root.slint")));
     if result.has_errors() {
         let msgs: Vec<String> = result.diagnostics().map(|d| d.to_string()).collect();
         return Err(msgs.join("\n"));
     }
     let def = result.component("Host").ok_or("no Host component")?;
-    def.create().map_err(|e| e.to_string())
+    let ui = def.create().map_err(|e| e.to_string())?;
+    theme_root::bind(&ui, log_warn)?;
+    Ok(ui)
+}
+
+fn log_warn(msg: &str) {
+    log::warn!("{msg}");
 }
 
 /// Theme first; any compile or create failure falls back to the bundled placeholder.

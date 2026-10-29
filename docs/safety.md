@@ -13,6 +13,26 @@ This project changes what a rider sees on a vehicle. The rules below apply to th
 - The overlay (telltales, alert cards, the unlock screen) is drawn by the host after the theme, above every theme.
 - No theme API can hide, move, resize, or draw over it.
 - Plugins cannot cover it either.
+- Themes can choose where the telltale strip sits (`overlay-placement`), in which order the telltales appear, the strip's colours and labels, and where alert cards sit. See [contract.md](contract.md#host-overlay-settings-v6).
+
+### What a theme can change (v6)
+
+- Strip placement: top, bottom, left or right.
+- Telltale order. Every telltale stays on the strip.
+- Strip background, label colour and corner radius, and label visibility.
+- Alert card vertical position.
+
+### What a theme cannot change
+
+- Whether the overlay is shown. It is always drawn, above the theme.
+- Telltale and alert colours. Semantic colours (green indicators and ready, blue high beam, amber side stand, red fault and alert frames) are fixed by the host.
+- Minimum sizes: telltale icons at least 28 px, alert text at least 32 px.
+- Contrast. A background and foreground pair below 4.5:1 is replaced by the host default.
+- Icons. Themes cannot supply their own telltale icons.
+- Dismissal. Fall or accident, tow or theft, side stand and steering lock cannot be dismissed. Fault and low battery can be tapped away, as before.
+- The TEST DATA badge, which is shown in every placement in debug builds.
+- The alert scrim dims the whole screen, but the telltale strip is drawn above it, so telltales stay at full brightness during an alert.
+- Placement is clamped: no overlay element goes off screen.
 - The overlay shows the TEST DATA banner in debug builds while injected values are active. A release build never shows injected data.
 
 If a theme or plugin ever hides the overlay, that is a critical bug. Report it under [SECURITY.md](../SECURITY.md).

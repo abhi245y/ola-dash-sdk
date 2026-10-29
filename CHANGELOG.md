@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- Contract v6: optional `Dash` properties for the host safety overlay. `overlay-placement` (top, bottom, left, right; default top), `telltale-order`, `overlay-style` (background, foreground, corner radius, labels) and `alert-position` (center, upper, lower). New enums `OverlayPlacement`, `Telltale`, `AlertPosition` and struct `OverlayStyle`, exported from `contract/vehicle.slint`. Host enforces: minimum telltale icon 28 px and alert text 32 px, 4.5:1 contrast with host fallback, host-fixed semantic colours, non-dismissible safety alerts, and placement inside the screen.
+- Overlay redesign: telltale strip on any edge with the reserved strip (48 px top or bottom, 72 px left or right), placeholder telltale glyphs, alert cards with a one-line hint, and a pulsing frame for fall and tow alerts. Overlay tokens at the top of `host/ui/overlay.slint`.
+- `sim` renders the host overlay through the same root as the device. Mock telltales and a side-stand alert phase; `--placement` and `--alert` flags.
+
 - Plugin host (API v1). Owner-enabled plugin APKs are bound through `files/plugins/enabled` and publish widgets, media and navigation. Each plugin gets its own `IDashHost`. Limits: 4 widgets per plugin, string lengths cut. A plugin that dies is rebound with backoff.
 - Plugin data reaches the UI as one JSON snapshot per change, coalesced on the UI thread.
 - Built-in media source (`StockMediaService`): the active media session feeds the Media card, and its play, pause, next and previous controls. Needs the notification listener grant, see [docs/plugins.md](docs/plugins.md).
@@ -14,6 +18,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - Default theme: plugin widget cards above the gauge and a navigation card in place of the media card while navigation is active. The minimal theme shows the first widget.
 
 ### Changed
+
+- Default theme declares a left-rail overlay with its own telltale order and style, and moves the plugin widget cards clear of the rail. Its contract is now 6. The minimal theme is unchanged (contract 5, top placement).
 
 - Keep-alive also counts media playing in PARK or charging, as the stock HMI does. Only the built-in media source counts, never a plugin. Each reason change is logged (`keep-alive <bool> reason=<touch|media|none>`).
 - `docs/plugins.md` is no longer a specification only: the host implements it.

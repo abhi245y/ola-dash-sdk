@@ -63,7 +63,7 @@ jobs:
           done
 
       - name: Upload screenshots
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sim-screens
           path: out/
@@ -114,7 +114,7 @@ jobs:
       - name: Build APK
         run: JDK_HOME="$JAVA_HOME" ANDROID_HOME="$ANDROID_HOME" host/build.sh
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ola-dash-debug-apk
           path: host/out/ola-dash-debug.apk

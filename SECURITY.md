@@ -5,7 +5,7 @@
 Please do not open a public issue for security problems.
 
 - Preferred: GitHub private vulnerability reporting on this repository (Security tab, "Report a vulnerability").
-- Otherwise: email `<maintainer email>`.
+- Otherwise: email abhi245y@gmail.com.
 
 Include what you found, the commit or release it affects, steps to reproduce, and the impact as you understand it. Do not include a real passcode, account credentials, a VIN, or unredacted logs. Describe the data instead.
 

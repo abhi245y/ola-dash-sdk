@@ -48,4 +48,4 @@ First public snapshot. Experimental, in field testing on one rooted scooter.
 - The host build is debuggable, so the test channel is present in the only APK produced so far. A release flavor is needed.
 - The host README and the bundled themes disagree on whether `Dash` should inherit `Window`. See [docs/themes.md](docs/themes.md).
 
-[0.1.0]: https://github.com/OWNER/REPO/releases/tag/v0.1.0
+[0.1.0]: https://github.com/abhi245y/ola-dash-sdk/releases/tag/v0.1.0

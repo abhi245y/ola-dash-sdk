@@ -1,7 +1,2 @@
-# Code owners are requested for review automatically. Replace the placeholder
-# with real GitHub handles before enabling branch protection.
-#
-# Example (not active until the handle is real):
-# *            @<maintainer-github-handle>
-# /host/       @<maintainer-github-handle>
-# /contract/   @<maintainer-github-handle>
+# Code owners are requested for review automatically.
+*            @abhi245y

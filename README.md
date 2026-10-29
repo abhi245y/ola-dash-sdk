@@ -2,9 +2,7 @@
 
 An unofficial, open-source dash platform for the Ola S1 Pro Gen 1 electric scooter. It replaces the stock 640 MB dash with a roughly 70 MB [Slint](https://slint.dev) app whose look comes from `.slint` theme files loaded at runtime, so a theme can be changed without rebuilding the app. Plugins are separate Android APKs that publish data into named slots, and the owner decides which of them run. The host, not the theme or a plugin, owns every safety-relevant screen element.
 
-<!-- CI badge: replace OWNER/REPO once the repository has a public URL.
-![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)
--->
+[![CI](https://github.com/abhi245y/ola-dash-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/abhi245y/ola-dash-sdk/actions/workflows/ci.yml)
 
 > **Status: 0.1, experimental.** The host is in field testing on a rooted scooter owned by the maintainer. Themes can be developed and checked without a scooter. Expect rough edges.
 >

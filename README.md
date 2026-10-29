@@ -4,8 +4,8 @@ An unofficial, open-source dash platform for the Ola S1 Pro Gen 1 electric scoot
 
 [![CI](https://github.com/abhi245y/ola-dash-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/abhi245y/ola-dash-sdk/actions/workflows/ci.yml)
 
-> **Status: 0.1, experimental.** The host is in field testing on a rooted scooter owned by the maintainer. Themes can be developed and checked without a scooter. Expect rough edges.
-
+> [!WARNING]
+> **Work in progress: early build (0.1, experimental).** Anything can change between commits: the theme contract, the plugin API, file layouts, build steps and behaviour on the scooter. There are no stability guarantees until 1.0, so pin a commit if you build on top of it. The host is in field testing on a rooted scooter owned by the maintainer. Themes can be developed and checked without a scooter. Expect rough edges.
 
 **This project is not affiliated with, endorsed by, or supported by Ola Electric.** See the [disclaimer](#disclaimer).
 

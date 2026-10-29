@@ -6,6 +6,8 @@ Units: distances in km, speed in km/h, temperatures in °C, current in A, voltag
 
 ## Versioning rules
 
+> **Pre-1.0:** this is an early build. The maintainer may still make breaking changes to the contract when the design needs it; each one bumps `contract-version` and is listed in [CHANGELOG.md](../CHANGELOG.md). The rules below are what contributors follow, and what the project commits to from 1.0.
+
 - **Additive only.** Never rename, remove or change the type of a field, enum value or callback.
 - **New enum values go at the end** of the enum.
 - **Bump `contract-version`** and add a line to the history comment at the top of the file.

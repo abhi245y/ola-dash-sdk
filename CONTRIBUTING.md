@@ -51,7 +51,7 @@ described at the bottom of that page.
 
 ## Contract changes
 
-The theme contract (`contract/vehicle.slint`) is the stable API that themes depend on. Changes must follow these rules:
+The theme contract (`contract/vehicle.slint`) is the API that themes depend on. Until 1.0 it can still change in breaking ways when the maintainer decides it must (see [docs/contract.md](docs/contract.md)); contributed changes must follow these rules:
 
 1. **Additive only.** Never rename, remove or change the type of a field, enum value or callback. Append new enum values at the end of the enum.
 2. **Bump `contract-version`** in `contract/vehicle.slint` by one.

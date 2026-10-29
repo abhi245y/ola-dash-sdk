@@ -10,7 +10,8 @@
 //
 // History: v2 park, reverse | v3 custom, hyper-available | v4 easy-park |
 //          v5 VehicleState, Battery, Ride, Navigation, Plugins; -1 = not reported yet |
-//          v6 overlay-placement, telltale-order, overlay-style, alert-position (optional Dash props)
+//          v6 overlay-placement, telltale-order, overlay-style, alert-position (optional Dash props),
+//             trunk-open, Actions.open-trunk
 
 export enum DriveMode { eco, normal, sport, hyper, unknown, park, reverse, custom, easy-park }
 
@@ -60,6 +61,8 @@ export global Vehicle {
     in property <bool> headlight;
 
     in property <bool> locked;
+    // Seat/trunk latch is open. It closes mechanically when the seat is pressed down.
+    in property <bool> trunk-open;
     // Same as state == drive; kept for v1 themes.
     in property <bool> ready-to-ride;
 
@@ -119,9 +122,12 @@ export global Plugins {
     callback widget-clicked(string /* widget id */);
 }
 
-// Harmless actions only. Vehicle commands (lock, seat, lights) are never
-// exposed to themes; they live in host-owned screens.
+// Harmless actions, plus one gated vehicle request. Other vehicle commands
+// (lock, lights, modes) are never exposed to themes.
 export global Actions {
     callback open-android-auto();
     callback open-settings();
+    // Ask the host to open the seat/trunk, like the stock dash's trunk button.
+    // The host ignores it unless the scooter is unlocked, in Park and at 0 km/h.
+    callback open-trunk();
 }

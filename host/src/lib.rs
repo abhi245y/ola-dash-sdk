@@ -43,6 +43,8 @@ const AUTH_ATTEMPTS: usize = 34;
 const AUTH_ERROR: usize = 35;
 const AUTH_COOLDOWN: usize = 36;
 const AUTH_AVAILABLE: usize = 37;
+// Contract v6. Trunk latch (true = open). Java side: VehicleBridge.TRUNK_OPEN.
+const TRUNK_OPEN: usize = 16;
 // Contract v5 (ids 15, 40+). Java side: VehicleBridge.java, same numbers.
 const VEHICLE_STATE: usize = 15;
 const SOC_PCT: usize = 40;
@@ -181,6 +183,21 @@ fn strct(obj: &serde_json::Value, keys: &[&str]) -> Value {
     Value::Struct(keys.iter().map(|k| (k.to_string(), text(obj, k))).collect())
 }
 
+/// Asks MainActivity.onOpenTrunk to send the host-gated trunk request (VehicleBridge.openTrunk).
+fn request_trunk(app: &AndroidApp) {
+    let vm = unsafe { JavaVM::from_raw(app.vm_as_ptr() as *mut _) };
+    let res = vm.attach_current_thread(|env| -> jni::errors::Result<()> {
+        let activity = ManuallyDrop::new(unsafe {
+            JObject::from_raw(&*env, app.activity_as_ptr() as jni::sys::jobject)
+        });
+        env.call_method(&*activity, jni_str!("onOpenTrunk"), jni_sig!("()V"), &[])?;
+        Ok(())
+    });
+    if res.is_err() {
+        log::warn!("trunk bridge unavailable");
+    }
+}
+
 /// Sends "media.<x>" or "widget.<id>" to PluginHost.action() through MainActivity.onDashAction.
 fn dash_action(app: &AndroidApp, action: &str) {
     let vm = unsafe { JavaVM::from_raw(app.vm_as_ptr() as *mut _) };
@@ -210,6 +227,7 @@ fn apply(ui: &ComponentInstance, id: usize, v: f64) {
             ("Vehicle", "mode", Value::EnumerationValue("DriveMode".into(), name.into()))
         }
         CHARGING => ("Vehicle", "charging", b),
+        TRUNK_OPEN => ("Vehicle", "trunk-open", b),
         ODO_KM => ("Vehicle", "odometer-km", n),
         TRIP_KM => ("Vehicle", "trip-km", n),
         LEFT_IND => ("Vehicle", "left-indicator", b),
@@ -415,6 +433,12 @@ fn wire(ui: &ComponentInstance, app: &AndroidApp) -> Result<(), String> {
     let a = app.clone();
     ui.set_global_callback("Actions", "open-android-auto", move |_| {
         launch(&a, Target::Package(HEADUNIT_PKG));
+        Value::Void
+    })
+    .map_err(err)?;
+    let a = app.clone();
+    ui.set_global_callback("Actions", "open-trunk", move |_| {
+        request_trunk(&a);
         Value::Void
     })
     .map_err(err)?;

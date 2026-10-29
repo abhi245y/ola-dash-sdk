@@ -22,7 +22,7 @@ History (from the file's comment):
 | 3 | `DriveMode.custom`, `Vehicle.hyper-available` |
 | 4 | `DriveMode.easy-park` |
 | 5 | `VehicleState`, `Battery`, `Ride`, `Navigation`, `Plugins`; `Vehicle.state` |
-| 6 | Optional `Dash` properties for the host overlay: `overlay-placement`, `telltale-order`, `overlay-style`, `alert-position`; enums `OverlayPlacement`, `Telltale`, `AlertPosition`; struct `OverlayStyle` |
+| 6 | Optional `Dash` properties for the host overlay: `overlay-placement`, `telltale-order`, `overlay-style`, `alert-position`; enums `OverlayPlacement`, `Telltale`, `AlertPosition`; struct `OverlayStyle`; `Vehicle.trunk-open`; `Actions.open-trunk()` (gated, see below) |
 
 ## Enums
 
@@ -67,6 +67,7 @@ History (from the file's comment):
 | `headlight` | `in bool` | false | As above |
 | `locked` | `in bool` | false | Vehicle lock state. Themes may ignore it; the host shows it. |
 | `ready-to-ride` | `in bool` | false | Equals `state == VehicleState.drive`. Kept for v1 themes. |
+| `trunk-open` | `in bool` | false | v6. True while the seat/trunk latch is open. It closes when the seat is pressed down. Themes may ignore it. |
 | `clock-text` | `in string` | "" | Preformatted clock, for example `10:24` |
 
 ## `Battery` global (v5)
@@ -136,12 +137,26 @@ The host implementation of `Plugins` is in progress. Until it lands, `widgets` s
 
 ## `Actions` global
 
-Harmless actions only. Vehicle commands (lock, seat, lights) are never exposed to themes. Those live in host-owned screens.
+Harmless actions, plus one gated vehicle request. Other vehicle commands (lock, lights, modes) are never exposed to themes. Those live in host-owned screens only.
 
 | Member | Type | Notes |
 |---|---|---|
 | `open-android-auto()` | callback | Launches Android Auto |
 | `open-settings()` | callback | Opens system settings |
+| `open-trunk()` | callback | v6. Asks the host to open the seat/trunk, like the stock trunk button. See below. |
+
+### `open-trunk()` (v6)
+
+The host sends the request only when all of these hold, using real vehicle values, never test data:
+
+- The BCM reports the scooter unlocked.
+- `state` is `park`.
+- Speed is 0 km/h. An unknown speed is refused.
+- The trunk latch is known to be closed (`trunk-open` is false). An unknown latch is refused.
+- The host is not in test mode, and the vehicle parser is connected.
+- The previous request was sent more than 3 s ago.
+
+Otherwise nothing happens. The theme gets no result, so show nothing the rider could mistake for "trunk opening". Each call is logged in the calls log as `trunk request: sent` or `trunk request: refused <reason>`. The host sends one command per request and does not retry or wait for an acknowledgement. If the command is lost, nothing happens. See [safety.md](safety.md#the-one-vehicle-request).
 
 ## Host overlay settings (v6)
 

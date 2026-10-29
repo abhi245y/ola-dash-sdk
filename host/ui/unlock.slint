@@ -31,7 +31,6 @@ export component UnlockScreen inherits Rectangle {
     in property <int> cooldown;
     in property <bool> available;
     in property <bool> test-mode;
-    in property <bool> side-stand;
     callback key(int);
     background: #070b10;
 
@@ -40,22 +39,20 @@ export component UnlockScreen inherits Rectangle {
 
     Text {
         x: 80px; y: 158px; width: 520px; height: 84px;
-        text: root.phase == 4 ? "PARKED"
-            : root.phase == 0 ? (root.error == 2 ? "Connection unavailable" : "Connecting")
+        text: root.phase == 0 ? (root.error == 2 ? "Connection unavailable" : "Connecting")
             : root.phase == 3 ? "Unlocking"
             : root.phase == 2 ? "Checking passcode"
             : root.attempts == 0 ? "Try again shortly"
             : "Enter passcode";
-        color: root.phase == 4 ? #3fb8ff : #f4f6fa;
-        font-size: root.phase == 4 ? 72px : 46px;
+        color: #f4f6fa;
+        font-size: 46px;
         font-weight: 700;
         vertical-alignment: center;
     }
 
     Text {
         x: 80px; y: 262px; width: 480px; height: 94px;
-        text: root.phase == 4 ? "Press the handlebar power button to start."
-            : root.phase == 0 ? (root.error == 2 ? "Cannot reach the passcode service. Retry the connection." : "Waiting for vehicle status.")
+        text: root.phase == 0 ? (root.error == 2 ? "Cannot reach the passcode service. Retry the connection." : "Waiting for vehicle status.")
             : root.phase == 3 ? "Waiting for the scooter to confirm unlock."
             : root.phase == 2 ? (root.error == 2 ? "Verification is taking longer than expected. Please wait." : "Please wait.")
             : root.test-mode ? "Exit test mode before unlocking."
@@ -112,10 +109,4 @@ export component UnlockScreen inherits Rectangle {
         pressed => { root.key(12); }
     }
 
-    if root.phase == 4 && root.side-stand : Text {
-        x: 80px; y: 400px; width: 650px; height: 56px;
-        text: "Close the side stand before starting.";
-        color: #ffb020;
-        font-size: 28px;
-    }
 }

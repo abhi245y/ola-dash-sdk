@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- Contract v6: `Vehicle.trunk-open` (latch state from `isTrunkLock`) and `Actions.open-trunk()`. The host sends the stock trunk command only when the scooter is unlocked, in Park, stopped, latch closed, not in test mode and not within 3 s of the last request. Each request is logged. Guards are in `safety.md`; the gate is `host/java/dev/olatool/dash/TrunkGate.java` with a JVM test.
+- Overlay icons redrawn as solid ISO-style glyphs (turn arrows, high and low beam, READY power symbol, padlock, side stand, fault, charging). Each sits in a lamp window with a hairline rim.
+- Alert card hint "Tap to dismiss" for fault and low battery.
+
 - Contract v6: optional `Dash` properties for the host safety overlay. `overlay-placement` (top, bottom, left, right; default top), `telltale-order`, `overlay-style` (background, foreground, corner radius, labels) and `alert-position` (center, upper, lower). New enums `OverlayPlacement`, `Telltale`, `AlertPosition` and struct `OverlayStyle`, exported from `contract/vehicle.slint`. Host enforces: minimum telltale icon 28 px and alert text 32 px, 4.5:1 contrast with host fallback, host-fixed semantic colours, non-dismissible safety alerts, and placement inside the screen.
 - Overlay redesign: telltale strip on any edge with the reserved strip (48 px top or bottom, 72 px left or right), placeholder telltale glyphs, alert cards with a one-line hint, and a pulsing frame for fall and tow alerts. Overlay tokens at the top of `host/ui/overlay.slint`.
 - `sim` renders the host overlay through the same root as the device. Mock telltales and a side-stand alert phase; `--placement` and `--alert` flags.
@@ -18,6 +22,10 @@ All notable changes to this project are documented here. The format follows [Kee
 - Default theme: plugin widget cards above the gauge and a navigation card in place of the media card while navigation is active. The minimal theme shows the first widget.
 
 ### Changed
+
+- The unlock screen covers the dash only in the locked and authentication phases. From PARK on it is hidden, and the theme shows the dash. The PARKED text, the power-button hint and the side-stand hint were removed from the host screen.
+- Overlay motion: telltale fade is 180 ms with a 6 px slide; the blink period stays 800 ms.
+- Safety alert frames (codes 1-4) pulse; fault and low battery stay still. Tow hint reads "Tow / theft alert".
 
 - Default theme declares a left-rail overlay with its own telltale order and style, and moves the plugin widget cards clear of the rail. Its contract is now 6. The minimal theme is unchanged (contract 5, top placement).
 

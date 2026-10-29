@@ -50,7 +50,7 @@ export component Dash inherits Window {
 - **Re-export the globals (for `sim`).** `sim` loads the theme file as the root component and sets `Vehicle.*` and `Media.*` on that instance. slint-interpreter only exposes globals the main file exports, so `sim` needs the `export { ... }` line; without it the values never arrive. The host wraps the theme and re-exports the globals itself, so the export line is not what the device depends on. Keep it in every theme.
 - Import the contract as `"vehicle.slint"`. The host and `sim` put `contract/` on the include path, so no copy is needed.
 
-> **Open question:** the bundled themes use `export component Dash inherits Window`, and `sim` accepts that. `host/README.md` says the host generates its own root window and that `Dash` must **not** inherit `Window`. Only the bundled themes were tested in `sim`; a plain-element `Dash` was not tried. Until the host and sim agree, follow the bundled themes and expect the host path to need a change.
+- **`Dash` must inherit `Window`:** `export component Dash inherits Window { ... }`. The host wraps it in its own root window and reads `default-font-family` from it; `sim` loads it directly.
 
 ## Reserved area
 

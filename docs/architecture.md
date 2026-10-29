@@ -2,6 +2,10 @@
 
 The dash is a Slint app running inside an Android app on the scooter's head unit. The Ola vehicle-parser service stays in charge of the vehicle. The host reads from it, draws the screen, and never sends vehicle commands.
 
+## Target hardware (S1 Pro Gen 1, measured on one scooter)
+
+Android 10 (API 29), Qualcomm SDM450 (msm8953 family, arm64), Adreno 506 GPU (GLES 3.2), 2.9 GB RAM, 1280x768 display at density 236 (the host forces a 1.0 scale factor so themes use panel pixels), multitouch. Wi-Fi with Wi-Fi Direct, Bluetooth and BLE, GPS, cellular modem. No Google services. Other generations are unknown.
+
 ## Components
 
 ```

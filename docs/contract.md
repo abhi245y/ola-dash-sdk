@@ -131,7 +131,7 @@ Turn-by-turn from a navigation plugin. Empty strings when inactive.
 | `value` | string | Preformatted value |
 | `unit` | string | Unit text, may be empty |
 
-The host implementation of `Plugins` is in progress. Until it lands, `widgets` stays empty.
+The host fills `widgets` from enabled plugins (see [plugins.md](plugins.md)); it is empty when no plugin publishes.
 
 ## `Actions` global
 

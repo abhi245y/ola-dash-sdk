@@ -51,7 +51,7 @@ javac -d host/build-tests \
 java -cp host/build-tests dev.olatool.dash.UnlockSessionTest
 ```
 
-These need the host sources to be present, not the vendor classes, so they run from a checkout. Check `host/README.md` if the paths move.
+These run from a plain checkout. Check `host/README.md` if the paths move.
 
 The overlay preview renders the real host overlay with mock state, without Android:
 
@@ -66,10 +66,14 @@ The test channel injects fake vehicle callbacks. It exists only in builds where 
 It is for shell-driven testing only: the broadcasts need the DUMP permission, which a root adb shell has.
 
 ```sh
-host/test/inject.sh display speed 25          # <callback> <method> [args...]
+host/test/inject.sh motor onSpeedChanged 25   # <target> <callback method> [args...]
 host/test/inject.sh off                       # end test mode
 ADB_SERIAL=<serial> host/test/inject.sh ...   # when more than one device is attached
 ```
+
+Targets: `display`, `motor`, `modes`, `alerts`, `info`, `commands`, `battery`, `charger`, `handlebar`. Method names are the parser callback names (see `sdk/vehicle-interface/SPEC.md`).
+
+**Screenshots:** `adb exec-out screencap -p` returns a plain white image while the head unit's display is asleep (`dumpsys power` shows `mWakefulness=Asleep`). Wake it first with `adb shell input keyevent KEYCODE_WAKEUP`; no vehicle command is involved.
 
 While test mode is active, real keypad submission is disabled, and real vehicle state is replayed when test mode ends. Starting the scooter is always a manual, supervised test, never an automated one.
 

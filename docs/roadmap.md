@@ -4,7 +4,6 @@ Nothing here is promised. Items are ordered roughly by how much they unblock.
 
 ## Next
 
-- **Clean-room AIDL for the vehicle interface.** Replace the vendor interface classes with our own AIDL, written from observed behaviour rather than copied, so the public build works from a clean checkout. This is the main blocker for outside contributors.
 - **Release flavor.** A build with `android:debuggable` off and the test channel compiled out, so "debug builds only" is true for the installed software.
 - **Plugin host implementation.** Bind enabled plugins, implement `IDashHost`, route `onAction`, and feed `Plugins.widgets`, `Media` and `Navigation` from plugins. Spec: [plugins.md](plugins.md).
 

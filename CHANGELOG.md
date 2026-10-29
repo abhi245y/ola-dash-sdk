@@ -44,7 +44,6 @@ First public snapshot. Experimental, in field testing on one rooted scooter.
 
 ### Known issues
 
-- Building the host needs the vendor interface classes, which are not distributed. The public build does not work yet without them.
 - The host build is debuggable, so the test channel is present in the only APK produced so far. A release flavor is needed.
 - The host README and the bundled themes disagree on whether `Dash` should inherit `Window`. See [docs/themes.md](docs/themes.md).
 

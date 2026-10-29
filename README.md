@@ -5,8 +5,7 @@ An unofficial, open-source dash platform for the Ola S1 Pro Gen 1 electric scoot
 [![CI](https://github.com/abhi245y/ola-dash-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/abhi245y/ola-dash-sdk/actions/workflows/ci.yml)
 
 > **Status: 0.1, experimental.** The host is in field testing on a rooted scooter owned by the maintainer. Themes can be developed and checked without a scooter. Expect rough edges.
->
-> **Work in progress: building the host app.** The dash app currently needs vendor interface classes that this repository does not distribute, so for now only the maintainer can build it. We are replacing them with clean-room interface definitions written from an interoperability spec ([sdk/vehicle-interface/](sdk/vehicle-interface/)). Themes and plugins can be built by anyone today.
+
 
 **This project is not affiliated with, endorsed by, or supported by Ola Electric.** See the [disclaimer](#disclaimer).
 
@@ -29,7 +28,7 @@ An unofficial, open-source dash platform for the Ola S1 Pro Gen 1 electric scoot
 
 ```
  Ola vehicle-parser service (stock, on the head unit)
-        |  AIDL callbacks (vendor interface classes, not distributed)
+        |  AIDL callbacks (clean-room interface, sdk/vehicle-interface)
         v
  VehicleBridge (Java)           keep-alive, session logs, debug test channel
         |  JNI
@@ -62,7 +61,7 @@ tools/check-themes.sh
 
 ### Build the Android host
 
-The host needs Ola's vendor interface classes, which are **not** distributed with this repository. Until clean-room replacements land (see [docs/roadmap.md](docs/roadmap.md)), the public build needs them supplied locally in a git-ignored `private/ola-interface/` directory. Full steps: [docs/building.md](docs/building.md).
+The host builds from a clean checkout. It talks to the stock vehicle service through clean-room interface definitions in [sdk/vehicle-interface/](sdk/vehicle-interface/), written from an interoperability spec rather than copied from Ola's software. Full steps: [docs/building.md](docs/building.md).
 
 ## Project layout
 

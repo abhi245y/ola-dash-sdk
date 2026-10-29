@@ -18,6 +18,7 @@ import com.olaelectric.vehicleinterface.ChargingStatus;
 import com.olaelectric.vehicleinterface.CommandFromVehicle;
 import com.olaelectric.vehicleinterface.DriveModes;
 import com.olaelectric.vehicleinterface.FallDetection;
+import com.olaelectric.vehicleinterface.*;
 import com.olaelectric.vehicleinterface.IAlertInfoCallbacks;
 import com.olaelectric.vehicleinterface.IBatteryInfoCallbacks;
 import com.olaelectric.vehicleinterface.IChargerInfoCallbacks;
@@ -213,8 +214,8 @@ final class VehicleBridge {
         vehicle = vehicleBinder;
         try {
             IVehicleService vs = IVehicleService.Stub.asInterface(vehicleBinder);
-            IParserService parser = IParserService.Stub.asInterface(vs.getParserServiceBinder());
-            commander = ICommanderService.Stub.asInterface(vs.getCommanderServiceBinder());
+            IParserService parser = vs.getParserServiceBinder();
+            commander = vs.getCommanderServiceBinder();
             // The parser keys subscriptions by this string. Use our own package name.
             String key = app.getPackageName();
             Log.i(TAG, "subscribe as " + key
@@ -228,12 +229,12 @@ final class VehicleBridge {
             parser.subscribeBatteryInfo(key, BATTERY);
             parser.subscribeChargerInfo(key, CHARGER);
             parser.subscribeHandleBar(key, HANDLEBAR);
-            parser.subscribeHardwareVersionInfo(key, new IHardwareVersionInfoCallbacks.Stub() { });
-            parser.subscribeIMUInfo(key, new IImuInfoCallbacks.Stub() { });
-            parser.subscribeMapInfo(key, new IMapInfoCallbacks.Stub() { });
-            parser.subscribeProximityInfo(key, new IProximityCallbacks.Stub() { });
-            parser.subscribeVehicleServiceInfo(key, new IVehicleServiceInfoCallbacks.Stub() { });
-            parser.subscribeWidgetData(key, new IWidgetInfoCallbacks.Stub() { });
+            parser.subscribeHardwareVersionInfo(key, new HardwareVersionInfoCallbacksBase() { });
+            parser.subscribeIMUInfo(key, new ImuInfoCallbacksBase() { });
+            parser.subscribeMapInfo(key, new MapInfoCallbacksBase() { });
+            parser.subscribeProximityInfo(key, new ProximityCallbacksBase() { });
+            parser.subscribeVehicleServiceInfo(key, new VehicleServiceInfoCallbacksBase() { });
+            parser.subscribeWidgetData(key, new WidgetInfoCallbacksBase() { });
             Trace.event("subscribed");
         } catch (RemoteException e) {
             Log.w(TAG, "subscribe failed, retrying", e);
@@ -485,7 +486,7 @@ final class VehicleBridge {
         }
     }
 
-    private static final IDisplayInfoCallbacks DISPLAY = new IDisplayInfoCallbacks.Stub() {
+    private static final IDisplayInfoCallbacks DISPLAY = new DisplayInfoCallbacksBase() {
         @Override
         public void isHighBeamOn(boolean on) {
             Trace.call("IDisplayInfoCallbacks.isHighBeamOn", on);
@@ -567,7 +568,7 @@ final class VehicleBridge {
         }
     };
 
-    private static final IMotorInfoCallbacks MOTOR = new IMotorInfoCallbacks.Stub() {
+    private static final IMotorInfoCallbacks MOTOR = new MotorInfoCallbacksBase() {
         @Override
         public void onSpeedChanged(int kmh) {
             Trace.call("IMotorInfoCallbacks.onSpeedChanged", kmh);
@@ -606,7 +607,7 @@ final class VehicleBridge {
         }
     };
 
-    private static final IVehicleModeCallbacks MODES = new IVehicleModeCallbacks.Stub() {
+    private static final IVehicleModeCallbacks MODES = new VehicleModeCallbacksBase() {
         @Override
         public void onVehicleLockStateBCMChanged(VehicleLockStateBCM state) {
             Trace.call("IVehicleModeCallbacks.onVehicleLockStateBCMChanged", state);
@@ -667,7 +668,7 @@ final class VehicleBridge {
         }
     }
 
-    private static final IAlertInfoCallbacks ALERTS = new IAlertInfoCallbacks.Stub() {
+    private static final IAlertInfoCallbacks ALERTS = new AlertInfoCallbacksBase() {
         @Override
         public void onSideStandPostionAlert(boolean on) {
             Trace.call("IAlertInfoCallbacks.onSideStandPostionAlert", on);
@@ -705,7 +706,7 @@ final class VehicleBridge {
         }
     };
 
-    private static final IVehicleInfoCallbacks INFO = new IVehicleInfoCallbacks.Stub() {
+    private static final IVehicleInfoCallbacks INFO = new VehicleInfoCallbacksBase() {
         @Override
         public void isFrontBrakeApplied(boolean on) {
             Trace.call("IVehicleInfoCallbacks.isFrontBrakeApplied", on);
@@ -728,7 +729,7 @@ final class VehicleBridge {
         }
     };
 
-    private static final IBatteryInfoCallbacks BATTERY = new IBatteryInfoCallbacks.Stub() {
+    private static final IBatteryInfoCallbacks BATTERY = new BatteryInfoCallbacksBase() {
         @Override
         public void onOverallSocChanged(float pct) {
             Trace.call("IBatteryInfoCallbacks.onOverallSocChanged", pct);
@@ -767,10 +768,10 @@ final class VehicleBridge {
     };
 
     // Log-only: every callback lands in the calls log; no theme value yet.
-    private static final IChargerInfoCallbacks CHARGER = new IChargerInfoCallbacks.Stub() { };
-    private static final IHandleBarCallbacks HANDLEBAR = new IHandleBarCallbacks.Stub() { };
+    private static final IChargerInfoCallbacks CHARGER = new ChargerInfoCallbacksBase() { };
+    private static final IHandleBarCallbacks HANDLEBAR = new HandleBarCallbacksBase() { };
 
-    private static final IVehicleCommandCallbacks COMMANDS = new IVehicleCommandCallbacks.Stub() {
+    private static final IVehicleCommandCallbacks COMMANDS = new VehicleCommandCallbacksBase() {
         @Override
         public void onPasscodeWindowActivated(boolean active) {
             Trace.call("IVehicleCommandCallbacks.onPasscodeWindowActivated", active);

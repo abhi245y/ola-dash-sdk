@@ -101,11 +101,20 @@ jobs:
           export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$NDK_BIN/aarch64-linux-android29-clang"
           cargo check --manifest-path host/Cargo.toml --target aarch64-linux-android
 
-      # The vendor interface classes are not in the repository. Without them the APK cannot be built.
-      - name: Build APK (only with vendor classes present)
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK packages
         run: |
-          if [ -d private/ola-interface ]; then
-            JDK_HOME="$JAVA_HOME" ANDROID_HOME="$ANDROID_HOME" host/build.sh
-          else
-            echo "::notice title=APK build skipped::private/ola-interface/ is not in this checkout. Vendor interface classes are not distributed, so only cargo check ran."
-          fi
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-34" "build-tools;34.0.0" "ndk;27.2.12479018" > /dev/null
+
+      - name: Build APK
+        run: JDK_HOME="$JAVA_HOME" ANDROID_HOME="$ANDROID_HOME" host/build.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ola-dash-debug-apk
+          path: host/out/ola-dash-debug.apk

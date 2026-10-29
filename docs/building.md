@@ -7,9 +7,9 @@ This page describes what the build needs. It does not assume a particular machin
 | Work | Needs |
 |---|---|
 | Themes, `sim`, `tools/check-themes.sh`, docs | Rust (stable) and fontconfig development files. Nothing Android. |
-| Host APK | Everything below, plus Ola's vendor interface classes in `private/ola-interface/` |
+| Host APK | Everything below (Rust, Android SDK/NDK, JDK 17) |
 
-The vendor interface classes (AIDL stubs, proxies and enums generated from Ola's firmware) are **not** distributed. They are git-ignored. Until clean-room replacements land (see [roadmap.md](roadmap.md)), the host cannot be built from a clean checkout. The maintainer's layout is being moved to `private/ola-interface/`; `host/README.md` lists the current file locations and changes as that move completes.
+The vehicle-service interface comes from `sdk/vehicle-interface/`: AIDL files and enum classes written from an interoperability spec (`SPEC.md`), not copied from Ola's software. `build.sh` compiles them with the SDK's `aidl` tool. No vendor files are needed.
 
 ## Desktop tools (sim and themes)
 
@@ -78,7 +78,7 @@ Themes are not built into the APK. The host copies its bundled assets on each st
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` checks the themes and sim on every push. Its `host` job runs `cargo check` for the Android target. It builds the APK only when `private/ola-interface/` exists, and otherwise prints a notice. The public runner does not have the vendor classes, so the APK step is skipped there.
+`.github/workflows/ci.yml` checks the themes and sim on every push. Its `host` job runs `cargo check` for the Android target. It then builds the debug APK and uploads it as an artifact.
 
 ## Keeping build output out of git
 

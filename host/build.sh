@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds the debug-signed host APK on a Linux build machine (see docs/building.md):
 #   host/build.sh
-# Needs the private vendor tree (private/ola-interface, see README). Output: host/out/ola-dash-debug.apk
+# Output: host/out/ola-dash-debug.apk
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -25,12 +25,8 @@ export CC_aarch64_linux_android="$TC/aarch64-linux-android$API-clang"
 export CXX_aarch64_linux_android="$TC/aarch64-linux-android$API-clang++"
 export AR_aarch64_linux_android="$TC/llvm-ar"
 
-VENDOR="$ROOT/private/ola-interface/java"
-if [ ! -d "$VENDOR/com/olaelectric/vehicleinterface" ]; then
-    echo "build.sh: missing $VENDOR (vendored Ola vehicle interface, not in git)." >&2
-    echo "build.sh: see host/README.md, section 'Vendored vehicle interface', to restore it." >&2
-    exit 1
-fi
+# Vehicle-service interface: clean-room definitions in sdk/vehicle-interface (see its README).
+VI="$ROOT/sdk/vehicle-interface"
 
 B="$HERE/build"
 rm -rf "$B"
@@ -46,14 +42,15 @@ cp "$HERE/ui/"*.slint "$B/assets/host/"
 cp -r "$ROOT/themes/default/." "$B/assets/fallback/"       # bundled default theme (fallback tier)
 cp "$HERE/ui/last-resort/main.slint" "$B/assets/last-resort/"  # placeholder (last-resort tier)
 
-# 3. Java: bridge + vendored Ola interface + plugin AIDL stubs -> classes.dex.
-#    The vendored sources must share one javac run with the bridge: their default
-#    methods call dev.olatool.dash.Trace.
+# 3. Java: bridge + vehicle interface + plugin AIDL stubs -> classes.dex.
+#    The vehicle-interface callback bases call dev.olatool.dash.Trace, so they share
+#    one javac run with the bridge.
 # Compile from a copy: aidl without --lang=java can rewrite its inputs in place.
 mkdir -p "$B/aidl"
-cp -r "$ROOT/sdk/plugin-api/aidl/dev" "$B/aidl/"
+cp -r "$ROOT/sdk/plugin-api/aidl/dev" "$VI/aidl/com" "$B/aidl/"
 "$BT/aidl" --lang=java -I "$B/aidl" -o "$B/gen" "$B/aidl/dev/olatool/dash/plugin/"*.aidl
-find "$HERE/java" "$VENDOR" "$B/gen" -name '*.java' > "$B/srcs.txt"
+"$BT/aidl" --lang=java -I "$B/aidl" -o "$B/gen" "$B/aidl/com/olaelectric/vehicleinterface/"*.aidl
+find "$HERE/java" "$VI/java" "$B/gen" -name '*.java' > "$B/srcs.txt"
 javac --release 8 -encoding UTF-8 -Xlint:-options -cp "$PLATFORM" -d "$B/classes" @"$B/srcs.txt"
 find "$B/classes" -name '*.class' > "$B/classes.txt"
 d8 --release --min-api "$API" --lib "$PLATFORM" --output "$B/dex" @"$B/classes.txt"
@@ -75,6 +72,7 @@ PY
 # 5. Align and sign with the debug key (created once).
 zipalign -p -f 4 "$B/unsigned.apk" "$B/aligned.apk"
 if [ ! -f "$KS" ]; then
+    mkdir -p "$(dirname "$KS")"
     keytool -genkeypair -keystore "$KS" -storepass android -keypass android \
         -alias androiddebugkey -dname "CN=Android Debug,O=Android,C=US" \
         -keyalg RSA -keysize 2048 -validity 10000

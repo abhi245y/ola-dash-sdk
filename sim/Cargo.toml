@@ -19,4 +19,4 @@ slint-interpreter = { version = "=1.18.1", default-features = false, features = 
 # Headless PNG output for --screenshot.
 png = "0.17"
 # Drives the async compiler without a runtime.
-pollster = "0.4"
+pollster = "1.0"

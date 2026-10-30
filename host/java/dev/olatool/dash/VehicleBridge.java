@@ -64,7 +64,7 @@ final class VehicleBridge {
             ODO_KM = 6, TRIP_KM = 7, LEFT_IND = 8, RIGHT_IND = 9, HIGH_BEAM = 10, HEADLIGHT = 11,
             LOCKED = 12, READY = 13, HYPER_AVAILABLE = 14, ALERT_CODE = 20, SIDE_STAND = 21, FAULT = 22, CLOCK_HHMM = 30,
             TEST_MODE = 31, AUTH_PHASE = 32, PIN_LENGTH = 33, AUTH_ATTEMPTS = 34,
-            AUTH_ERROR = 35, AUTH_COOLDOWN = 36, AUTH_AVAILABLE = 37;
+            AUTH_ERROR = 35, AUTH_COOLDOWN = 36, AUTH_AVAILABLE = 37, PARKED = 39;
     // Contract v5. Ids match host/src/lib.rs. Unreported values are -1.
     static final int VEHICLE_STATE = 15, SOC_PCT = 40, BAT_CURRENT = 41, BUS_VOLTAGE = 42,
             TEMP_MIN = 43, TEMP_MAX = 44, HEALTH = 45, FRONT_BRAKE = 46, REAR_BRAKE = 47,
@@ -227,6 +227,21 @@ final class VehicleBridge {
         realBcmUnlocked = null;
         realTrunkOpen = null;
         realSpeedKmh = -1;
+        // Also fail closed on state: tripOnState then skips one unlock-based trip reset after a
+        // parser restart or a test session, and the keep-alive media count stops until a state arrives.
+        lastState = null;
+        pushParked();
+    }
+
+    private static boolean lastParked;
+
+    /** HostState.parked from real values only. Direct nativeSet: never replayed from REAL. */
+    private static synchronized void pushParked() {
+        boolean p = TrunkGate.parked(Trace.testMode, realBcmUnlocked,
+                stateIndex(lastState), realSpeedKmh);
+        if (lastParked && !p && MainActivity.paused) Trace.event("parked -> false while paused");
+        lastParked = p;
+        nativeSet(PARKED, p ? 1 : 0);
     }
 
     static void unlockKey(int key) {
@@ -355,6 +370,8 @@ final class VehicleBridge {
     private static void setTestModeLocked(boolean on) {
         TEST_EVENTS.setActive(on);
         Trace.testMode = on;
+        // Real inputs freeze while test mode is on; forget them so exit waits for the parser replay.
+        if (on) forgetGateState(); else pushParked();
         unlockController.testMode(on);
         setBool(TEST_MODE, on);
         if (on) {
@@ -626,6 +643,7 @@ final class VehicleBridge {
             Trace.call("IMotorInfoCallbacks.onSpeedChanged", kmh);
             if (realVehicleEvent()) realSpeedKmh = kmh;
             setNum(SPEED_KMH, kmh);
+            pushParked();
         }
 
         @Override
@@ -675,6 +693,7 @@ final class VehicleBridge {
                 unlocked = state == VehicleLockStateBCM.Vehicle_Unlocked;
                 realBcmUnlocked = unlocked;
             }
+            pushParked();
         }
 
         @Override
@@ -694,6 +713,7 @@ final class VehicleBridge {
                     || state == VehicleStates.VEHICLE_IDLE || state == VehicleStates.VACATION)) {
                 unlocked = false;
             }
+            pushParked();
         }
     };
 

@@ -64,7 +64,7 @@ If a theme or plugin ever hides the overlay, that is a critical bug. Report it u
 | Commander connected | Parser binder present |
 | No repeat within 3 s | Time since the last request that was sent |
 
-Every request is logged as `trunk request: sent` or `trunk request: refused <reason>`. The host sends the command once. It does not retry and does not wait for an acknowledgement, so a lost command means the trunk does not open and the rider uses the stock control. Rules are in `host/java/dev/olatool/dash/TrunkGate.java`, tested by `host/test/TrunkGateTest.java`.
+Every request is logged as `trunk request: sent` or `trunk request: refused <reason>`. The host sends the command once. It does not retry and does not wait for an acknowledgement, so a lost command means the trunk does not open and the rider uses the stock control. Rules are in `host/java/dev/olatool/dash/TrunkGate.java`, tested by `host/test/TrunkGateTest.java`. The park rule is also exposed as `HostState.parked` (unlocked and parked and stopped, or unlocked and charging, never in test mode), and host screens will use the same gate.
 
 ## Plugins require the owner
 

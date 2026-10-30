@@ -49,6 +49,8 @@ javac -d host/build-tests \
     host/java/dev/olatool/dash/UnlockSession.java \
     host/java/dev/olatool/dash/TestEventGate.java host/test/UnlockSessionTest.java
 java -cp host/build-tests dev.olatool.dash.UnlockSessionTest
+javac -d host/build-tests host/java/dev/olatool/dash/TrunkGate.java host/test/TrunkGateTest.java \
+    && java -cp host/build-tests dev.olatool.dash.TrunkGateTest
 ```
 
 These run from a plain checkout. Check `host/README.md` if the paths move.

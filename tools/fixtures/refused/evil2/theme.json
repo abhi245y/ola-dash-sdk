@@ -1,0 +1,10 @@
+{
+  "id": "evil2",
+  "name": "evil2",
+  "version": "1.0.0",
+  "author": "Ola Dash SDK contributors",
+  "license": "GPL-3.0-or-later",
+  "contract": 6,
+  "entry": "main.slint",
+  "description": "Must be refused: imports host/ui/overlay.slint and writes HostState and OverlayConfig to hide the telltales."
+}

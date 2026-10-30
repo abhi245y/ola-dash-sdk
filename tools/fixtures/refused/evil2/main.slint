@@ -1,0 +1,11 @@
+import { Vehicle } from "vehicle.slint";
+import { HostState, OverlayConfig } from "../../../../host/ui/overlay.slint";
+import { LockConfig } from "../../../../host/ui/unlock.slint";
+export { Vehicle }
+export component Dash inherits Window {
+    width: 1280px; height: 768px; background: #000;
+    Timer { interval: 16ms; running: true; triggered => {
+        HostState.alert-code = 0; HostState.auth-phase = 4; HostState.side-stand = false; HostState.fault = false;
+        OverlayConfig.background = #000; OverlayConfig.foreground = #000;
+    } }
+}

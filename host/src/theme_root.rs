@@ -10,7 +10,9 @@
 
 use slint::{Brush, Color, Model, ModelRc, VecModel};
 use slint_interpreter::Struct;
-use slint_interpreter::{CompilationResult, ComponentHandle, ComponentInstance, Value};
+use slint_interpreter::{CompilationResult, Compiler, ComponentHandle, ComponentInstance, Value};
+use std::io;
+use std::path::{Path, PathBuf};
 
 /// Optional `Dash` properties of contract v6, with the type each one must have.
 const OPTIONAL: [(&str, &str); 5] = [
@@ -62,7 +64,11 @@ export component Host inherits Window {
     height: 768px;
     background: #000000;
     default-font-family: dash.default-font-family;
-    dash := Dash { width: parent.width; height: parent.height; }
+    // The wrapper keeps a theme's own `z` (it merges onto this use-site) below the overlay.
+    Rectangle {
+        width: parent.width; height: parent.height;
+        dash := Dash { width: parent.width; height: parent.height; }
+    }
     HostOverlay {
         width: parent.width; height: parent.height;
         unlock-key(key) => { root.unlock-key(key); }
@@ -97,6 +103,46 @@ pub fn declared(result: &CompilationResult) -> Result<Vec<String>, String> {
         .filter(|(n, _)| names.iter().any(|x| x == n))
         .map(|(n, _)| n.to_string())
         .collect())
+}
+
+/// Source a theme may not contain: each draws after the host overlay and takes touches over it
+/// (`std-widgets.slint` because its widgets embed popups; `Tooltip` lowers to a `PopupWindow`).
+const BANNED: [&str; 6] = ["PopupWindow", "ContextMenuArea", "MenuBar", "Tooltip", "DragArea", "std-widgets.slint"];
+
+/// Reads `path` if it is a plain file under `theme` or one of `allowed` (all canonical),
+/// and, inside `theme`, free of `BANNED` words.
+fn vet(path: &Path, allowed: &[PathBuf], theme: &Path) -> io::Result<String> {
+    let deny = |why: &str| io::Error::new(io::ErrorKind::PermissionDenied, format!("import guard: {}: {why}", path.display()));
+    if std::fs::symlink_metadata(path)?.file_type().is_symlink() {
+        return Err(deny("symlinks are not allowed in themes"));
+    }
+    let real = path.canonicalize()?;
+    let in_theme = real.starts_with(theme);
+    if !in_theme && !allowed.iter().any(|d| real.starts_with(d)) {
+        return Err(deny("a theme may only import its own folder and the contract"));
+    }
+    let src = std::fs::read_to_string(&real)?;
+    match BANNED.iter().find(|w| in_theme && src.contains(**w)) {
+        Some(w) => Err(deny(&format!("themes may not use {w}"))),
+        None => Ok(src),
+    }
+}
+
+/// Gate for a compile of a theme: vets `entry` (`build_from_path` reads it without the loader)
+/// and every import the loader serves. `allowed` is the contract dir, plus the host dir for the
+/// root compile. The probe is the gate: on the root compile the host dir is reachable from theme
+/// files too, so there this only closes paths outside theme, contract and host.
+/// Always `Some(..)`: `None` would fall through to the disk.
+pub fn guard(c: &mut Compiler, allowed: &[&Path], theme: &Path, entry: &Path) -> Result<(), String> {
+    let canon = |p: &Path| p.canonicalize().map_err(|e| format!("{}: {e}", p.display()));
+    if std::fs::symlink_metadata(theme).map_err(|e| format!("{}: {e}", theme.display()))?.file_type().is_symlink() {
+        return Err(format!("import guard: {}: the theme folder is a symlink", theme.display()));
+    }
+    let allowed = allowed.iter().map(|p| canon(p)).collect::<Result<Vec<_>, _>>()?;
+    let theme = canon(theme)?;
+    vet(entry, &allowed, &theme).map_err(|e| e.to_string())?;
+    c.set_file_loader(move |p| Box::pin(std::future::ready(Some(vet(p, &allowed, &theme)))));
+    Ok(())
 }
 
 /// Connects the theme-change callback and applies the settings once.
@@ -420,5 +466,54 @@ mod tests {
     fn contrast_black_white_is_21() {
         assert!((contrast(Color::from_rgb_u8(0, 0, 0), Color::from_rgb_u8(255, 255, 255)) - 21.0).abs() < 0.01);
         assert!(contrast(DEFAULT_BG, DEFAULT_FG) >= MIN_CONTRAST);
+    }
+
+    /// `<tmp>/<name>/{contract/c.slint, theme/ok.slint, outside.slint}`; returns canonical (root, contract, theme).
+    fn tree(name: &str) -> (std::path::PathBuf, std::path::PathBuf, std::path::PathBuf) {
+        let root = std::env::temp_dir().join(format!("ola-guard-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("contract")).unwrap();
+        std::fs::create_dir_all(root.join("theme")).unwrap();
+        for f in ["contract/c.slint", "theme/ok.slint", "outside.slint"] {
+            std::fs::write(root.join(f), "export component A {}").unwrap();
+        }
+        let root = root.canonicalize().unwrap();
+        (root.clone(), root.join("contract"), root.join("theme"))
+    }
+
+    #[test]
+    fn guard_serves_theme_and_contract_files() {
+        let (root, c, t) = tree("ok");
+        assert!(vet(&t.join("ok.slint"), &[c.clone()], &t).is_ok());
+        assert!(vet(&c.join("c.slint"), &[c.clone()], &t).is_ok());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn guard_refuses_escapes() {
+        let (root, c, t) = tree("escape");
+        let denied = |p: &Path| vet(p, &[c.clone()], &t).unwrap_err().kind() == io::ErrorKind::PermissionDenied;
+        assert!(denied(&t.join("../outside.slint")));
+        assert!(denied(&root.join("outside.slint")));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn guard_refuses_symlinks() {
+        let (root, c, t) = tree("link");
+        std::os::unix::fs::symlink(t.join("ok.slint"), t.join("link.slint")).unwrap();
+        assert!(vet(&t.join("link.slint"), &[c.clone()], &t).unwrap_err().to_string().contains("symlink"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn guard_refuses_keywords_in_theme_files() {
+        let (root, c, t) = tree("words");
+        for w in BANNED {
+            std::fs::write(t.join("bad.slint"), format!("// {w}")).unwrap();
+            assert!(vet(&t.join("bad.slint"), &[c.clone()], &t).unwrap_err().to_string().contains(w), "{w}");
+        }
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

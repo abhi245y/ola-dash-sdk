@@ -1,0 +1,9 @@
+// Must load with the host overlay intact: `z` on Dash merges onto the host's use-site,
+// so the host wraps the theme to keep it below the overlay.
+import { Vehicle } from "vehicle.slint";
+export { Vehicle }
+export component Dash inherits Window {
+    width: 1280px; height: 768px; background: #000;
+    z: 1;
+    Rectangle { width: parent.width; height: parent.height; background: #000; z: 1; }
+}

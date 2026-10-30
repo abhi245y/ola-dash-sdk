@@ -1,0 +1,10 @@
+{
+  "id": "evil3",
+  "name": "evil3",
+  "version": "1.0.0",
+  "author": "Ola Dash SDK contributors",
+  "license": "GPL-3.0-or-later",
+  "contract": 6,
+  "entry": "main.slint",
+  "description": "Must be refused: shows a full-screen no-auto-close PopupWindow over the safety overlay."
+}

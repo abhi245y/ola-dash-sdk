@@ -27,6 +27,9 @@ jobs:
             sim/target
           key: cargo-sim-${{ runner.os }}-${{ hashFiles('sim/Cargo.lock') }}
 
+      - name: Unit tests (import guard, overlay rules)
+        run: cargo test --release --manifest-path sim/Cargo.toml
+
       - name: Check every theme
         run: tools/check-themes.sh
 

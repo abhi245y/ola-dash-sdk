@@ -321,11 +321,15 @@ fn build_root(files: &Path, theme: &str) -> Result<ComponentInstance, String> {
     // Probe compile of the theme alone: which optional Dash properties it defines.
     let mut probe = Compiler::new();
     probe.set_include_paths(include.clone());
-    let probed = spin_on::spin_on(probe.build_from_path(files.join(&rel).join(&entry)));
+    let entry_path = files.join(&rel).join(&entry);
+    let (contract, theme_dir, host) = (files.join("contract"), files.join(&rel), files.join("host"));
+    theme_root::guard(&mut probe, &[&contract], &theme_dir, &entry_path)?;
+    let probed = spin_on::spin_on(probe.build_from_path(&entry_path));
     let declared = theme_root::declared(&probed)?;
     let src = theme_root::root_source(&format!("../{rel}/{entry}"), &declared);
     let mut compiler = Compiler::new();
     compiler.set_include_paths(include);
+    theme_root::guard(&mut compiler, &[&contract, &host], &theme_dir, &entry_path)?;
     let result = spin_on::spin_on(compiler.build_from_source(src, files.join("host/root.slint")));
     if result.has_errors() {
         let msgs: Vec<String> = result.diagnostics().map(|d| d.to_string()).collect();

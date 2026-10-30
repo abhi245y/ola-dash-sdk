@@ -8,8 +8,10 @@ project's license, safety notes and what it changes on your scooter before you u
 
 | Project | What it is | License |
 |---|---|---|
-| [ola-s1-rea](https://github.com/itsmobsys/ola-s1-rea) | Reverse engineering of the Ola S1 head unit: root access over IPv6, ADB setup, CAN bus map, HMI internals, OTA and security findings, plus a companion Android app and scripts. | See repository |
 | [Axiom](https://codeberg.org/pitzel/axiom) | Android app for CAN bus telemetry, fault decoding and system management over the scooter's hotspot network: reads CAN frames through the vehicle's gRPC service and can provision wireless ADB. | Apache-2.0 |
+| [ola-can-reference](https://github.com/abhi245y/ola-can-reference) | Sister project: a versioned, evidence-based catalog of Gen 1 CAN messages, signals and enums, with a small decoder and contribution templates. | MIT |
+| [ola-dev-skill](https://github.com/abhi245y/ola-dev-skill) | Sister project: an AI-agent skill (Claude Code, Codex, Gemini CLI, Cursor) for building themes, plugins and tools on this SDK and the CAN reference; it re-syncs automatically when they change. | MIT |
+| [ola-s1-rea](https://github.com/itsmobsys/ola-s1-rea) | Reverse engineering of the Ola S1 head unit: root access over IPv6, ADB setup, CAN bus map, HMI internals, OTA and security findings, plus a companion Android app and scripts. | See repository |
 
 ## Adding a project
 

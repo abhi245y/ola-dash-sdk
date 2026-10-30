@@ -30,9 +30,9 @@ Three themes ship as copyable references. Each started as a concept mock-up; the
 <td><a href="docs/themes.md#default-themesdefault"><img src="docs/img/themes/default-riding.png" alt="Default theme, riding, rendered by sim" width="310"></a></td>
 </tr>
 <tr>
-<td><img src="docs/img/concepts/segment-lockscreen.jpg" alt="Segment lock-screen concept" width="310"></td>
-<td><img src="docs/img/concepts/fields-lockscreen.jpg" alt="Data Fields lock-screen concept" width="310"></td>
-<td><img src="docs/img/concepts/default-lockscreen.jpg" alt="Default lock-screen concept" width="310"></td>
+<td><img src="docs/img/themes/segment-locked.png" alt="Segment theme lock screen, rendered by sim" width="310"></td>
+<td><img src="docs/img/themes/fields-locked.png" alt="Data Fields theme lock screen, rendered by sim" width="310"></td>
+<td><img src="docs/img/themes/default-locked.png" alt="Default theme lock screen, rendered by sim" width="310"></td>
 </tr>
 <tr>
 <td>Seven-segment digits drawn in code, ghost segments for unknown values, telltales on top</td>
@@ -41,7 +41,7 @@ Three themes ship as copyable references. Each started as a concept mock-up; the
 </tr>
 </table>
 
-Rows: concept mock-up (AI-generated, see [docs/img/concepts](docs/img/concepts/)), shipped theme, lock-screen concept. Each theme also has park (P), charging, alert and trunk-open captures in [docs/img/themes/](docs/img/themes/). The gallery and the patterns to copy are in [docs/themes.md](docs/themes.md#reference-themes).
+Rows: concept mock-up (AI-generated, see [docs/img/concepts](docs/img/concepts/)), shipped theme, shipped lock screen (styled by the theme, drawn by the host). Each theme also has park (P), charging, alert and trunk-open captures in [docs/img/themes/](docs/img/themes/). The gallery and the patterns to copy are in [docs/themes.md](docs/themes.md#reference-themes).
 
 ## Features
 

@@ -6,7 +6,7 @@ Before you start, read [docs/safety.md](docs/safety.md). The safety rules are no
 
 ## Things we will not accept
 
-- Ola's vendor files: AIDL interfaces, decompiled code, firmware, keys, passcodes, account credentials, or anything taken from the scooter's update or service paths.
+- Ola's vendor files: AIDL interfaces, decompiled code, firmware, keys, passcodes, account credentials, or anything taken from the scooter's update or service paths. The vehicle interface in `sdk/vehicle-interface/` is clean-room: change it by updating `SPEC.md` from observed behaviour and regenerating (`python3 sdk/vehicle-interface/gen/generate.py`), never by copying from a decompiled app.
 - Theme or plugin code that sends vehicle commands, or a way to hide the host safety overlay.
 - Anything that makes the test channel active in a release build.
 - Logs or screenshots that contain a passcode, account identifiers, or a VIN. Redact before attaching.

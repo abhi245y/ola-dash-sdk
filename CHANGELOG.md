@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- Clean-room vehicle interface (`sdk/vehicle-interface/`): an interoperability spec (`SPEC.md`) and AIDL, enum and callback-base files generated from it, written without Ola's code. The host builds from a clean checkout; CI builds the APK. Verified on a Gen 1 scooter against the previous classes (same callbacks and values).
+
 - Contract v6: `Vehicle.trunk-open` (latch state from `isTrunkLock`) and `Actions.open-trunk()`. The host sends the stock trunk command only when the scooter is unlocked, in Park, stopped, latch closed, not in test mode and not within 3 s of the last request. Each request is logged. Guards are in `safety.md`; the gate is `host/java/dev/olatool/dash/TrunkGate.java` with a JVM test.
 - Overlay icons redrawn as solid ISO-style glyphs (turn arrows, high and low beam, READY power symbol, padlock, side stand, fault, charging). Each sits in a lamp window with a hairline rim.
 - Alert card hint "Tap to dismiss" for fault and low battery.

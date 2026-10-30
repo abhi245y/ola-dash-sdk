@@ -23,7 +23,8 @@ PluginHost.java, StockMediaService.java: bind enabled plugins, one IDashHost eac
 
 | Component | Path | Role |
 |---|---|---|
-| Vehicle-parser service | stock, not in this repo | Source of vehicle state. Its AIDL classes are vendor files, not distributed. |
+| Vehicle-parser service | stock, on the head unit | Source of vehicle state, reached over binder. |
+| Vehicle interface | `sdk/vehicle-interface/` | Clean-room AIDL, enums and logging callback bases for that service, generated from `SPEC.md` (no Ola code). |
 | `VehicleBridge` | `host/java/dev/olatool/dash/VehicleBridge.java` | Receives callbacks, forwards values to Rust, runs keep-alive, writes trace logs. |
 | `TrunkGate` | `host/java/dev/olatool/dash/TrunkGate.java` | Pure rules for the trunk request. Unit-tested on a desktop JVM. |
 | Rust host | `host/src/lib.rs` | Owns the Slint runtime, loads the active theme, pushes values into the contract globals. |

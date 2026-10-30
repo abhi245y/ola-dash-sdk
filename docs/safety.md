@@ -11,7 +11,7 @@ This project changes what a rider sees on a vehicle. The rules below apply to th
 ## Host-owned safety overlay
 
 - The overlay (telltales, alert cards, the unlock screen while locked) is drawn by the host after the theme, above every theme.
-- No theme API can hide, move, resize, or draw over it.
+- No theme API can hide it, shrink it below the host minimums, drop a telltale, or draw over it. Themes may choose its placement, order and style (next point); the host still draws it.
 - Plugins cannot cover it either.
 - Themes can choose where the telltale strip sits (`overlay-placement`), in which order the telltales appear, the strip's colours and labels, and where alert cards sit. See [contract.md](contract.md#host-overlay-settings-v6).
 

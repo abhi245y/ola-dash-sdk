@@ -100,7 +100,7 @@ export component Dash inherits Window {
     property <bool> reversing: Vehicle.mode == DriveMode.reverse;
     property <bool> easy-parking: Vehicle.mode == DriveMode.easy-park;
     // The trunk key works only parked and stopped; the host gates it too.
-    property <bool> trunk-ready: Vehicle.state == VehicleState.park && Vehicle.speed-kmh < 1 && !Vehicle.trunk-open;
+    property <bool> trunk-ready: Vehicle.state == VehicleState.park && Vehicle.speed-kmh == 0 && !Vehicle.trunk-open;
 
     // ---- mode accent: animates whenever the mode or charge state changes ----
     out property <color> accent: charge-view ? #2ee6a6

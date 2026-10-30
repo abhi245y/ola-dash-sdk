@@ -82,10 +82,10 @@ export component Dash inherits Window {
         Rectangle {
             x: 260px; y: 20px; width: 200px; height: 64px;
             background: #2a2a2a; border-radius: 12px;
-            opacity: (Vehicle.state == VehicleState.park && Vehicle.speed-kmh < 1 && !Vehicle.trunk-open) || Vehicle.trunk-open ? 1 : 0.35;
+            opacity: (Vehicle.state == VehicleState.park && Vehicle.speed-kmh == 0 && !Vehicle.trunk-open) || Vehicle.trunk-open ? 1 : 0.35;
             Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: Vehicle.trunk-open ? "Trunk open" : "Open trunk"; color: #fff; font-size: 26px; }
             TouchArea {
-                enabled: Vehicle.state == VehicleState.park && Vehicle.speed-kmh < 1 && !Vehicle.trunk-open;
+                enabled: Vehicle.state == VehicleState.park && Vehicle.speed-kmh == 0 && !Vehicle.trunk-open;
                 clicked => { Actions.open-trunk(); }
             }
         }

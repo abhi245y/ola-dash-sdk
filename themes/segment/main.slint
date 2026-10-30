@@ -68,7 +68,7 @@ export component Dash inherits Window {
     property <bool> parked: !charge-view && (Vehicle.state == VehicleState.park || Vehicle.mode == DriveMode.park);
     property <bool> reversing: Vehicle.mode == DriveMode.reverse;
     property <bool> easy-parking: Vehicle.mode == DriveMode.easy-park;
-    property <bool> trunk-ready: Vehicle.state == VehicleState.park && Vehicle.speed-kmh < 1 && !Vehicle.trunk-open;
+    property <bool> trunk-ready: Vehicle.state == VehicleState.park && Vehicle.speed-kmh == 0 && !Vehicle.trunk-open;
 
     // ---- host overlay settings (contract v6): top strip, dark, indicators first ----
     out property <OverlayPlacement> overlay-placement: OverlayPlacement.top;

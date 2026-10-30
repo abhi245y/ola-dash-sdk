@@ -37,7 +37,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Overlay motion: telltale fade is 180 ms with a 6 px slide; the blink period stays 800 ms.
 - Safety alert frames (codes 1-4) pulse; fault and low battery stay still. Tow hint reads "Tow / theft alert".
 
-- Default theme declares a left-rail overlay with its own telltale order and style, and moves the plugin widget cards clear of the rail. Its contract is now 6. The minimal theme is unchanged (contract 5, top placement).
+- Reference themes declare their overlay settings: Segment and Default put the telltale strip on top, Data Fields on the left rail, each with its own telltale order and style. All four bundled themes (including minimal, which keeps the host defaults) declare contract 6.
 
 - Keep-alive also counts media playing in PARK or charging, as the stock HMI does. Only the built-in media source counts, never a plugin. Each reason change is logged (`keep-alive <bool> reason=<touch|media|none>`).
 - `docs/plugins.md` is no longer a specification only: the host implements it.
@@ -67,6 +67,8 @@ First public snapshot. Experimental, in field testing on one rooted scooter.
 - Project documentation, Contributor Covenant 2.1 code of conduct, security policy, issue and PR templates, and CI.
 
 ### Known issues
+
+- `Vehicle.trunk-open` is derived as `!isTrunkLock`; the polarity is inferred from ride logs and not yet verified on a scooter. The Open Trunk button and its gate have not been exercised on hardware.
 
 - The host build is debuggable, so the test channel is present in the only APK produced so far. A release flavor is needed.
 

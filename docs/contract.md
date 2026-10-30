@@ -67,7 +67,7 @@ History (from the file's comment):
 | `headlight` | `in bool` | false | As above |
 | `locked` | `in bool` | false | Vehicle lock state. Themes may ignore it; the host shows it. |
 | `ready-to-ride` | `in bool` | false | Equals `state == VehicleState.drive`. Kept for v1 themes. |
-| `trunk-open` | `in bool` | false | v6. True while the seat/trunk latch is open. It closes when the seat is pressed down. Themes may ignore it. |
+| `trunk-open` | `in bool` | false | v6. True while the seat/trunk latch is open. It closes when the seat is pressed down. Themes may ignore it. Derived from `isTrunkLock` as `!locked`; that polarity is inferred from logs and not yet verified on a scooter. |
 | `clock-text` | `in string` | "" | Preformatted clock, for example `10:24` |
 
 ## `Battery` global (v5)
@@ -239,7 +239,7 @@ The keypad's size and position are fixed by the host (about 155 x 97 px per key,
 
 ## Re-exporting globals
 
-A theme's entry file must `export { Vehicle, Media, Actions, DriveMode }` and `export component Dash`. `sim` loads the theme as the root component, so it needs these exports. The host documentation also expects `Dash` to be a plain element; see the open question in [themes.md](themes.md).
+A theme's entry file must `export component Dash inherits Window`. The host and `sim` wrap it in the same generated root, which imports the contract and re-exports its globals, so a theme does not need to export them (re-exporting them is harmless).
 
 Themes import the contract as:
 

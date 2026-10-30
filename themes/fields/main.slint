@@ -94,7 +94,7 @@ export component Dash inherits Window {
     // Charging wins: a charging scooter reports park mode too.
     property <bool> parked: !charge-view && (Vehicle.state == VehicleState.park || Vehicle.mode == DriveMode.park);
     property <bool> reversing: Vehicle.mode == DriveMode.reverse;
-    property <bool> trunk-ready: Vehicle.state == VehicleState.park && Vehicle.speed-kmh < 1 && !Vehicle.trunk-open;
+    property <bool> trunk-ready: Vehicle.state == VehicleState.park && Vehicle.speed-kmh == 0 && !Vehicle.trunk-open;
 
     // ---- eased speed for the readout ----
     out property <float> speed-shown: Vehicle.speed-kmh;

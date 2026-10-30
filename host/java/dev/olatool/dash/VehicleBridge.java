@@ -228,7 +228,7 @@ final class VehicleBridge {
         realTrunkOpen = null;
         realSpeedKmh = -1;
         // Also fail closed on state: tripOnState then skips one unlock-based trip reset after a
-        // parser restart, and the keep-alive media count stops until a state arrives.
+        // parser restart or a test session, and the keep-alive media count stops until a state arrives.
         lastState = null;
         pushParked();
     }

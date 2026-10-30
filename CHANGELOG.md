@@ -21,7 +21,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Alert card hint "Tap to dismiss" for fault and low battery.
 
 - Contract v6: optional `Dash` properties for the host safety overlay. `overlay-placement` (top, bottom, left, right; default top), `telltale-order`, `overlay-style` (background, foreground, corner radius, labels) and `alert-position` (center, upper, lower). New enums `OverlayPlacement`, `Telltale`, `AlertPosition` and struct `OverlayStyle`, exported from `contract/vehicle.slint`. Host enforces: minimum telltale icon 28 px and alert text 32 px, 4.5:1 contrast with host fallback, host-fixed semantic colours, non-dismissible safety alerts, and placement inside the screen.
-- Overlay redesign: telltale strip on any edge with the reserved strip (48 px top or bottom, 72 px left or right), placeholder telltale glyphs, alert cards with a one-line hint, and a pulsing frame for fall and tow alerts. Overlay tokens at the top of `host/ui/overlay.slint`.
+- Overlay redesign: telltale strip on any edge with the reserved strip (48 px top or bottom, 72 px left or right), telltale glyphs, alert cards with a one-line hint, and a pulsing frame for fall and tow alerts. Overlay tokens at the top of `host/ui/overlay.slint`.
 - `sim` renders the host overlay through the same root as the device. Mock telltales and a side-stand alert phase; `--placement` and `--alert` flags.
 
 - Plugin host (API v1). Owner-enabled plugin APKs are bound through `files/plugins/enabled` and publish widgets, media and navigation. Each plugin gets its own `IDashHost`. Limits: 4 widgets per plugin, string lengths cut. A plugin that dies is rebound with backoff.

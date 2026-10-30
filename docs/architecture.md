@@ -58,7 +58,7 @@ Themes are loaded in three tiers. A failed compile or create logs its diagnostic
 
 ## Safety overlay
 
-The overlay is compiled into the host and painted after the theme's `Dash` component. Themes have no API to hide it, reorder it, or draw over it. Telltales and alerts are host-owned. Debug builds add a TEST DATA banner while injected values are active. The full model is in [safety.md](safety.md).
+The overlay is compiled into the host and painted after the theme's `Dash` component. Themes can choose its placement, telltale order and style through optional `Dash` properties, but have no API to hide it, drop a telltale, or draw over it. Telltales and alerts are host-owned. Debug builds add a TEST DATA banner while injected values are active. The full model is in [safety.md](safety.md).
 
 ## Keep-alive
 

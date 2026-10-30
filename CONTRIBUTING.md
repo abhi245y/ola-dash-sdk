@@ -7,7 +7,7 @@ Before you start, read [docs/safety.md](docs/safety.md). The safety rules are no
 ## Things we will not accept
 
 - Ola's vendor files: AIDL interfaces, decompiled code, firmware, keys, passcodes, account credentials, or anything taken from the scooter's update or service paths. The vehicle interface in `sdk/vehicle-interface/` is clean-room: change it by updating `SPEC.md` from observed behaviour and regenerating (`python3 sdk/vehicle-interface/gen/generate.py`), never by copying from a decompiled app.
-- Theme or plugin code that sends vehicle commands, or a way to hide the host safety overlay.
+- Theme or plugin code that sends vehicle commands (beyond the host-gated `Actions.open-trunk()` request), or a way to hide the host safety overlay.
 - Anything that makes the test channel active in a release build.
 - Logs or screenshots that contain a passcode, account identifiers, or a VIN. Redact before attaching.
 
@@ -80,7 +80,7 @@ Sign-off (DCO) is optional. If you want it, add `git commit -s`, which appends `
 - [ ] Contract changes follow the rules above, including the version bump and history line.
 - [ ] Docs updated for user-visible changes. CHANGELOG updated under "Unreleased".
 - [ ] No vendor files, secrets, logs with identifiers, or binaries in the diff.
-- [ ] Safety rules still hold: overlay not hideable, no vehicle commands from themes or plugins, test channel gated to debug builds.
+- [ ] Safety rules still hold: overlay not hideable, no vehicle commands from themes or plugins beyond the gated trunk request, test channel gated to debug builds.
 - [ ] Commit messages follow Conventional Commits.
 
 ## Reviews and maintainers

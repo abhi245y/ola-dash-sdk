@@ -20,7 +20,7 @@ Nothing here is promised. Items are ordered roughly by how much they unblock.
 
 ## Not planned
 
-- Any vehicle command from a theme or plugin.
-- Hiding or reordering the safety overlay.
+- Any vehicle command from a theme or plugin beyond the host-gated trunk request.
+- Hiding the safety overlay or dropping a telltale (themes may move, reorder and restyle it).
 - Unlock or ignition that bypasses the scooter's own passcode attempts, cooldowns or interlocks.
 - Firmware update tooling.

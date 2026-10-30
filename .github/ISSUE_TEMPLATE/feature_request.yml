@@ -34,5 +34,5 @@ body:
     attributes:
       label: Safety check
       options:
-        - label: This does not let a theme or plugin send a vehicle command or hide the safety overlay.
+        - label: This does not let a theme or plugin send a vehicle command (other than the host-gated trunk request) or hide the safety overlay.
           required: true

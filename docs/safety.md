@@ -44,7 +44,7 @@ If a theme or plugin ever hides the overlay, that is a critical bug. Report it u
 - The host checks the style's contrast before use. A theme cannot make the attempt count, cooldown or error copy unreadable (these are in the `muted` and error colours, which are checked) or make the keys too small to press.
 - `host/test/unlock-preview.rs` renders the host overlay with the default theme and checks that a tap on a key dispatches the key through the host overlay, with the expected digit, Delete and Clear codes.
 
-## No vehicle commands from themes or plugins
+## One gated vehicle request, nothing else
 
 - The contract exposes read-only vehicle values, harmless callbacks (media control, Android Auto, settings) and one gated vehicle request, `Actions.open-trunk()`. See [contract.md](contract.md).
 - Other vehicle commands such as lock, lights and modes are never part of the contract. They live in host-owned screens only.

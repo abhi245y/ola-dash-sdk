@@ -18,7 +18,7 @@
 - [ ] Contract changes are additive, bump `contract-version`, add a history line, and update `docs/contract.md`
 - [ ] Docs updated; CHANGELOG entry under "Unreleased"
 - [ ] No vendor files, passcodes, keys, account data, logs with identifiers, or binaries
-- [ ] Safety rules hold: overlay not hideable, no vehicle commands from themes or plugins, test channel gated to debug builds
+- [ ] Safety rules hold: overlay not hideable, no vehicle commands from themes or plugins beyond the gated trunk request, test channel gated to debug builds
 - [ ] Commits follow Conventional Commits
 
 ## Safety notes

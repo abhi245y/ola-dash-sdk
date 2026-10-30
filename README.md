@@ -48,7 +48,7 @@ Rows: concept mock-up (AI-generated, see [docs/img/concepts](docs/img/concepts/)
 - **Runtime themes.** A theme is a folder with a `main.slint` and a `theme.json`. `slint-interpreter` loads it at runtime. No Rust code or rebuild is needed.
 - **A small, versioned contract.** Themes see only `contract/vehicle.slint`: read-only vehicle, battery, ride, media and navigation values, plus a few harmless callbacks. The contract is additive-only (see [docs/contract.md](docs/contract.md)).
 - **Host-owned safety overlay.** Telltales, alerts and the passcode/unlock screens are drawn above every theme and cannot be hidden by one.
-- **No vehicle commands from themes or plugins.** Themes and plugins are display-only.
+- **One gated vehicle request, nothing else.** Themes can only *ask* the host to open the trunk (`Actions.open-trunk()`); the host sends the stock command only when the scooter is unlocked, in Park and stopped. No other vehicle command is reachable from a theme, and plugins are display-only.
 - **Desktop preview.** `sim` renders any theme with mock data, either in a window or as a deterministic PNG, so themes can be designed without a scooter.
 - **Keep-alive and logging.** The host keeps the vehicle-parser service awake the way the stock HMI does, and writes session logs of every vehicle callback and raw CAN traffic for analysis.
 - **Plugins (API v1).** Owner-enabled APKs publish value widgets, media and turn-by-turn data. The host also has a built-in media source. See [docs/plugins.md](docs/plugins.md) and the [example plugin](plugins/example-sysinfo/README.md).
@@ -100,7 +100,7 @@ contract/            theme contract (the only API themes see)
 host/                Android host: Rust + Slint, Java bridge, safety overlay
 sdk/plugin-api/      plugin API v1 (AIDL)
 plugins/            example plugin (`example-sysinfo`)
-themes/              bundled themes: default, minimal
+themes/              reference themes: segment, fields, default, minimal
 sim/                 desktop mock-data runner (preview and --check)
 tools/               check-themes.sh and other helpers
 docs/                documentation, screenshots (docs/img)
@@ -126,7 +126,7 @@ docs/                documentation, screenshots (docs/img)
 
 ## Safety
 
-Read [docs/safety.md](docs/safety.md) before installing anything. In short: the safety overlay cannot be hidden, themes and plugins cannot command the vehicle, the test channel exists only in debug builds and shows a TEST DATA banner, and this software is experimental. Do not use the dash for anything beyond glanceable information while riding.
+Read [docs/safety.md](docs/safety.md) before installing anything. In short: the safety overlay cannot be hidden (themes may move and restyle it, the host keeps every warning visible), plugins cannot command the vehicle, themes can only make one gated request (open the trunk, which the host allows only when unlocked, in Park and stopped), the passcode keypad is drawn and handled by the host only, the test channel exists only in debug builds and shows a TEST DATA banner, and this software is experimental. Do not use the dash for anything beyond glanceable information while riding.
 
 ## Disclaimer
 

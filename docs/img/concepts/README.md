@@ -11,5 +11,7 @@ not screenshots: the shipped themes are in `themes/` and their real renders are 
 | Data Fields (`themes/fields`) | `fields-dash.jpg` | `fields-lockscreen.jpg` |
 | Default (`themes/default`) | `default-dash.jpg` | `default-lockscreen.jpg` |
 
-The lock-screen concepts are not implemented yet: the passcode keypad is drawn by the
-host (themes must never handle the passcode), and theme styling for it is planned.
+The lock-screen concepts are implemented through the optional `lock-style` property:
+the theme supplies colours, key shape and digit style, while the host draws the keypad
+and handles the passcode (see `docs/themes.md` and `docs/safety.md`). Real renders:
+`docs/img/themes/*-locked.png`.

@@ -3,8 +3,9 @@
 // OPTIONAL Dash properties (contract v6). The host reads them and writes
 // OverlayConfig (see host/src/theme_root.rs). Host-fixed rules are marked
 // "host-fixed" below and enforced in code: themes cannot lower them.
-import { Vehicle, OverlayPlacement, Telltale, AlertPosition } from "vehicle.slint";
+import { OverlayPlacement, Telltale, AlertPosition } from "vehicle.slint";
 import { UnlockScreen } from "unlock.slint";
+import { HostText } from "hosttext.slint";
 
 // ---- design tokens: restyle here, logic stays put ----
 export global OverlayTokens {
@@ -70,8 +71,19 @@ export global OverlayConfig {
     ];
 }
 
-// Global state, set by the host from Vehicle/HostState values.
+// Global state, set by the host from Vehicle/HostState values. The overlay and the lock screen
+// read only this global: a theme can write the contract's `in` properties (Vehicle.*), not these.
 export global HostState {
+    // Copies of the Vehicle values the host draws; the host sets both (theme_root.rs HOST_COPY).
+    in property <bool> left-indicator: false;
+    in property <bool> right-indicator: false;
+    in property <bool> high-beam: false;
+    in property <bool> headlight: false;
+    in property <bool> ready: false;
+    in property <bool> locked: false;
+    in property <bool> charging: false;
+    in property <string> clock-text;
+    in property <int> battery-pct: -1;
     // 0 none, 1 fall/accident, 2 tow/theft, 3 side stand, 4 steering lock,
     // 5 vehicle fault, 6 low battery.
     in property <int> alert-code: 0;
@@ -139,15 +151,15 @@ component TelltaleStrip inherits Rectangle {
     property <bool> blink-on: Math.mod(animation-tick() / 1ms, OverlayTokens.blink-ms) < OverlayTokens.blink-ms / 2;
 
     function is-on(t: Telltale) -> bool {
-        t == Telltale.left-indicator ? Vehicle.left-indicator
-            : t == Telltale.right-indicator ? Vehicle.right-indicator
-            : t == Telltale.high-beam ? Vehicle.high-beam
-            : t == Telltale.headlight ? Vehicle.headlight
-            : t == Telltale.ready ? Vehicle.ready-to-ride
-            : t == Telltale.locked ? Vehicle.locked
+        t == Telltale.left-indicator ? HostState.left-indicator
+            : t == Telltale.right-indicator ? HostState.right-indicator
+            : t == Telltale.high-beam ? HostState.high-beam
+            : t == Telltale.headlight ? HostState.headlight
+            : t == Telltale.ready ? HostState.ready
+            : t == Telltale.locked ? HostState.locked
             : t == Telltale.side-stand ? HostState.side-stand
             : t == Telltale.fault ? HostState.fault
-            : Vehicle.charging
+            : HostState.charging
     }
     function is-blinker(t: Telltale) -> bool {
         t == Telltale.left-indicator || t == Telltale.right-indicator
@@ -191,7 +203,7 @@ component TelltaleStrip inherits Rectangle {
             animate x { duration: OverlayTokens.fade; }
             animate y { duration: OverlayTokens.fade; }
         }
-        if root.labels && !root.vertical : Text {
+        if root.labels && !root.vertical : HostText {
             x: OverlayTokens.disc + 6px;
             width: root.labels ? 74px : 0px;
             height: parent.height;
@@ -201,7 +213,7 @@ component TelltaleStrip inherits Rectangle {
             font-weight: 600;
             vertical-alignment: center;
         }
-        if root.labels && root.vertical : Text {
+        if root.labels && root.vertical : HostText {
             x: (parent.width - self.width) / 2;
             y: OverlayTokens.disc + 2px;
             width: 72px;
@@ -236,7 +248,7 @@ component AlertCard inherits Rectangle {
         x: 40px;
         y: (parent.height - self.height) / 2;
     }
-    Text {
+    HostText {
         x: 144px;
         y: 32px;
         width: root.width - 176px;
@@ -248,7 +260,7 @@ component AlertCard inherits Rectangle {
         wrap: word-wrap;
         vertical-alignment: bottom;
     }
-    Text {
+    HostText {
         x: 144px;
         y: 136px;
         width: root.width - 176px;
@@ -259,7 +271,7 @@ component AlertCard inherits Rectangle {
         overflow: elide;
         vertical-alignment: center;
     }
-    if root.dismissable : Text {
+    if root.dismissable : HostText {
         x: 144px;
         y: 188px;
         width: root.width - 176px;
@@ -319,8 +331,8 @@ export component HostOverlay inherits Rectangle {
         cooldown: HostState.auth-cooldown;
         available: HostState.auth-available;
         test-mode: HostState.test-mode;
-        clock-text: Vehicle.clock-text;
-        battery-pct: Vehicle.battery-pct;
+        clock-text: HostState.clock-text;
+        battery-pct: HostState.battery-pct;
         key(key) => { root.unlock-key(key); }
     }
 
@@ -333,7 +345,7 @@ export component HostOverlay inherits Rectangle {
         height: 64px;
         border-radius: 12px;
         background: #3c1719;
-        Text {
+        HostText {
             width: parent.width;
             height: parent.height;
             text: root.alert-title;
@@ -397,7 +409,7 @@ export component HostOverlay inherits Rectangle {
             : (OverlayConfig.placement == OverlayPlacement.bottom ? root.height - OverlayTokens.strip-h + 7px : 7px);
         border-radius: 6px;
         background: OverlayTokens.test-fill;
-        Text {
+        HostText {
             width: parent.width;
             height: parent.height;
             text: "TEST DATA";

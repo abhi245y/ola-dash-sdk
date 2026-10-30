@@ -274,6 +274,12 @@ fn apply(ui: &ComponentInstance, id: usize, v: f64) {
         MCU_TEMP => ("Ride", "mcu-temp-c", n),
         _ => return,
     };
+    let copy = theme_root::HOST_COPY.iter().find(|(p, _)| global == "Vehicle" && *p == prop);
+    if let Some((_, host)) = copy {
+        if let Err(e) = ui.set_global_property("HostState", host, val.clone()) {
+            log::warn!("set HostState.{host} failed: {e:?}");
+        }
+    }
     if let Err(e) = ui.set_global_property(global, prop, val) {
         log::warn!("set {global}.{prop} failed: {e:?}");
     }

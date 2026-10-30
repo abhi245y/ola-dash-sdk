@@ -73,11 +73,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         ] { ui.set_global_property("HostState", property, Value::Number(value as f64))?; }
         ui.set_global_property("HostState", "auth-available", Value::Bool(*available))?;
         ui.set_global_property("HostState", "side-stand", Value::Bool(*alert == 3))?;
+        // The overlay reads the HostState copies; the theme behind it reads Vehicle.
         ui.set_global_property("Vehicle", "locked", Value::Bool(*phase < 3))?;
+        ui.set_global_property("HostState", "locked", Value::Bool(*phase < 3))?;
         ui.set_global_property("Vehicle", "ready-to-ride", Value::Bool(*phase == 5))?;
+        ui.set_global_property("HostState", "ready", Value::Bool(*phase == 5))?;
         ui.set_global_property("Vehicle", "battery-pct", Value::Number(70.0))?;
+        ui.set_global_property("HostState", "battery-pct", Value::Number(70.0))?;
         ui.set_global_property("Vehicle", "range-km", Value::Number(80.0))?;
         ui.set_global_property("Vehicle", "clock-text", Value::String("10:24".into()))?;
+        ui.set_global_property("HostState", "clock-text", Value::String("10:24".into()))?;
         ui.set_global_property("Vehicle", "mode", Value::EnumerationValue("DriveMode".into(),
             if *phase == 5 { "normal" } else { "park" }.into()))?;
         ui.show()?;

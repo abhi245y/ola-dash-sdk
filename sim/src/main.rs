@@ -339,6 +339,9 @@ impl Feeder {
     }
 
     fn set(&self, inst: &ComponentInstance, global: &str, prop: &str, v: Value) {
+        if let Some((_, host)) = theme_root::HOST_COPY.iter().find(|(p, _)| global == "Vehicle" && *p == prop) {
+            self.set(inst, "HostState", host, v.clone());
+        }
         if let Err(e) = inst.set_global_property(global, prop, v) {
             let key = format!("{global}.{prop}");
             if self.warned.borrow_mut().insert(key.clone()) {

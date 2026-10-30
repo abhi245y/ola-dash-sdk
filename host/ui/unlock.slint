@@ -5,6 +5,7 @@
 // Slint receives only their count.
 import { LockKeyShape, LockDigits, LockStyle } from "vehicle.slint";
 import { LockSegDigit } from "segdigit.slint";
+import { HostText } from "hosttext.slint";
 
 // Written by the host from the theme's optional lock-style, or the host defaults (the values
 // below). `error` is the error copy colour; the host picks it so it reads on the background.
@@ -49,7 +50,7 @@ component Key inherits Rectangle {
         digit: root.digit;
         ink: root.enabled ? LockConfig.style.foreground : LockConfig.style.foreground.with-alpha(0.4);
     }
-    if !(LockConfig.style.digits == LockDigits.segment && root.digit >= 0) : Text {
+    if !(LockConfig.style.digits == LockDigits.segment && root.digit >= 0) : HostText {
         text: root.label;
         color: root.enabled ? LockConfig.style.foreground : LockConfig.style.foreground.with-alpha(0.4);
         font-size: root.label == "Delete" || root.label == "Clear" ? 22px : 34px;
@@ -102,7 +103,7 @@ export component UnlockScreen inherits Rectangle {
         x: 0px; y: 112px; width: root.width; height: 1px;
         background: LockConfig.style.key-border;
     }
-    if !root.segment : Text {
+    if !root.segment : HostText {
         x: 80px; y: 60px; width: 120px; height: 40px;
         text: root.clock-text == "" ? "--:--" : root.clock-text;
         color: LockConfig.style.foreground;
@@ -147,7 +148,7 @@ export component UnlockScreen inherits Rectangle {
         }
     }
     Rectangle { x: 280px; y: 76px; width: 3px; height: 8px; background: LockConfig.style.foreground; }
-    if !root.segment : Text {
+    if !root.segment : HostText {
         x: 292px; y: 60px; width: 120px; height: 40px;
         text: root.battery-pct < 0 ? "-- %" : root.battery-pct + " %";
         color: LockConfig.style.foreground;
@@ -170,7 +171,7 @@ export component UnlockScreen inherits Rectangle {
             x: 52px; width: 22px; height: 40px; ink: LockConfig.style.foreground;
             digit: root.pct < 0 ? -1 : Math.mod(root.pct, 10);
         }
-        Text {
+        HostText {
             x: 80px; y: 0px; width: 30px; height: 40px;
             text: "%";
             color: LockConfig.style.foreground;
@@ -189,7 +190,7 @@ export component UnlockScreen inherits Rectangle {
             height: 22px;
             y: 7px;
         }
-        Text {
+        HostText {
             width: 120px;
             text: "LOCKED";
             color: LockConfig.style.accent;
@@ -200,7 +201,7 @@ export component UnlockScreen inherits Rectangle {
         }
     }
 
-    Text {
+    HostText {
         x: 80px; y: 158px; width: 520px; height: 84px;
         text: root.phase == 0 ? (root.error == 2 ? "Connection unavailable" : "Connecting")
             : root.phase == 3 ? "Unlocking"
@@ -213,7 +214,7 @@ export component UnlockScreen inherits Rectangle {
         vertical-alignment: center;
     }
 
-    Text {
+    HostText {
         x: 80px; y: 262px; width: 480px; height: 94px;
         text: root.phase == 0 ? (root.error == 2 ? "Cannot reach the passcode service. Retry the connection." : "Waiting for vehicle status.")
             : root.phase == 3 ? "Waiting for the scooter to confirm unlock."
@@ -239,7 +240,7 @@ export component UnlockScreen inherits Rectangle {
         }
     }
 
-    if root.phase == 1 : Text {
+    if root.phase == 1 : HostText {
         x: 80px; y: 456px; width: 500px; height: 80px;
         text: root.error == 1 ? "Incorrect passcode. " + root.attempts + " attempts remaining."
             : root.error == 2 ? "Passcode service unavailable. Retry the connection."

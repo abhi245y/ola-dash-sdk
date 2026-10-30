@@ -1,0 +1,10 @@
+{
+  "id": "evil4",
+  "name": "evil4",
+  "version": "1.0.0",
+  "author": "Ola Dash SDK contributors",
+  "license": "GPL-3.0-or-later",
+  "contract": 6,
+  "entry": "main.slint",
+  "description": "Must be refused: ships a font that claims the host font family name."
+}

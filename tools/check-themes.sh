@@ -45,8 +45,10 @@ for dir in "$ROOT"/tools/fixtures/refused/*/; do
     fi
 done
 
-# Hostile themes the host must load but keep below the overlay: the strip (ride) and a keypad
-# key (locked) must not show the theme's black.
+# Hostile themes the host must load but keep below the overlay. Probes: state, sim time, pixel,
+# expected colour ("-" = anything but the theme's black). At t=13 of the ride the left
+# indicator is lit (slot 0 icon, OverlayTokens.ind-color); a theme writing Vehicle.* must not blank it.
+probes=("ride 13 1200,24 -" "ride 13 36,24 #5cff9d" "locked 5 710,200 -")
 png="$(mktemp)"
 for dir in "$ROOT"/tools/fixtures/loads/*/; do
     dir="${dir%/}"
@@ -54,15 +56,14 @@ for dir in "$ROOT"/tools/fixtures/loads/*/; do
         status=1
         continue
     fi
-    # Host defaults: top strip (48 px), keypad block at 700,164-1188,588; fixtures here keep them.
-    for probe in "ride 1200,24" "locked 710,200"; do
-        read -r state xy <<<"$probe"
-        got=$("$SIM" "$dir" --contract "$ROOT/contract" --state "$state" --screenshot "$png" --pixel "$xy" | tail -n 1) || { status=1; continue; }
-        if [ "$got" = "#000000" ]; then
-            echo "error: fixture $dir covers the overlay ($state, pixel $xy is $got)" >&2
-            status=1
+    for probe in "${probes[@]}"; do
+        read -r state at xy want <<<"$probe"
+        got=$("$SIM" "$dir" --contract "$ROOT/contract" --state "$state" --at "$at" --screenshot "$png" --pixel "$xy" | tail -n 1) || { status=1; continue; }
+        if [ "$want" = "-" ] && [ "$got" != "#000000" ] || [ "$got" = "$want" ]; then
+            echo "ok: $(basename "$dir") overlay intact ($state t=$at, pixel $xy is $got)"
         else
-            echo "ok: $(basename "$dir") overlay intact ($state, pixel $xy is $got)"
+            echo "error: fixture $dir covers or blanks the overlay ($state t=$at, pixel $xy is $got, want $want)" >&2
+            status=1
         fi
     done
 done

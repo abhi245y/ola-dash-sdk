@@ -391,6 +391,7 @@ impl Feeder {
         // Keys are live while passcode entry is open, and disabled during the cooldown.
         self.set(inst, "HostState", "auth-available", Value::Bool(matches!(self.scenario, Scenario::Locked | Scenario::LockedError)));
         let alert = self.alert_override.unwrap_or(s.alert);
+        self.set(inst, "HostState", "parked", Value::Bool(matches!(self.scenario, Scenario::Park | Scenario::Trunk | Scenario::Charge)));
         self.set(inst, "HostState", "alert-code", Value::Number(alert as f64));
         self.set(inst, "HostState", "side-stand", Value::Bool(s.side_stand || alert == 3));
         self.set(inst, "HostState", "fault", Value::Bool(s.fault || alert == 5));

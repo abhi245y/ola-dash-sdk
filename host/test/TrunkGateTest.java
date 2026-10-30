@@ -34,6 +34,23 @@ public final class TrunkGateTest {
         check("speed not reported".equals(ok(true, park, -1, false)), "Unknown speed refuses");
         check("already open".equals(ok(true, park, 0, true)), "Already open refuses");
         check("trunk state not reported".equals(ok(true, park, 0, null)), "Unknown trunk refuses");
+        int charging = TrunkGate.STATE_CHARGING;
+        check(TrunkGate.parked(false, true, park, 0), "Unlocked, parked, stopped: parked");
+        check("scooter not unlocked".equals(TrunkGate.notParked(false, null, park, 0)), "Unknown lock: not parked");
+        check(!TrunkGate.parked(false, null, park, 0), "Unknown lock fails closed");
+        check(!TrunkGate.parked(false, false, park, 0), "Locked: not parked");
+        check(!TrunkGate.parked(false, true, 0, 0), "Unknown state fails closed");
+        check(!TrunkGate.parked(false, true, 4, 0), "DRIVE: not parked");
+        check(!TrunkGate.parked(false, true, park, 3), "Moving: not parked");
+        check(!TrunkGate.parked(false, true, park, -1), "Unknown speed fails closed");
+        check(!TrunkGate.parked(true, true, park, 0), "Test mode: not parked");
+        check(TrunkGate.parked(false, true, charging, -1), "Charging, unlocked, speed unknown: parked");
+        check(TrunkGate.parked(false, true, charging, 5), "Charging does not need speed 0");
+        check(!TrunkGate.parked(false, false, charging, 0), "Charging, locked: not parked");
+        check(!TrunkGate.parked(false, null, charging, 0), "Charging, unknown lock fails closed");
+        check(!TrunkGate.parked(true, true, charging, 0), "Charging in test mode: not parked");
+        check(TrunkGate.refusal(false, true, true, charging, 0, false, READY) != null,
+                "Charging is parked but still refuses the trunk");
         System.out.println("TrunkGateTest: " + checks + " checks passed");
     }
 }

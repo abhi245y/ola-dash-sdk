@@ -87,6 +87,8 @@ export global HostState {
     in property <int> auth-error: 0;
     in property <int> auth-cooldown: 0;
     in property <bool> auth-available: false;
+    // The park gate (TrunkGate.parked): host screens and app launches need it.
+    in property <bool> parked: false;
 }
 
 // Telltale glyphs in a 28x28 viewbox. Solid fills only: no strokes, gradients or rotation,

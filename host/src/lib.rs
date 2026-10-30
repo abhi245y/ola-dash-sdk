@@ -43,6 +43,7 @@ const AUTH_ATTEMPTS: usize = 34;
 const AUTH_ERROR: usize = 35;
 const AUTH_COOLDOWN: usize = 36;
 const AUTH_AVAILABLE: usize = 37;
+const PARKED: usize = 39;
 // Contract v6. Trunk latch (true = open). Java side: VehicleBridge.TRUNK_OPEN.
 const TRUNK_OPEN: usize = 16;
 // Contract v5 (ids 15, 40+). Java side: VehicleBridge.java, same numbers.
@@ -252,6 +253,7 @@ fn apply(ui: &ComponentInstance, id: usize, v: f64) {
         AUTH_ERROR => ("HostState", "auth-error", n),
         AUTH_COOLDOWN => ("HostState", "auth-cooldown", n),
         AUTH_AVAILABLE => ("HostState", "auth-available", b),
+        PARKED => ("HostState", "parked", b),
         VEHICLE_STATE => {
             let name = STATE_NAMES.get(v as usize).copied().unwrap_or("unknown");
             ("Vehicle", "state", Value::EnumerationValue("VehicleState".into(), name.into()))

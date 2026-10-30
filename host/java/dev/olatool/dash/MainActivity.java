@@ -32,6 +32,7 @@ public final class MainActivity extends NativeActivity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable testOff = () -> VehicleBridge.setTestMode(false);
     private BroadcastReceiver testReceiver;
+    static volatile boolean paused;
 
     /** Called from Rust for Media.* and Plugins.widget-clicked. Moves the work to the main looper. */
     public void onDashAction(String action) {
@@ -92,6 +93,18 @@ public final class MainActivity extends NativeActivity {
         f.addAction(ACTION_TEST_OFF);
         registerReceiver(testReceiver, f, "android.permission.DUMP", null);
         Log.i(TAG, "test channel enabled (debug build)");
+    }
+
+    @Override
+    protected void onPause() {
+        paused = true;
+        super.onPause();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        paused = false;
     }
 
     @Override

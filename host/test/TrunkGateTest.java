@@ -1,6 +1,6 @@
 package dev.olatool.dash;
 
-/** Runs on a desktop JVM. Gate rules for the trunk request. No Android or vehicle access. */
+/** Runs on a desktop JVM. Gate rules for the trunk request and the park gate. No Android or vehicle access. */
 public final class TrunkGateTest {
     private static int checks;
 
@@ -36,10 +36,11 @@ public final class TrunkGateTest {
         check("trunk state not reported".equals(ok(true, park, 0, null)), "Unknown trunk refuses");
         int charging = TrunkGate.STATE_CHARGING;
         check(TrunkGate.parked(false, true, park, 0), "Unlocked, parked, stopped: parked");
-        check("scooter not unlocked".equals(TrunkGate.notParked(false, null, park, 0)), "Unknown lock: not parked");
         check(!TrunkGate.parked(false, null, park, 0), "Unknown lock fails closed");
         check(!TrunkGate.parked(false, false, park, 0), "Locked: not parked");
         check(!TrunkGate.parked(false, true, 0, 0), "Unknown state fails closed");
+        check(!TrunkGate.parked(false, true, 1, 0), "Sleep: not parked");
+        check(!TrunkGate.parked(false, true, 2, 0), "Idle: not parked");
         check(!TrunkGate.parked(false, true, 4, 0), "DRIVE: not parked");
         check(!TrunkGate.parked(false, true, park, 3), "Moving: not parked");
         check(!TrunkGate.parked(false, true, park, -1), "Unknown speed fails closed");

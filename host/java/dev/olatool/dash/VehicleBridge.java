@@ -110,7 +110,6 @@ final class VehicleBridge {
     private static volatile boolean unlocked; // real BCM state only, never test-injected
     private static Boolean lastKeepAlive;
     // Real values for TrunkGate (never test-injected). Null/-1 = not reported or lost on disconnect.
-    private static volatile boolean lastParked;
     private static volatile Boolean realBcmUnlocked;
     private static volatile Boolean realTrunkOpen;
     private static volatile int realSpeedKmh = -1;
@@ -228,11 +227,16 @@ final class VehicleBridge {
         realBcmUnlocked = null;
         realTrunkOpen = null;
         realSpeedKmh = -1;
+        // Also fail closed on state: tripOnState then skips one unlock-based trip reset after a
+        // parser restart, and the keep-alive media count stops until a state arrives.
+        lastState = null;
         pushParked();
     }
 
+    private static boolean lastParked;
+
     /** HostState.parked from real values only. Direct nativeSet: never replayed from REAL. */
-    private static void pushParked() {
+    private static synchronized void pushParked() {
         boolean p = TrunkGate.parked(Trace.testMode, realBcmUnlocked,
                 stateIndex(lastState), realSpeedKmh);
         if (lastParked && !p && MainActivity.paused) Trace.event("parked -> false while paused");
@@ -366,7 +370,8 @@ final class VehicleBridge {
     private static void setTestModeLocked(boolean on) {
         TEST_EVENTS.setActive(on);
         Trace.testMode = on;
-        pushParked();
+        // Real inputs freeze while test mode is on; forget them so exit waits for the parser replay.
+        if (on) forgetGateState(); else pushParked();
         unlockController.testMode(on);
         setBool(TEST_MODE, on);
         if (on) {

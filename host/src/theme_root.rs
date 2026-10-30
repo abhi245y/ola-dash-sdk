@@ -130,7 +130,9 @@ fn vet(path: &Path, allowed: &[PathBuf], theme: &Path) -> io::Result<String> {
 
 /// Gate for a compile of a theme: vets `entry` (`build_from_path` reads it without the loader)
 /// and every import the loader serves. `allowed` is the contract dir, plus the host dir for the
-/// root compile. Always `Some(..)`: `None` would fall through to the disk.
+/// root compile. The probe is the gate: on the root compile the host dir is reachable from theme
+/// files too, so there this only closes paths outside theme, contract and host.
+/// Always `Some(..)`: `None` would fall through to the disk.
 pub fn guard(c: &mut Compiler, allowed: &[&Path], theme: &Path, entry: &Path) -> Result<(), String> {
     let canon = |p: &Path| p.canonicalize().map_err(|e| format!("{}: {e}", p.display()));
     if std::fs::symlink_metadata(theme).map_err(|e| format!("{}: {e}", theme.display()))?.file_type().is_symlink() {

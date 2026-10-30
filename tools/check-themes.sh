@@ -54,9 +54,10 @@ for dir in "$ROOT"/tools/fixtures/loads/*/; do
         status=1
         continue
     fi
+    # Host defaults: top strip (48 px), keypad block at 700,164-1188,588; fixtures here keep them.
     for probe in "ride 1200,24" "locked 710,200"; do
         read -r state xy <<<"$probe"
-        got=$("$SIM" "$dir" --contract "$ROOT/contract" --state "$state" --screenshot "$png" --pixel "$xy" | tail -n 1)
+        got=$("$SIM" "$dir" --contract "$ROOT/contract" --state "$state" --screenshot "$png" --pixel "$xy" | tail -n 1) || { status=1; continue; }
         if [ "$got" = "#000000" ]; then
             echo "error: fixture $dir covers the overlay ($state, pixel $xy is $got)" >&2
             status=1

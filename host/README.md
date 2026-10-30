@@ -130,12 +130,16 @@ bash host/test/hmi-swap.sh stock
 - `theme.json` manifest (required): `id`, `name`, `version`, `author`, `license`,
   `contract` (integer, the lowest contract version the theme needs) and `entry`
   (the Slint file to load, inside the theme folder). The host rejects a theme with
-  `contract` above its own (`HOST_CONTRACT` in `src/lib.rs`, currently 5), a missing
+  `contract` above its own (`HOST_CONTRACT` in `src/lib.rs`, currently 6), a missing
   `contract` or `entry`, or an `entry` that is absolute, contains `..`, or does not
   exist. A rejected theme logs the reason under `OlaDash` and the fallback tier loads.
 - The entry file must export `export component Dash inherits Window`. The host
   embeds it in its own root window and binds `default-font-family` from it, so keep
-  the `Window` base. The host re-exports `Vehicle`, `Battery`, `Ride`, `Media`,
+  the `Window` base. Contract v6 optional `out` properties on `Dash` (`overlay-placement`,
+  `telltale-order`, `overlay-style`, `alert-position`) are read by a probe compile
+  (`src/theme_root.rs`). Only the ones the theme declares are mirrored on `Host`, and
+  each change re-applies the `OverlayConfig` global. Contrast and order rules are
+  applied in `theme_root.rs`. The host re-exports `Vehicle`, `Battery`, `Ride`, `Media`,
   `Navigation`, `Plugins`, `Actions` and `HostState` from its root. It imports the contract as
   `import { Vehicle, Battery, Ride, Media, Actions, DriveMode } from "vehicle.slint";`.
   The host supplies the include path, so no copy of the contract is needed.
@@ -165,7 +169,8 @@ the passcode screen; it never sends commands or changes unlock state.
 
 - `src/lib.rs`: Slint runtime, theme loader, JNI entry `VehicleBridge.nativeSet`,
   Open Headunit / Settings launch via JNI.
-- `ui/overlay.slint`: host-owned telltale bar and alert cards.
+- `ui/overlay.slint`: host-owned telltale strip and alert cards. Design tokens are at the top of the file (`OverlayTokens`).
+- `src/theme_root.rs`: the `Host` root source, the optional-property probe, and the overlay settings checks. `sim` includes this file, so both preview the same logic.
 - `ui/last-resort/main.slint`: placeholder used only when the default theme fails.
 - `java/dev/olatool/dash/`: `MainActivity` (NativeActivity, asset copy, clock),
   `VehicleBridge` (telemetry, keep-alive, callbacks, alert logic), `ProfileService`

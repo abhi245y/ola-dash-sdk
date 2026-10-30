@@ -70,6 +70,9 @@ final class VehicleBridge {
             TEMP_MIN = 43, TEMP_MAX = 44, HEALTH = 45, FRONT_BRAKE = 46, REAR_BRAKE = 47,
             REGEN = 48, MOTOR_TEMP = 49, MCU_TEMP = 50;
 
+    // Contract v6. Trunk latch, from IDisplayInfoCallbacks.isTrunkLock (true = open).
+    static final int TRUNK_OPEN = 16;
+
     // ponytail: fixed threshold for the low-battery popup. Calibrate against stock derate points.
     private static final int LOW_BATTERY_PCT = 10;
     // ponytail: blinker lamp pulses on CAN; hold "off" this long so the host reports steady on
@@ -106,6 +109,11 @@ final class VehicleBridge {
     private static volatile ICommanderService commander;
     private static volatile boolean unlocked; // real BCM state only, never test-injected
     private static Boolean lastKeepAlive;
+    // Real values for TrunkGate (never test-injected). Null/-1 = not reported or lost on disconnect.
+    private static volatile Boolean realBcmUnlocked;
+    private static volatile Boolean realTrunkOpen;
+    private static volatile int realSpeedKmh = -1;
+    private static volatile long trunkSentAtMs = Long.MIN_VALUE / 2;
     private static String lastReason;
     private static boolean lastScreenOn;
     private static PowerManager power;
@@ -184,6 +192,41 @@ final class VehicleBridge {
 
     static void setClock(int hour, int minute) {
         nativeSet(CLOCK_HHMM, hour * 100 + minute);
+    }
+
+    /**
+     * Host-gated trunk request: sends the stock HMI's trunk command (Seat_Unlock_Cmd) once,
+     * if TrunkGate allows it. Runs on the vehicle thread; every request is logged.
+     */
+    static void openTrunk() {
+        if (work == null) {
+            Trace.event("trunk request: refused not started");
+            return;
+        }
+        work.post(() -> {
+            long now = System.currentTimeMillis();
+            ICommanderService c = commander;
+            String why = TrunkGate.refusal(Trace.testMode, c != null, realBcmUnlocked,
+                    stateIndex(lastState), realSpeedKmh, realTrunkOpen, now - trunkSentAtMs);
+            if (why != null) {
+                Trace.event("trunk request: refused " + why);
+                return;
+            }
+            try {
+                // One send. The stock HHMIS resends until acked; v1 does not.
+                c.sendCommandToScooter(CommandFromHMI.Seat_Unlock_Cmd);
+                trunkSentAtMs = now;
+                Trace.event("trunk request: sent");
+            } catch (RemoteException e) {
+                Trace.event("trunk request: refused binder " + e);
+            }
+        });
+    }
+
+    private static void forgetGateState() {
+        realBcmUnlocked = null;
+        realTrunkOpen = null;
+        realSpeedKmh = -1;
     }
 
     static void unlockKey(int key) {
@@ -320,7 +363,7 @@ final class VehicleBridge {
         // Drop every injected value, then let the parser replay what it really has.
         for (int id : new int[] {SPEED_KMH, CHARGING, ODO_KM, TRIP_KM,
                 LEFT_IND, RIGHT_IND, HIGH_BEAM, HEADLIGHT, LOCKED, READY, SIDE_STAND,
-                BAT_CURRENT, FRONT_BRAKE, REAR_BRAKE, REGEN, VEHICLE_STATE}) {
+                BAT_CURRENT, FRONT_BRAKE, REAR_BRAKE, REGEN, VEHICLE_STATE, TRUNK_OPEN}) {
             nativeSet(id, 0);
         }
         for (int id : new int[] {BATTERY_PCT, RANGE_KM, SOC_PCT, BUS_VOLTAGE, TEMP_MIN, TEMP_MAX,
@@ -362,6 +405,7 @@ final class VehicleBridge {
             vehicle = null;
             commander = null;
             unlocked = false;
+            forgetGateState();
             unlockController.parserDisconnected();
             rebind(RETRY_MS);
         }
@@ -372,6 +416,7 @@ final class VehicleBridge {
             vehicle = null;
             commander = null;
             unlocked = false;
+            forgetGateState();
             unlockController.parserDisconnected();
             rebind(RETRY_MS);
         }
@@ -518,6 +563,13 @@ final class VehicleBridge {
         }
 
         @Override
+        public void isTrunkLock(boolean locked) {
+            Trace.call("IDisplayInfoCallbacks.isTrunkLock", locked);
+            if (realVehicleEvent()) realTrunkOpen = !locked;
+            setBool(TRUNK_OPEN, !locked);
+        }
+
+        @Override
         public void onBatterySocChanged(int pct) {
             Trace.call("IDisplayInfoCallbacks.onBatterySocChanged", pct);
             setNum(BATTERY_PCT, pct);
@@ -572,6 +624,7 @@ final class VehicleBridge {
         @Override
         public void onSpeedChanged(int kmh) {
             Trace.call("IMotorInfoCallbacks.onSpeedChanged", kmh);
+            if (realVehicleEvent()) realSpeedKmh = kmh;
             setNum(SPEED_KMH, kmh);
         }
 
@@ -620,6 +673,7 @@ final class VehicleBridge {
             if (realVehicleEvent() && (state == VehicleLockStateBCM.Vehicle_Locked
                     || state == VehicleLockStateBCM.Vehicle_Unlocked)) {
                 unlocked = state == VehicleLockStateBCM.Vehicle_Unlocked;
+                realBcmUnlocked = unlocked;
             }
         }
 
@@ -651,7 +705,7 @@ final class VehicleBridge {
         }
     }
 
-    private static VehicleStates lastState;
+    private static volatile VehicleStates lastState;
     /** True while the parser reports the MCU supply off; MCU temperatures are then -1. */
     private static volatile boolean mcuOff;
 

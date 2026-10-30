@@ -1,6 +1,6 @@
 # Architecture
 
-The dash is a Slint app running inside an Android app on the scooter's head unit. The Ola vehicle-parser service stays in charge of the vehicle. The host reads from it, draws the screen, and never sends vehicle commands.
+The dash is a Slint app running inside an Android app on the scooter's head unit. The Ola vehicle-parser service stays in charge of the vehicle. The host reads from it, draws the screen, and sends no vehicle command except the one gated trunk request (see [safety.md](safety.md#the-one-vehicle-request)).
 
 ## Components
 
@@ -23,11 +23,13 @@ PluginHost.java, StockMediaService.java: bind enabled plugins, one IDashHost eac
 
 | Component | Path | Role |
 |---|---|---|
-| Vehicle-parser service | stock, not in this repo | Source of vehicle state. Its AIDL classes are vendor files, not distributed. |
+| Vehicle-parser service | stock, on the head unit | Source of vehicle state, reached over binder. |
+| Vehicle interface | `sdk/vehicle-interface/` | Clean-room AIDL, enums and logging callback bases for that service, generated from `SPEC.md` (no Ola code). |
 | `VehicleBridge` | `host/java/dev/olatool/dash/VehicleBridge.java` | Receives callbacks, forwards values to Rust, runs keep-alive, writes trace logs. |
+| `TrunkGate` | `host/java/dev/olatool/dash/TrunkGate.java` | Pure rules for the trunk request. Unit-tested on a desktop JVM. |
 | Rust host | `host/src/lib.rs` | Owns the Slint runtime, loads the active theme, pushes values into the contract globals. |
 | Safety overlay | `host/ui/overlay.slint` | Telltales, alert cards, the TEST DATA banner. Painted after the theme, so no theme can cover it. |
-| Unlock module | `host/java/dev/olatool/dash/Unlock*.java`, `ProfileService.java` | Passcode screen and stock profile-service client. See [safety.md](safety.md). |
+| Unlock module | `host/java/dev/olatool/dash/Unlock*.java`, `ProfileService.java` | Passcode screen (covers the dash until PARK) and stock profile-service client. See [safety.md](safety.md). |
 | Theme | `themes/<id>/` | Only Slint code. Reads the contract, calls the allowed callbacks. |
 | Contract | `contract/vehicle.slint` | The only API a theme sees. See [contract.md](contract.md). |
 | Sim | `sim/` | Desktop runner that feeds the same contract from a mock clock. |
@@ -40,7 +42,7 @@ PluginHost.java, StockMediaService.java: bind enabled plugins, one IDashHost eac
 1. The vehicle-parser service calls back into `VehicleBridge` on a binder thread.
 2. `VehicleBridge` hands each value to Rust through JNI. Each callback is also written to the calls log.
 3. The Rust host sets the `in` properties on the contract globals. Themes read them. Themes never write them.
-4. Theme callbacks (`Media.play-pause`, `Actions.open-settings`, and the others the contract allows) come back to the host. The host decides what they do. A theme cannot reach any other function.
+4. Theme callbacks (`Media.play-pause`, `Actions.open-settings`, and the others the contract allows) come back to the host. The host decides what they do. A theme cannot reach any other function. `Actions.open-trunk` goes to `MainActivity.onOpenTrunk`, then `VehicleBridge.openTrunk`, where `TrunkGate` decides.
 
 ## Themes and fallback
 

@@ -1,5 +1,5 @@
 // Drawing helpers for the default theme. Pure geometry: no globals, no state.
-// Coordinates are absolute window pixels; each element covers its parent.
+// Coordinates are absolute window pixels; each element covers the whole window.
 
 // Clockwise arc on a circle, starting at the lower-left (135 deg, y-down) and
 // sweeping up to 270 deg. `fraction` is 0..1 of that sweep.
@@ -27,8 +27,8 @@ export component Arc inherits Path {
         + (cx + radius * Math.cos(a1 * 1deg)) + " " + (cy + radius * Math.sin(a1 * 1deg));
 }
 
-// Speed scale ticks around the outside of the main gauge (every 10 km/h,
-// longer every 20). Static geometry for a 0..120 km/h scale centred at (340, 404).
+// Speed scale ticks around the main gauge (centre 330, 356; radius 226). Every 10 km/h,
+// longer every 20. Static geometry for a 0..120 km/h scale; labels are placed in main.slint.
 export component GaugeTicks inherits Path {
     x: 0px;
     y: 0px;
@@ -41,19 +41,5 @@ export component GaugeTicks inherits Path {
     fill: transparent;
     stroke: #3a4658;
     stroke-width: 3px;
-    commands: "M 146.3 597.7 L 133.5 610.5 M 81.3 511.2 L 75.8 513.4 M 66.0 404.0 L 48.0 404.0 M 81.3 296.8 L 75.8 294.6 M 146.3 210.3 L 133.5 197.5 M 232.8 145.3 L 230.6 139.8 M 340.0 130.0 L 340.0 112.0 M 447.2 145.3 L 449.4 139.8 M 533.7 210.3 L 546.5 197.5 M 598.7 296.8 L 604.2 294.6 M 614.0 404.0 L 632.0 404.0 M 598.7 511.2 L 604.2 513.4 M 533.7 597.7 L 546.5 610.5";
-}
-
-// Turn arrow, 56x28. Tip at x=56 for right, x=0 for left.
-export component TurnArrow inherits Path {
-    in property <bool> left: false;
-    in property <color> tint: #5cff9d;
-    width: 56px;
-    height: 28px;
-    viewbox-width: 56;
-    viewbox-height: 28;
-    fill: tint;
-    commands: left
-        ? "M 0 14 L 26 0 L 26 9 L 56 9 L 56 19 L 26 19 L 26 28 Z"
-        : "M 56 14 L 30 0 L 30 9 L 0 9 L 0 19 L 30 19 L 30 28 Z";
+    commands: "M 160.3 525.7 L 149.0 537.0 M 104.6 449.4 L 95.3 453.2 M 90.0 356.0 L 74.0 356.0 M 104.6 262.6 L 95.3 258.8 M 160.3 186.3 L 149.0 175.0 M 236.6 130.6 L 232.8 121.3 M 330.0 116.0 L 330.0 100.0 M 423.4 130.6 L 427.2 121.3 M 499.7 186.3 L 511.0 175.0 M 555.4 262.6 L 564.7 258.8 M 570.0 356.0 L 586.0 356.0 M 555.4 449.4 L 564.7 453.2 M 499.7 525.7 L 511.0 537.0";
 }

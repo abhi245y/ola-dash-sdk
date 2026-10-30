@@ -1,6 +1,6 @@
 // Minimal example theme. Proves a theme swaps in at runtime with no rebuild.
 // Uses the platform default font, draws nothing in the top 48px host bar.
-import { Vehicle, Media, Actions, DriveMode, Plugins } from "vehicle.slint";
+import { Vehicle, Media, Actions, DriveMode, Plugins, VehicleState } from "vehicle.slint";
 // Re-exported so the host can reach the globals on the instance.
 export { Vehicle, Media, Actions, DriveMode, Plugins }
 
@@ -9,6 +9,8 @@ export component Dash inherits Window {
     height: 768px;
     background: #000000;
 
+    // Parked (unlocked, not ready): show P and how to start. Charging also reports park mode.
+    property <bool> parked: !Vehicle.charging && (Vehicle.state == VehicleState.park || Vehicle.mode == DriveMode.park);
     property <string> mode-name: Vehicle.mode == DriveMode.eco ? "ECO"
         : Vehicle.mode == DriveMode.normal ? "NORMAL"
         : Vehicle.mode == DriveMode.sport ? "SPORT"
@@ -25,7 +27,7 @@ export component Dash inherits Window {
             y: 110px;
             width: parent.width;
             horizontal-alignment: center;
-            text: round(Vehicle.speed-kmh) + "";
+            text: parked ? "P" : round(Vehicle.speed-kmh) + "";
             color: #ffffff;
             font-size: 240px;
             font-weight: 700;
@@ -35,7 +37,7 @@ export component Dash inherits Window {
             y: 370px;
             width: parent.width;
             horizontal-alignment: center;
-            text: "km/h   " + mode-name;
+            text: parked ? "Press the power button to start" : "km/h   " + mode-name;
             color: #b0b0b0;
             font-size: 36px;
         }
@@ -67,7 +69,7 @@ export component Dash inherits Window {
 
         // First plugin widget, if any (see docs/plugins.md).
         if Plugins.widgets.length > 0 : Text {
-            x: 280px;
+            x: 480px;
             y: 36px;
             width: 400px;
             text: Plugins.widgets[0].title + " " + Plugins.widgets[0].value + " " + Plugins.widgets[0].unit;
@@ -76,6 +78,17 @@ export component Dash inherits Window {
             overflow: elide;
         }
 
+        // Trunk: enabled only parked and stopped; "Trunk open" is passive.
+        Rectangle {
+            x: 260px; y: 20px; width: 200px; height: 64px;
+            background: #2a2a2a; border-radius: 12px;
+            opacity: (Vehicle.state == VehicleState.park && Vehicle.speed-kmh < 1 && !Vehicle.trunk-open) || Vehicle.trunk-open ? 1 : 0.35;
+            Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: Vehicle.trunk-open ? "Trunk open" : "Open trunk"; color: #fff; font-size: 26px; }
+            TouchArea {
+                enabled: Vehicle.state == VehicleState.park && Vehicle.speed-kmh < 1 && !Vehicle.trunk-open;
+                clicked => { Actions.open-trunk(); }
+            }
+        }
         Rectangle {
             x: 40px; y: 20px; width: 200px; height: 64px;
             background: #2a2a2a; border-radius: 12px;

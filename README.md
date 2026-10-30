@@ -9,9 +9,39 @@ An unofficial, open-source dash platform for the Ola S1 Pro Gen 1 electric scoot
 
 **This project is not affiliated with, endorsed by, or supported by Ola Electric.** See the [disclaimer](#disclaimer).
 
-![Default theme, sim at 75 s (riding, then charging)](docs/img/default-t75.png)
+## Reference themes
 
-![Host build: safety overlay (TEST DATA banner, side-stand alert) drawn over the default theme in several drive modes](docs/img/grid-modes.png)
+Three themes ship as copyable references. Each started as a concept mock-up; the second row shows the shipped theme rendered by `sim`.
+
+<table>
+<tr>
+<th>Segment</th>
+<th>Data Fields</th>
+<th>Default</th>
+</tr>
+<tr>
+<td><img src="docs/img/concepts/segment-dash.jpg" alt="Segment concept: seven-segment speed on a reflective LCD face" width="310"></td>
+<td><img src="docs/img/concepts/fields-dash.jpg" alt="Data Fields concept: giant speed field and labeled cells" width="310"></td>
+<td><img src="docs/img/concepts/default-dash.jpg" alt="Default concept: arc gauge, battery ring and mode pills" width="310"></td>
+</tr>
+<tr>
+<td><a href="docs/themes.md#segment-themessegment"><img src="docs/img/themes/segment-riding.png" alt="Segment theme, riding, rendered by sim" width="310"></a></td>
+<td><a href="docs/themes.md#data-fields-themesfields"><img src="docs/img/themes/fields-riding.png" alt="Data Fields theme, riding, rendered by sim" width="310"></a></td>
+<td><a href="docs/themes.md#default-themesdefault"><img src="docs/img/themes/default-riding.png" alt="Default theme, riding, rendered by sim" width="310"></a></td>
+</tr>
+<tr>
+<td><img src="docs/img/themes/segment-locked.png" alt="Segment theme lock screen, rendered by sim" width="310"></td>
+<td><img src="docs/img/themes/fields-locked.png" alt="Data Fields theme lock screen, rendered by sim" width="310"></td>
+<td><img src="docs/img/themes/default-locked.png" alt="Default theme lock screen, rendered by sim" width="310"></td>
+</tr>
+<tr>
+<td>Seven-segment digits drawn in code, ghost segments for unknown values, telltales on top</td>
+<td>Cycling-computer field grid, telltales on the left rail</td>
+<td>Arc gauge, battery ring, mode pills, media card, telltales on top</td>
+</tr>
+</table>
+
+Rows: concept mock-up (AI-generated, see [docs/img/concepts](docs/img/concepts/)), shipped theme, shipped lock screen (styled by the theme, drawn by the host). Each theme also has park (P), charging, alert and trunk-open captures in [docs/img/themes/](docs/img/themes/). The gallery and the patterns to copy are in [docs/themes.md](docs/themes.md#reference-themes).
 
 ## Features
 

@@ -1,0 +1,134 @@
+// Seven-segment drawing kit for the Segment theme. Reusable: copy this file into a theme
+// and you have digits, numbers and separators with no font file.
+//
+// Each glyph is seven chamfered polygons in a 100 x 200 unit box, scaled to whatever
+// size the parent gives it. Segment bits: a=1 b=2 c=4 d=8 e=16 f=32 g=64. Unlit segments
+// stay drawn at `ghost-opacity`, the way a real segment LCD shows its ghost "8".
+// Slint has no bitwise operators, so a bit is tested with floor and Math.mod.
+
+// One seven-segment digit cell. `mask` lights the segments; 0 leaves only the ghost.
+export component SegDigit inherits Rectangle {
+    in property <int> mask: 0;
+    in property <color> ink: #1d201c;
+    in property <float> ghost-opacity: 0.075;
+
+    background: transparent;
+    property <bool> sa: Math.mod(floor(root.mask / 1), 2) == 1;
+    property <bool> sb: Math.mod(floor(root.mask / 2), 2) == 1;
+    property <bool> sc: Math.mod(floor(root.mask / 4), 2) == 1;
+    property <bool> sd: Math.mod(floor(root.mask / 8), 2) == 1;
+    property <bool> se: Math.mod(floor(root.mask / 16), 2) == 1;
+    property <bool> sf: Math.mod(floor(root.mask / 32), 2) == 1;
+    property <bool> sg: Math.mod(floor(root.mask / 64), 2) == 1;
+
+    Path {
+        width: parent.width; height: parent.height;
+        viewbox-width: 100; viewbox-height: 200;
+        fill: root.ink;
+        opacity: root.sa ? 1 : root.ghost-opacity;
+        commands: "M 13 0 L 87 0 L 94 7 L 87 14 L 13 14 L 6 7 Z";
+    }
+    Path {
+        width: parent.width; height: parent.height;
+        viewbox-width: 100; viewbox-height: 200;
+        fill: root.ink;
+        opacity: root.sb ? 1 : root.ghost-opacity;
+        commands: "M 93 16 L 100 23 L 100 84 L 93 91 L 86 84 L 86 23 Z";
+    }
+    Path {
+        width: parent.width; height: parent.height;
+        viewbox-width: 100; viewbox-height: 200;
+        fill: root.ink;
+        opacity: root.sc ? 1 : root.ghost-opacity;
+        commands: "M 93 109 L 100 116 L 100 177 L 93 184 L 86 177 L 86 116 Z";
+    }
+    Path {
+        width: parent.width; height: parent.height;
+        viewbox-width: 100; viewbox-height: 200;
+        fill: root.ink;
+        opacity: root.sd ? 1 : root.ghost-opacity;
+        commands: "M 13 186 L 87 186 L 94 193 L 87 200 L 13 200 L 6 193 Z";
+    }
+    Path {
+        width: parent.width; height: parent.height;
+        viewbox-width: 100; viewbox-height: 200;
+        fill: root.ink;
+        opacity: root.se ? 1 : root.ghost-opacity;
+        commands: "M 7 109 L 14 116 L 14 177 L 7 184 L 0 177 L 0 116 Z";
+    }
+    Path {
+        width: parent.width; height: parent.height;
+        viewbox-width: 100; viewbox-height: 200;
+        fill: root.ink;
+        opacity: root.sf ? 1 : root.ghost-opacity;
+        commands: "M 7 16 L 14 23 L 14 84 L 7 91 L 0 84 L 0 23 Z";
+    }
+    Path {
+        width: parent.width; height: parent.height;
+        viewbox-width: 100; viewbox-height: 200;
+        fill: root.ink;
+        opacity: root.sg ? 1 : root.ghost-opacity;
+        commands: "M 13 93 L 87 93 L 94 100 L 87 107 L 13 107 L 6 100 Z";
+    }
+}
+
+// One cell of a number: shows digit `power` (10^power place) of `value`. Leading zeros
+// stay blank, and value < 0 lights nothing (the "--" unknown state).
+component SegCell inherits Rectangle {
+    in property <int> value: -1;
+    in property <int> power: 0;
+    in property <length> cell-w: 100px;
+    in property <length> cell-h: 200px;
+    in property <color> ink: #1d201c;
+
+    // Six places: the odometer is the widest number (six cells).
+    property <[int]> pow10: [1, 10, 100, 1000, 10000, 100000];
+    property <[int]> masks: [63, 6, 91, 79, 102, 109, 125, 7, 127, 111];
+    property <bool> lit: root.value >= 0 && (root.power == 0 || root.value >= root.pow10[root.power]);
+    property <int> digit: Math.mod(floor(root.value / root.pow10[root.power]), 10);
+
+    width: root.cell-w;
+    height: root.cell-h;
+    SegDigit {
+        width: parent.width;
+        height: parent.height;
+        ink: root.ink;
+        mask: root.lit ? root.masks[root.digit] : 0;
+    }
+}
+
+// Integer right-aligned in `cells` digit cells (at most 6). Each cell is cell-w wide and
+// cell-h tall; cells are separated by `gap`. value < 0 shows ghost cells only ("--").
+// For decimals, pass value * 10 and place a SegDot between two cells.
+export component SegNumber inherits Rectangle {
+    in property <int> value: -1;
+    in property <int> cells: 3;
+    in property <length> cell-w: 100px;
+    in property <length> cell-h: 200px;
+    in property <length> gap: 12px;
+    in property <color> ink: #1d201c;
+
+    width: root.cells * root.cell-w + (root.cells - 1) * root.gap;
+    height: root.cell-h;
+    background: transparent;
+
+    for k[i] in [0, 1, 2, 3, 4, 5] : SegCell {
+        visible: i < root.cells;
+        x: i * (root.cell-w + root.gap);
+        y: 0px;
+        value: root.value;
+        power: root.cells - 1 - i;
+        cell-w: root.cell-w;
+        cell-h: root.cell-h;
+        ink: root.ink;
+    }
+}
+
+// Square separator: decimal point or the clock colon.
+export component SegDot inherits Rectangle {
+    in property <color> ink: #1d201c;
+    in property <length> size: 12px;
+    width: root.size;
+    height: root.size;
+    background: root.ink;
+}

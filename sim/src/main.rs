@@ -4,6 +4,15 @@
 //!   sim <theme-dir> --screenshot out.png --at 30 headless PNG at sim time 30 s
 //!   sim --check <theme-dir>                      validate theme.json and compile (no window)
 //!   options: --contract <dir>  (default: <theme>/../../contract)
+//!            --placement top|bottom|left|right   preview another overlay placement
+//!            --alert <code>                      hold a host alert (1-6) instead of the mock cycle
+//!            --state ride|park|charge|reverse|trunk|easy-park|locked|locked-error|cooldown
+//!                                                 hold one vehicle state (default: the mock ride cycle);
+//!                                                 the last three show the lock screen (see docs/themes.md)
+//!            --plugins / --nav                    feed mock plugin widgets / an active navigation card
+//!
+//! The theme is loaded the way the device loads it: inside the host's `Host` root,
+//! with `HostOverlay` drawn above it (host/src/theme_root.rs, shared with the host).
 //!
 //! The fake vehicle is a pure function of time (`sim_at`), so a screenshot at
 //! `--at T` is reproducible: the headless path steps a mock clock from 0 to T
@@ -22,6 +31,10 @@ use std::f64::consts::PI;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
+
+// The host's root window and overlay settings, shared with the Android build.
+#[path = "../../host/src/theme_root.rs"]
+mod theme_root;
 
 /// Keys every theme.json must carry (see docs/themes.md).
 const REQUIRED_STR_KEYS: [&str; 7] = ["id", "name", "version", "author", "license", "entry", "description"];
@@ -51,24 +64,89 @@ struct Sim {
     headlight: bool,
     locked: bool,
     ready: bool,
+    side_stand: bool,
+    fault: bool,
+    /// Host alert code (0 none, 3 side stand) on the mock cycle.
+    alert: i64,
     state: &'static str,
     clock: String,
+    trunk: bool,
+    hyper_available: bool,
+    // Battery global (contract v5).
+    soc: f64,
+    current_a: f64,
+    voltage_v: f64,
+    temp_min_c: f64,
+    temp_max_c: f64,
+    health_pct: i64,
+    // Ride global (contract v5).
+    front_brake: bool,
+    rear_brake: bool,
+    regen: &'static str,
+    motor_temp_c: f64,
+    mcu_temp_c: f64,
 }
 
-/// 120 s loop: 60 s riding (mode cycles eco->normal->sport->hyper every 15 s,
+/// What the fake vehicle is doing. `Ride` is the mock loop; the others hold one state.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Scenario {
+    Ride,
+    Park,
+    Charge,
+    Reverse,
+    Trunk,
+    EasyPark,
+    Locked,
+    LockedError,
+    Cooldown,
+}
+
+impl Scenario {
+    fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "ride" => Self::Ride,
+            "park" => Self::Park,
+            "charge" => Self::Charge,
+            "reverse" => Self::Reverse,
+            "trunk" => Self::Trunk,
+            "easy-park" => Self::EasyPark,
+            "locked" => Self::Locked,
+            "locked-error" => Self::LockedError,
+            "cooldown" => Self::Cooldown,
+            _ => return None,
+        })
+    }
+
+    /// Lock-screen preview: HostState (auth-phase, pin-length, attempts, error, cooldown).
+    /// `None` for vehicle states, where the lock screen is hidden.
+    fn lock_state(self) -> Option<[i64; 5]> {
+        match self {
+            // Locked, two digits entered, four attempts left.
+            Self::Locked => Some([1, 2, 4, 0, 0]),
+            // Wrong passcode: the keypad is cleared, three attempts left.
+            Self::LockedError => Some([1, 0, 3, 1, 0]),
+            // Attempts used up: the service cooldown counts down.
+            Self::Cooldown => Some([1, 0, 0, 0, 272]),
+            _ => None,
+        }
+    }
+}
+
+/// 120 s loop: 60 s riding (mode cycles eco, normal, sport, hyper, custom every 12 s,
 /// battery drains 100->60), then 60 s stopped and charging back to 100.
-fn sim_at(t: f64) -> Sim {
+fn sim_at(t: f64, sc: Scenario) -> Sim {
     let loop_t = t % 120.0;
     let riding = loop_t < 60.0;
-    let (mode, top) = if riding {
-        match (loop_t / 15.0) as u32 {
-            0 => ("eco", 45.0),
-            1 => ("normal", 70.0),
-            2 => ("sport", 95.0),
-            _ => ("hyper", 120.0),
+    let (mode, top, hyper_available) = if riding {
+        match (loop_t / 12.0) as u32 {
+            0 => ("eco", 45.0, true),
+            1 => ("normal", 70.0, true),
+            2 => ("sport", 95.0, true),
+            3 => ("hyper", 120.0, true),
+            _ => ("custom", 80.0, false),
         }
     } else {
-        ("eco", 0.0)
+        ("eco", 0.0, true)
     };
     // Accelerate/brake wave: 0 .. top, 9 s period.
     let speed = top * (0.5 - 0.5 * (2.0 * PI * t / 9.0).cos());
@@ -79,7 +157,14 @@ fn sim_at(t: f64) -> Sim {
     };
     let battery = battery_f.round() as i64;
     let minutes = (10 * 60 + 24 + (t / 60.0) as i64) % (24 * 60);
-    Sim {
+    // 120 s cycle: side-stand alert card for 10 s, fault telltale for 6 s before it.
+    let phase = t % 120.0;
+    let alert = if (100.0..110.0).contains(&phase) { 3 } else { 0 };
+    let braking = riding && (t % 18.0) >= 6.0 && (t % 18.0) < 8.0;
+    let mut s = Sim {
+        side_stand: alert == 3,
+        fault: (70.0..76.0).contains(&phase),
+        alert,
         speed,
         battery,
         range: (battery_f * 1.05).round() as i64,
@@ -95,7 +180,90 @@ fn sim_at(t: f64) -> Sim {
         ready: true,
         state: if riding { "drive" } else { "charging" },
         clock: format!("{:02}:{:02}", minutes / 60, minutes % 60),
+        trunk: false,
+        hyper_available,
+        soc: battery_f,
+        current_a: if riding { -(speed * 0.35) } else { 18.4 },
+        voltage_v: 50.0 + 0.1 * battery_f,
+        temp_min_c: 25.0,
+        temp_max_c: 28.0,
+        health_pct: 96,
+        front_brake: braking,
+        rear_brake: braking,
+        regen: if braking { "brake" } else if riding { "coast" } else { "none" },
+        motor_temp_c: if riding { 42.0 + speed * 0.05 } else { 31.0 },
+        mcu_temp_c: if riding { 38.0 } else { 29.0 },
+    };
+    // Held states drop the riding-only alerts and telltales.
+    let held = |s: &mut Sim| {
+        s.alert = 0;
+        s.side_stand = false;
+        s.fault = false;
+        s.left = false;
+        s.right = false;
+        s.high_beam = false;
+        s.headlight = false;
+        s.speed = 0.0;
+        s.charging = false;
+        s.ready = false;
+        s.state = "park";
+        s.mode = "park";
+        s.current_a = 0.0;
+        s.regen = "none";
+        s.front_brake = false;
+        s.rear_brake = false;
+        s.soc = 72.0;
+        s.battery = 72;
+        s.range = 76;
+    };
+    match sc {
+        Scenario::Ride => {}
+        Scenario::Park => held(&mut s),
+        Scenario::Trunk => {
+            held(&mut s);
+            s.trunk = true;
+        }
+        Scenario::Charge => {
+            held(&mut s);
+            s.charging = true;
+            s.state = "charging";
+            // Charging: SOC climbs from 64 to 84 over a minute.
+            s.soc = 64.0 + (t % 60.0) / 3.0;
+            s.battery = s.soc.round() as i64;
+            s.range = (s.soc * 1.05).round() as i64;
+            s.current_a = 18.4;
+            s.voltage_v = 50.0 + 0.1 * s.soc;
+        }
+        Scenario::Reverse => {
+            s.alert = 0;
+            s.side_stand = false;
+            s.fault = false;
+            s.left = false;
+            s.right = false;
+            s.ready = true;
+            s.state = "drive";
+            s.mode = "reverse";
+            s.speed = 3.0;
+            s.current_a = -6.0;
+            s.regen = "none";
+        }
+        Scenario::EasyPark => {
+            held(&mut s);
+            s.state = "drive";
+            s.mode = "easy-park";
+            s.ready = true;
+        }
+        Scenario::Locked | Scenario::LockedError | Scenario::Cooldown => {
+            held(&mut s);
+            s.state = "sleep";
+            s.locked = true;
+            s.clock = "18:24".into();
+            s.battery = 70;
+            s.soc = 70.0;
+            s.range = 74;
+        }
     }
+    s
 }
 
 /// Media state the theme can change through callbacks.
@@ -122,14 +290,26 @@ impl MediaState {
 struct Feeder {
     media: Rc<MediaState>,
     warned: RefCell<HashSet<String>>,
-    /// Set with SIM_PLUGINS=1: mock plugin widgets and an active navigation card.
+    /// `--plugins`: mock plugin widgets. `--nav`: an active navigation card.
     plugins: bool,
+    nav: bool,
+    /// `--alert <code>`: holds this host alert instead of the mock cycle.
+    alert_override: Option<i64>,
+    scenario: Scenario,
 }
 
 impl Feeder {
-    fn new() -> Self {
-        let plugins = std::env::var_os("SIM_PLUGINS").is_some();
-        Self { media: MediaState::new(), warned: Default::default(), plugins }
+    fn new(args: &Args) -> Self {
+        // SIM_PLUGINS=1 is the older spelling of --plugins --nav.
+        let env = std::env::var_os("SIM_PLUGINS").is_some();
+        Self {
+            media: MediaState::new(),
+            warned: Default::default(),
+            plugins: args.plugins || env,
+            nav: args.nav || env,
+            alert_override: args.alert,
+            scenario: args.scenario,
+        }
     }
 
     fn push_plugins(&self, inst: &ComponentInstance) {
@@ -143,11 +323,15 @@ impl Feeder {
             card([("id", "temp"), ("title", "CPU"), ("value", "41"), ("unit", "C")]),
             card([("id", "uptime"), ("title", "Uptime"), ("value", "3h 12m"), ("unit", "")]),
         ];
-        self.set(inst, "Plugins", "widgets", Value::Model(slint::ModelRc::new(slint::VecModel::from(widgets))));
-        self.set(inst, "Navigation", "active", Value::Bool(true));
-        self.set(inst, "Navigation", "instruction", Value::String("Turn left onto Harbour Road".into()));
-        self.set(inst, "Navigation", "distance", Value::String("320 m".into()));
-        self.set(inst, "Navigation", "eta", Value::String("14:32".into()));
+        if self.plugins {
+            self.set(inst, "Plugins", "widgets", Value::Model(slint::ModelRc::new(slint::VecModel::from(widgets))));
+        }
+        if self.nav {
+            self.set(inst, "Navigation", "active", Value::Bool(true));
+            self.set(inst, "Navigation", "instruction", Value::String("Turn left onto Harbour Road".into()));
+            self.set(inst, "Navigation", "distance", Value::String("320 m".into()));
+            self.set(inst, "Navigation", "eta", Value::String("14:32".into()));
+        }
     }
 
     fn set(&self, inst: &ComponentInstance, global: &str, prop: &str, v: Value) {
@@ -160,7 +344,7 @@ impl Feeder {
     }
 
     fn push(&self, inst: &ComponentInstance, t: f64) {
-        let s = sim_at(t);
+        let s = sim_at(t, self.scenario);
         let (title, artist) = self.media.track(t);
         self.set(inst, "Vehicle", "speed-kmh", Value::Number(s.speed));
         self.set(inst, "Vehicle", "battery-pct", Value::Number(s.battery as f64));
@@ -180,16 +364,40 @@ impl Feeder {
         self.set(inst, "Vehicle", "locked", Value::Bool(s.locked));
         self.set(inst, "Vehicle", "ready-to-ride", Value::Bool(s.ready));
         self.set(inst, "Vehicle", "clock-text", Value::String(s.clock.into()));
+        self.set(inst, "Vehicle", "trunk-open", Value::Bool(s.trunk));
+        self.set(inst, "Vehicle", "hyper-available", Value::Bool(s.hyper_available));
+        self.set(inst, "Battery", "soc-pct", Value::Number(s.soc));
+        self.set(inst, "Battery", "current-a", Value::Number(s.current_a));
+        self.set(inst, "Battery", "voltage-v", Value::Number(s.voltage_v));
+        self.set(inst, "Battery", "temp-min-c", Value::Number(s.temp_min_c));
+        self.set(inst, "Battery", "temp-max-c", Value::Number(s.temp_max_c));
+        self.set(inst, "Battery", "health-pct", Value::Number(s.health_pct as f64));
+        self.set(inst, "Ride", "front-brake", Value::Bool(s.front_brake));
+        self.set(inst, "Ride", "rear-brake", Value::Bool(s.rear_brake));
+        self.set(inst, "Ride", "regen", Value::EnumerationValue("Regen".into(), s.regen.into()));
+        self.set(inst, "Ride", "motor-temp-c", Value::Number(s.motor_temp_c));
+        self.set(inst, "Ride", "mcu-temp-c", Value::Number(s.mcu_temp_c));
         self.set(
             inst,
             "Vehicle",
             "state",
             Value::EnumerationValue("VehicleState".into(), s.state.into()),
         );
+        // HostState: the unlock screen is hidden in DRIVE (auth-phase 5).
+        let auth = self.scenario.lock_state().unwrap_or([5, 0, -1, 0, 0]);
+        for (prop, v) in ["auth-phase", "pin-length", "auth-attempts", "auth-error", "auth-cooldown"].iter().zip(auth) {
+            self.set(inst, "HostState", prop, Value::Number(v as f64));
+        }
+        // Keys are live while passcode entry is open, and disabled during the cooldown.
+        self.set(inst, "HostState", "auth-available", Value::Bool(matches!(self.scenario, Scenario::Locked | Scenario::LockedError)));
+        let alert = self.alert_override.unwrap_or(s.alert);
+        self.set(inst, "HostState", "alert-code", Value::Number(alert as f64));
+        self.set(inst, "HostState", "side-stand", Value::Bool(s.side_stand || alert == 3));
+        self.set(inst, "HostState", "fault", Value::Bool(s.fault || alert == 5));
         self.set(inst, "Media", "title", Value::String(title.into()));
         self.set(inst, "Media", "artist", Value::String(artist.into()));
         self.set(inst, "Media", "playing", Value::Bool(self.media.playing.get()));
-        if self.plugins {
+        if self.plugins || self.nav {
             self.push_plugins(inst);
         }
     }
@@ -222,6 +430,14 @@ impl Feeder {
             println!("action: open-settings (sim: no-op)");
             Value::Void
         });
+        let _ = inst.set_global_callback("Actions", "open-trunk", |_| {
+            println!("action: open-trunk (sim: no-op)");
+            Value::Void
+        });
+        let _ = inst.set_global_callback("Plugins", "widget-clicked", |args| {
+            println!("plugins: widget-clicked {:?}", args.first());
+            Value::Void
+        });
     }
 }
 
@@ -246,6 +462,11 @@ struct Args {
     screenshot: Option<PathBuf>,
     at: f64,
     check: bool,
+    placement: Option<String>,
+    alert: Option<i64>,
+    scenario: Scenario,
+    plugins: bool,
+    nav: bool,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -254,11 +475,33 @@ fn parse_args() -> Result<Args, String> {
     let mut screenshot = None;
     let mut at = 5.0;
     let mut check = false;
+    let mut placement = None;
+    let mut alert = None;
+    let mut scenario = Scenario::Ride;
+    let mut plugins = false;
+    let mut nav = false;
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
             "--check" => check = true,
             "--contract" => contract = it.next().map(PathBuf::from),
+            "--placement" => placement = it.next(),
+            "--alert" => {
+                alert = Some(
+                    it.next()
+                        .and_then(|v| v.parse().ok())
+                        .filter(|c| (1..=6).contains(c))
+                        .ok_or("--alert needs a code 1-6")?,
+                )
+            }
+            "--state" => {
+                scenario = it
+                    .next()
+                    .and_then(|v| Scenario::parse(&v))
+                    .ok_or("--state needs ride, park, charge, reverse, trunk, easy-park, locked, locked-error or cooldown")?
+            }
+            "--plugins" => plugins = true,
+            "--nav" => nav = true,
             "--screenshot" => screenshot = it.next().map(PathBuf::from),
             "--at" => {
                 at = it
@@ -268,6 +511,8 @@ fn parse_args() -> Result<Args, String> {
             }
             "-h" | "--help" => {
                 println!("usage: sim <theme-dir> [--screenshot out.png --at SECS] [--contract DIR]");
+                println!("       [--placement top|bottom|left|right] [--alert 1-6]");
+                println!("       [--state ride|park|charge|reverse|trunk|easy-park|locked|locked-error|cooldown] [--plugins] [--nav]");
                 println!("       sim --check <theme-dir> [--contract DIR]");
                 std::process::exit(0);
             }
@@ -282,13 +527,39 @@ fn parse_args() -> Result<Args, String> {
     let contract = std::fs::canonicalize(&contract)
         .map_err(|e| format!("contract dir {}: {e}", contract.display()))?;
     let theme = std::fs::canonicalize(&theme).map_err(|e| format!("theme {}: {e}", theme.display()))?;
-    Ok(Args { theme, contract, screenshot, at, check })
+    if let Some(p) = &placement {
+        if !["top", "bottom", "left", "right"].contains(&p.as_str()) {
+            return Err(format!("--placement needs top, bottom, left or right, got {p}"));
+        }
+    }
+    Ok(Args { theme, contract, screenshot, at, check, placement, alert, scenario, plugins, nav })
 }
 
-fn load(main: &Path, contract: &Path) -> Result<ComponentDefinition, Box<dyn Error>> {
+/// Path of `to` relative to `from` (both absolute, same drive), with '/' separators.
+fn relative(from: &Path, to: &Path) -> String {
+    let f: Vec<_> = from.components().collect();
+    let t: Vec<_> = to.components().collect();
+    let common = f.iter().zip(&t).take_while(|(a, b)| a == b).count();
+    let mut parts = vec!["..".to_string(); f.len() - common];
+    parts.extend(t[common..].iter().map(|c| c.as_os_str().to_string_lossy().into_owned()));
+    parts.join("/")
+}
+
+/// Compiles the theme inside the host's `Host` root, as the device does.
+fn load(main: &Path, args: &Args) -> Result<ComponentDefinition, Box<dyn Error>> {
+    let include = vec![args.contract.clone()];
+    let host_ui = args.contract.parent().unwrap_or(Path::new(".")).join("host/ui");
+    let mut probe = Compiler::default();
+    probe.set_include_paths(include.clone());
+    let probed = pollster::block_on(probe.build_from_path(main));
+    for d in probed.diagnostics() {
+        eprintln!("{d}");
+    }
+    let declared = theme_root::declared(&probed).map_err(|e| format!("{}: {e}", main.display()))?;
+    let src = theme_root::root_source(&relative(&host_ui, main), &declared);
     let mut compiler = Compiler::default();
-    compiler.set_include_paths(vec![contract.to_path_buf()]);
-    let result = pollster::block_on(compiler.build_from_path(&main));
+    compiler.set_include_paths(include);
+    let result = pollster::block_on(compiler.build_from_source(src, host_ui.join("root.slint")));
     for d in result.diagnostics() {
         eprintln!("{d}");
     }
@@ -296,8 +567,21 @@ fn load(main: &Path, contract: &Path) -> Result<ComponentDefinition, Box<dyn Err
         return Err(format!("{} failed to compile", main.display()).into());
     }
     result
-        .component("Dash")
-        .ok_or_else(|| format!("{} must export component Dash", main.display()).into())
+        .component("Host")
+        .ok_or_else(|| "host root component missing".into())
+}
+
+/// Binds the host overlay and applies the sim-only placement override, if any.
+fn bind_overlay(inst: &ComponentInstance, args: &Args) -> Result<(), Box<dyn Error>> {
+    theme_root::bind(inst, sim_warn)?;
+    if let Some(p) = &args.placement {
+        inst.set_global_property("OverlayConfig", "placement", Value::EnumerationValue("OverlayPlacement".into(), p.clone()))?;
+    }
+    Ok(())
+}
+
+fn sim_warn(msg: &str) {
+    eprintln!("sim: {msg}");
 }
 
 /// Contract version the SDK ships: `contract-version: N;` in contract/vehicle.slint.
@@ -385,7 +669,7 @@ fn run_check(args: &Args) -> bool {
     };
     let entry = check_manifest(&args.theme, current, &mut errors);
     if let (true, Some(entry)) = (errors.is_empty(), entry) {
-        match load(&entry, &args.contract) {
+        match load(&entry, args) {
             Ok(_) => println!("ok: {} (sim contract {current})", args.theme.display()),
             Err(e) => errors.push(e.to_string()),
         }
@@ -421,9 +705,10 @@ fn run_screenshot(args: &Args, out: &Path) -> Result<(), Box<dyn Error>> {
         window: window.clone(),
         clock: clock.clone(),
     }))?;
-    let def = load(&args.theme.join("main.slint"), &args.contract)?;
+    let def = load(&args.theme.join("main.slint"), args)?;
     let inst = def.create()?;
-    let feeder = Feeder::new();
+    bind_overlay(&inst, args)?;
+    let feeder = Feeder::new(args);
     feeder.wire_callbacks(&inst);
     inst.show()?;
     window.set_size(slint::PhysicalSize::new(WIDTH, HEIGHT));
@@ -457,9 +742,10 @@ fn run_screenshot(args: &Args, out: &Path) -> Result<(), Box<dyn Error>> {
 }
 
 fn run_live(args: &Args) -> Result<(), Box<dyn Error>> {
-    let def = load(&args.theme.join("main.slint"), &args.contract)?;
+    let def = load(&args.theme.join("main.slint"), args)?;
     let inst = def.create()?;
-    let feeder = Rc::new(Feeder::new());
+    bind_overlay(&inst, args)?;
+    let feeder = Rc::new(Feeder::new(args));
     feeder.wire_callbacks(&inst);
     let start = Instant::now();
     feeder.push(&inst, 0.0);

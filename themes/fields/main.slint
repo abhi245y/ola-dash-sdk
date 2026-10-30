@@ -1,0 +1,295 @@
+// Data Fields theme: a cycling-computer data page. Matte near-black, off-white tabular numerals,
+// grey labels, one amber accent, hairline dividers and no cards. Fixed 1280x768 layout.
+// The host strip is on the LEFT rail (72 px, contract v6): everything here starts at x >= 92.
+// Patterns to copy: the giant speed field, the 2 x 3 labelled data grid with hairlines,
+// the unit-at-bottom-right cell, and the switch on the speed field for park, reverse and charge.
+import { Vehicle, Media, Actions, Battery, Ride, DriveMode, VehicleState, Navigation, Plugins, OverlayPlacement, OverlayStyle, Telltale, LockStyle, LockKeyShape, LockDigits } from "vehicle.slint";
+import "fonts/NotoSans-SemiCondensedBold.ttf";
+import "fonts/NotoSans-SemiCondensed.ttf";
+
+// Re-exported so the host can set these on the instance.
+export { Vehicle, Media, Actions, DriveMode, Battery, Ride, Navigation, Plugins }
+
+// One labelled data cell: label top-left, value large, unit bottom-right.
+component Field inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <string> unit: "";
+    in property <color> value-color: #f2f2ef;
+    in property <length> value-size: 84px;
+
+    Text {
+        x: 24px; y: 20px;
+        text: root.label;
+        color: #8d939d;
+        font-size: 18px;
+        font-weight: 400;
+        letter-spacing: 2px;
+    }
+    Text {
+        x: 24px; y: 46px;
+        width: parent.width - 48px;
+        height: 96px;
+        text: root.value;
+        color: root.value-color;
+        font-size: root.value-size;
+        font-weight: 700;
+        letter-spacing: -2px;
+        overflow: elide;
+    }
+    Text {
+        x: 24px;
+        y: parent.height - 44px;
+        width: parent.width - 48px;
+        horizontal-alignment: right;
+        text: root.unit;
+        color: #8d939d;
+        font-size: 26px;
+        font-weight: 400;
+    }
+}
+
+// Host-neutral key at the bottom right: outline, one label.
+component Key inherits Rectangle {
+    in property <string> label;
+    in property <color> label-color: #f2f2ef;
+    in property <color> edge: #3a3e46;
+    @children
+    border-width: 1.5px;
+    border-color: root.edge;
+    border-radius: 14px;
+    Text {
+        width: parent.width;
+        height: parent.height;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        text: root.label;
+        color: root.label-color;
+        font-size: 24px;
+        font-weight: 700;
+    }
+}
+
+export component Dash inherits Window {
+    width: 1280px;
+    height: 768px;
+    background: #0b0c0e;
+    default-font-family: "Noto Sans SemiCondensed";
+
+    out property <color> amber: #ffb020;
+    // Lock screen: matte black, hairline grid keys, amber dots and status.
+    out property <LockStyle> lock-style: {
+        background: #0b0c0e,
+        foreground: #f2f2ef,
+        muted: #8d939d,
+        accent: #ffb020,
+        key-background: #0b0c0e,
+        key-border: #2a2e35,
+        key-shape: LockKeyShape.grid,
+        digits: LockDigits.sans,
+    };
+
+    // ---- state the speed field and the mode cell switch on ----
+    property <bool> charge-view: Vehicle.charging || Vehicle.state == VehicleState.charging;
+    // Charging wins: a charging scooter reports park mode too.
+    property <bool> parked: !charge-view && (Vehicle.state == VehicleState.park || Vehicle.mode == DriveMode.park);
+    property <bool> reversing: Vehicle.mode == DriveMode.reverse;
+    property <bool> trunk-ready: Vehicle.state == VehicleState.park && Vehicle.speed-kmh < 1 && !Vehicle.trunk-open;
+
+    // ---- eased speed for the readout ----
+    out property <float> speed-shown: Vehicle.speed-kmh;
+    animate speed-shown { duration: 400ms; easing: ease-out; }
+
+    // Trip and current in tenths, shown with one decimal without float noise.
+    property <int> trip-tenths: round(Vehicle.trip-km * 10);
+    property <string> trip-text: floor(trip-tenths / 10) + "." + Math.mod(trip-tenths, 10);
+    property <int> amps-tenths: round(abs(Battery.current-a) * 10);
+    property <string> amps-text: floor(amps-tenths / 10) + "." + Math.mod(amps-tenths, 10);
+
+    property <string> mode-name: Vehicle.mode == DriveMode.eco ? "ECO"
+        : Vehicle.mode == DriveMode.normal ? "NORMAL"
+        : Vehicle.mode == DriveMode.sport ? "SPORT"
+        : Vehicle.mode == DriveMode.hyper ? "HYPER"
+        : Vehicle.mode == DriveMode.custom ? "CUSTOM"
+        : Vehicle.mode == DriveMode.reverse ? "REVERSE"
+        : Vehicle.mode == DriveMode.park ? "PARK"
+        : Vehicle.mode == DriveMode.easy-park ? "EASY PARK"
+        : "--";
+
+    // ---- host overlay settings (contract v6): left rail, no labels, indicators first ----
+    out property <OverlayPlacement> overlay-placement: OverlayPlacement.left;
+    out property <[Telltale]> telltale-order: [
+        Telltale.left-indicator, Telltale.right-indicator, Telltale.ready,
+        Telltale.high-beam, Telltale.headlight, Telltale.side-stand,
+        Telltale.fault, Telltale.locked, Telltale.charging,
+    ];
+    out property <OverlayStyle> overlay-style: {
+        background: #0b0c0e,
+        foreground: #f2f2ef,
+        corner-radius: 8px,
+        show-labels: false,
+    };
+
+    // ---- dividers ----
+    Rectangle { x: 652px; y: 36px; width: 1px; height: 524px; background: #2a2e35; }
+    Rectangle { x: 676px; y: 211px; width: 580px; height: 1px; background: #2a2e35; }
+    Rectangle { x: 676px; y: 386px; width: 580px; height: 1px; background: #2a2e35; }
+    Rectangle { x: 966px; y: 36px; width: 1px; height: 524px; background: #2a2e35; }
+    Rectangle { x: 92px; y: 372px; width: 540px; height: 1px; background: #2a2e35; }
+    Rectangle { x: 92px; y: 568px; width: 540px; height: 1px; background: #2a2e35; }
+
+    // ---- speed field: giant numerals, or P / R / SOC on park, reverse and charge ----
+    // Row label: the unit while riding, the state's instruction when parked or charging.
+    Text {
+        x: 92px; y: 40px; width: 540px;
+        text: charge-view ? "CHARGING  \u{00B7}  STATE OF CHARGE"
+            : parked ? "Press the power button to start"
+            : reversing ? "REVERSE"
+            : "SPEED  km/h";
+        color: charge-view ? root.amber : #8d939d;
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: 2px;
+    }
+    Text {
+        x: 84px; y: 78px;
+        width: 580px;
+        height: 290px;
+        vertical-alignment: center;
+        text: charge-view ? (Vehicle.battery-pct < 0 ? "--" : "" + round(Battery.soc-pct < 0 ? Vehicle.battery-pct : Battery.soc-pct))
+            : parked ? "P"
+            : reversing ? "R"
+            : (Vehicle.speed-kmh < 0 ? "--" : "" + round(speed-shown));
+        color: parked || reversing ? #8d939d : #f2f2ef;
+        font-size: 340px;
+        font-weight: 700;
+        letter-spacing: -8px;
+    }
+
+    // ---- odometer under the speed field ----
+    Text { x: 92px; y: 388px; text: "ODOMETER"; color: #8d939d; font-size: 18px; letter-spacing: 2px; }
+    Text {
+        x: 92px; y: 412px;
+        width: 420px;
+        text: "" + round(Vehicle.odometer-km);
+        color: #f2f2ef;
+        font-size: 48px;
+        font-weight: 700;
+    }
+    Text {
+        x: 92px; y: 412px;
+        width: 540px;
+        horizontal-alignment: right;
+        text: "km";
+        color: #8d939d;
+        font-size: 26px;
+    }
+
+    // ---- media line, or the navigation line while guidance runs ----
+    Text {
+        x: 92px; y: 470px; width: 540px; height: 36px;
+        visible: !Navigation.active;
+        text: Media.title == "" ? "Nothing playing" : Media.title;
+        color: #f2f2ef;
+        font-size: 30px;
+        font-weight: 700;
+        overflow: elide;
+    }
+    Text {
+        x: 92px; y: 508px; width: 540px; height: 28px;
+        visible: !Navigation.active;
+        text: Media.artist == "" ? "Tap to play or pause" : Media.artist;
+        color: #8d939d;
+        font-size: 22px;
+        overflow: elide;
+    }
+    TouchArea {
+        x: 92px; y: 466px; width: 540px; height: 74px;
+        visible: !Navigation.active;
+        clicked => { Media.play-pause(); }
+    }
+    Text {
+        x: 92px; y: 466px; width: 540px; height: 80px;
+        visible: Navigation.active;
+        text: Navigation.instruction;
+        color: #f2f2ef;
+        font-size: 30px;
+        font-weight: 700;
+        wrap: word-wrap;
+        overflow: elide;
+    }
+    Text {
+        x: 92px; y: 540px; width: 540px; height: 28px;
+        visible: Navigation.active;
+        text: Navigation.distance + "   " + Navigation.eta;
+        color: root.amber;
+        font-size: 24px;
+        font-weight: 700;
+        overflow: elide;
+    }
+
+    // ---- plugin widgets: up to three labelled values under the media line ----
+    for w[i] in Plugins.widgets : Rectangle {
+        x: 92px + 186px * i;
+        y: 586px;
+        width: 176px;
+        height: 66px;
+        visible: i < 3;
+        background: transparent;
+        Text {
+            x: 0px; y: 0px; width: parent.width;
+            text: w.title;
+            color: #8d939d;
+            font-size: 18px;
+            letter-spacing: 1px;
+            overflow: elide;
+        }
+        Text {
+            x: 0px; y: 24px; width: parent.width;
+            text: w.value + " " + w.unit;
+            color: #f2f2ef;
+            font-size: 26px;
+            font-weight: 700;
+            overflow: elide;
+        }
+    }
+
+    // ---- 2 x 3 data grid: cells are 290 x 175, from x 676 and y 36 ----
+    Field { x: 676px; y: 36px; width: 290px; height: 175px; label: "RANGE"; value: Vehicle.range-km < 0 ? "--" : "" + Vehicle.range-km; unit: "km"; }
+    Field { x: 966px; y: 36px; width: 290px; height: 175px; label: "BATTERY"; value: Vehicle.battery-pct < 0 ? "--" : "" + round(Battery.soc-pct < 0 ? Vehicle.battery-pct : Battery.soc-pct); unit: "%"; }
+    Field {
+        x: 676px; y: 211px; width: 290px; height: 175px;
+        label: charge-view ? "CURRENT" : "TRIP";
+        value: charge-view ? amps-text : trip-text;
+        unit: charge-view ? "A" : "km";
+    }
+    Field {
+        x: 966px; y: 211px; width: 290px; height: 175px;
+        label: "MODE";
+        value: mode-name;
+        value-color: root.amber;
+        value-size: 44px;
+    }
+    Field { x: 676px; y: 386px; width: 290px; height: 175px; label: "PACK"; value: Battery.temp-max-c < 0 ? "--" : "" + round(Battery.temp-max-c); unit: "\u{00B0}C"; }
+    Field { x: 966px; y: 386px; width: 290px; height: 175px; label: "TIME"; value: Vehicle.clock-text == "" ? "--:--" : Vehicle.clock-text; }
+
+    // ---- keys: Android Auto, trunk (enabled parked and stopped), settings ----
+    Key {
+        x: 676px; y: 588px; width: 200px; height: 92px;
+        label: "Android Auto";
+        aa-ta := TouchArea { width: parent.width; height: parent.height; clicked => { Actions.open-android-auto(); } }
+    }
+    Key {
+        x: 888px; y: 588px; width: 180px; height: 92px;
+        label: Vehicle.trunk-open ? "Trunk open" : "Open trunk";
+        label-color: Vehicle.trunk-open ? root.amber : #f2f2ef;
+        edge: Vehicle.trunk-open ? root.amber : #3a3e46;
+        opacity: (trunk-ready || Vehicle.trunk-open) ? 1 : 0.35;
+        trunk-ta := TouchArea { width: parent.width; height: parent.height; enabled: trunk-ready; clicked => { Actions.open-trunk(); } }
+    }
+    Key {
+        x: 1080px; y: 588px; width: 176px; height: 92px;
+        label: "Settings";
+        set-ta := TouchArea { width: parent.width; height: parent.height; clicked => { Actions.open-settings(); } }
+    }
+}

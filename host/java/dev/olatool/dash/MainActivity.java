@@ -42,6 +42,11 @@ public final class MainActivity extends NativeActivity {
     public void onUnlockKey(int key) {
         VehicleBridge.unlockKey(key);
     }
+
+    /** Theme asked for the trunk. The host gate decides (see TrunkGate). */
+    public void onOpenTrunk() {
+        VehicleBridge.openTrunk();
+    }
     private final Runnable clock = new Runnable() {
         @Override
         public void run() {

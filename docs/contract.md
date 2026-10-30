@@ -1,6 +1,6 @@
 # Theme contract reference
 
-The contract is `contract/vehicle.slint`, currently **`contract-version: 5`**. It is the only API a theme may use. Themes read `in` properties and invoke the callbacks listed here. The host writes the `in` properties; themes must never assign to them.
+The contract is `contract/vehicle.slint`, currently **`contract-version: 6`**. It is the only API a theme may use. Themes read `in` properties and invoke the callbacks listed here. The host writes the `in` properties; themes must never assign to them.
 
 Units: distances in km, speed in km/h, temperatures in °C, current in A, voltage in V. `-1` means "not reported yet" wherever a default of `-1` is listed. Themes should show `--`.
 
@@ -22,6 +22,7 @@ History (from the file's comment):
 | 3 | `DriveMode.custom`, `Vehicle.hyper-available` |
 | 4 | `DriveMode.easy-park` |
 | 5 | `VehicleState`, `Battery`, `Ride`, `Navigation`, `Plugins`; `Vehicle.state` |
+| 6 | Optional `Dash` properties for the host overlay: `overlay-placement`, `telltale-order`, `overlay-style`, `alert-position`; enums `OverlayPlacement`, `Telltale`, `AlertPosition`; struct `OverlayStyle`; `Vehicle.trunk-open`; `Actions.open-trunk()` (gated, see below). v6 also: optional `Dash` property `lock-style` for the lock screen (added within v6, see below) |
 
 ## Enums
 
@@ -50,7 +51,7 @@ History (from the file's comment):
 
 | Property | Type | Default | Notes |
 |---|---|---|---|
-| `contract-version` | `out int` | 5 | Read-only. The contract version the theme was compiled against. |
+| `contract-version` | `out int` | 6 | Read-only. The contract version the theme was compiled against. |
 | `speed-kmh` | `in float` | 0 | km/h |
 | `battery-pct` | `in int` | -1 | Rounded state of charge, %. Use `Battery.soc-pct` for the fine value. |
 | `range-km` | `in int` | -1 | Estimated range, km |
@@ -66,6 +67,7 @@ History (from the file's comment):
 | `headlight` | `in bool` | false | As above |
 | `locked` | `in bool` | false | Vehicle lock state. Themes may ignore it; the host shows it. |
 | `ready-to-ride` | `in bool` | false | Equals `state == VehicleState.drive`. Kept for v1 themes. |
+| `trunk-open` | `in bool` | false | v6. True while the seat/trunk latch is open. It closes when the seat is pressed down. Themes may ignore it. |
 | `clock-text` | `in string` | "" | Preformatted clock, for example `10:24` |
 
 ## `Battery` global (v5)
@@ -135,12 +137,105 @@ The host implementation of `Plugins` is in progress. Until it lands, `widgets` s
 
 ## `Actions` global
 
-Harmless actions only. Vehicle commands (lock, seat, lights) are never exposed to themes. Those live in host-owned screens.
+Harmless actions, plus one gated vehicle request. Other vehicle commands (lock, lights, modes) are never exposed to themes. Those live in host-owned screens only.
 
 | Member | Type | Notes |
 |---|---|---|
 | `open-android-auto()` | callback | Launches Android Auto |
 | `open-settings()` | callback | Opens system settings |
+| `open-trunk()` | callback | v6. Asks the host to open the seat/trunk, like the stock trunk button. See below. |
+
+### `open-trunk()` (v6)
+
+The host sends the request only when all of these hold, using real vehicle values, never test data:
+
+- The BCM reports the scooter unlocked.
+- `state` is `park`.
+- Speed is 0 km/h. An unknown speed is refused.
+- The trunk latch is known to be closed (`trunk-open` is false). An unknown latch is refused.
+- The host is not in test mode, and the vehicle parser is connected.
+- The previous request was sent more than 3 s ago.
+
+Otherwise nothing happens. The theme gets no result, so show nothing the rider could mistake for "trunk opening". Each call is logged in the calls log as `trunk request: sent` or `trunk request: refused <reason>`. The host sends one command per request and does not retry or wait for an acknowledgement. If the command is lost, nothing happens. See [safety.md](safety.md#the-one-vehicle-request).
+
+## Host overlay settings (v6)
+
+A theme may declare these four properties on its `Dash` component. They are **optional**: leave one out and the host uses its default. They are `out` properties; the host reads them once the theme loads and re-reads them when they change.
+
+| Property | Type | Default | Notes |
+|---|---|---|---|
+| `overlay-placement` | `out OverlayPlacement` | `top` | Where the telltale strip sits. See [themes.md](themes.md#overlay-placement-and-the-reserved-strip). |
+| `telltale-order` | `out [Telltale]` | host order | Order of the telltales in the strip. |
+| `overlay-style` | `out OverlayStyle` | host dark style, labels off | Strip background, label colour, corner radius, labels on or off. |
+| `alert-position` | `out AlertPosition` | `center` | Vertical position of alert cards. |
+
+The host never lets these hide, shrink or cover a warning. Rules that apply regardless of theme are in [safety.md](safety.md#host-owned-safety-overlay).
+
+### `OverlayPlacement` (v6)
+
+`top`, `bottom`, `left`, `right`. Reserved strip: top and bottom 48 px tall, full width; left and right 72 px wide, full height.
+
+### `Telltale` (v6)
+
+`left-indicator`, `right-indicator`, `high-beam`, `headlight`, `ready`, `locked`, `side-stand`, `fault`, `charging`. The host default order is the order listed here. New values are appended.
+
+The host normalises the theme's list: unknown and duplicate entries are ignored, and any telltale the theme leaves out is appended in default order. A theme can reorder telltales but cannot drop them.
+
+### `AlertPosition` (v6)
+
+`center`, `upper`, `lower`.
+
+### `OverlayStyle` (v6)
+
+| Field | Type | Notes |
+|---|---|---|
+| `background` | color | Strip background. Must contrast with `foreground` at 4.5:1 or more. |
+| `foreground` | color | Label colour |
+| `corner-radius` | length | Telltale disc corner radius |
+| `show-labels` | bool | Labels under or beside each telltale |
+
+If `background` and `foreground` fail the 4.5:1 contrast rule (WCAG 2.x), the host uses its own colours and logs the reason under `OlaDash` (`sim` prints it to stderr). Telltale icon colours are host-fixed and do not come from the theme.
+
+## Lock screen style (v6)
+
+A theme may declare one more optional `out` property on `Dash`: `lock-style`. It styles the passcode screen (the screen the host shows while the scooter is locked or unlocking). It is **style data only**. The host draws the keypad, handles every key press, and owns the layout, key order, labels, copy and phase logic. A theme never gets a callback, text or a layout from the lock screen. Absent means the host default style. This was added within v6, so `contract-version` stays 6. See [themes.md](themes.md#lock-screen) and [safety.md](safety.md#the-lock-screen-is-styled-never-handled).
+
+| Property | Type | Default | Notes |
+|---|---|---|---|
+| `lock-style` | `out LockStyle` | host default look | Colours, key shape and digit drawing. All fields are required when the struct is written (use `#00000000` only where the table below allows it). |
+
+### `LockStyle` (v6)
+
+| Field | Type | Rule |
+|---|---|---|
+| `background` | color | Opaque. Foreground must reach 4.5:1 on it. |
+| `foreground` | color | Keypad digits, title, status. 4.5:1 on background. |
+| `muted` | color | Secondary copy, including attempt and cooldown lines. 4.5:1 on background. |
+| `accent` | color | Filled passcode cells, battery fill, LOCKED. 3:1 on background. |
+| `key-background` | color | Opaque, 4.5:1 with `foreground`. `#00000000` means the screen background. |
+| `key-border` | color | Hairlines and key outlines. Decorative, not checked. |
+| `key-shape` | `LockKeyShape` | `rounded`, `square` or `grid`. |
+| `digits` | `LockDigits` | `sans` (font) or `segment` (the host's seven-segment drawing). |
+
+### `LockKeyShape` (v6)
+
+`rounded` (12 px corners, 1 px outline), `square` (4 px corners, 1 px outline), `grid` (no corners, no outline, 1 px hairlines between keys).
+
+### `LockDigits` (v6)
+
+`sans` draws digits with the theme's default font. `segment` draws them with the host's seven-segment shapes in the foreground colour.
+
+### Host checks
+
+When a theme's `lock-style` is read, the host checks it and logs each rejection under `OlaDash` (`sim` prints it to stderr). A rejected value falls back to a host colour that passes the same rule, or to the foreground:
+
+- Background and foreground fail together. If the pair is below 4.5:1, or either is transparent, both become host colours.
+- Muted and accent each fall back on their own rule.
+- A transparent `key-background` uses the screen background.
+- An unknown `key-shape` becomes `rounded`. An unknown `digits` value becomes `sans`.
+- The error copy uses amber when it reads on the background, otherwise the foreground.
+
+The keypad's size and position are fixed by the host (about 155 x 97 px per key, above the 96 x 80 px minimum), so a theme cannot make keys smaller. There are no per-key colours, labels or callbacks.
 
 ## Re-exporting globals
 

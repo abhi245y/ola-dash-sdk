@@ -467,6 +467,7 @@ struct Args {
     scenario: Scenario,
     plugins: bool,
     nav: bool,
+    pixel: Option<(usize, usize)>,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -480,6 +481,7 @@ fn parse_args() -> Result<Args, String> {
     let mut scenario = Scenario::Ride;
     let mut plugins = false;
     let mut nav = false;
+    let mut pixel = None;
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -502,6 +504,13 @@ fn parse_args() -> Result<Args, String> {
             }
             "--plugins" => plugins = true,
             "--nav" => nav = true,
+            "--pixel" => {
+                pixel = Some(it
+                    .next()
+                    .and_then(|v| v.split_once(',').and_then(|(x, y)| Some((x.parse().ok()?, y.parse().ok()?))))
+                    .filter(|&(x, y)| x < WIDTH as usize && y < HEIGHT as usize)
+                    .ok_or("--pixel needs X,Y inside the 1280 x 768 screen")?)
+            }
             "--screenshot" => screenshot = it.next().map(PathBuf::from),
             "--at" => {
                 at = it
@@ -513,6 +522,7 @@ fn parse_args() -> Result<Args, String> {
                 println!("usage: sim <theme-dir> [--screenshot out.png --at SECS] [--contract DIR]");
                 println!("       [--placement top|bottom|left|right] [--alert 1-6]");
                 println!("       [--state ride|park|charge|reverse|trunk|easy-park|locked|locked-error|cooldown] [--plugins] [--nav]");
+                println!("       [--pixel X,Y]  (with --screenshot: also print the colour at that point)");
                 println!("       sim --check <theme-dir> [--contract DIR]");
                 std::process::exit(0);
             }
@@ -532,7 +542,7 @@ fn parse_args() -> Result<Args, String> {
             return Err(format!("--placement needs top, bottom, left or right, got {p}"));
         }
     }
-    Ok(Args { theme, contract, screenshot, at, check, placement, alert, scenario, plugins, nav })
+    Ok(Args { theme, contract, screenshot, at, check, placement, alert, scenario, plugins, nav, pixel })
 }
 
 /// Path of `to` relative to `from` (both absolute, same drive), with '/' separators.
@@ -551,7 +561,7 @@ fn load(main: &Path, args: &Args) -> Result<ComponentDefinition, Box<dyn Error>>
     let host_ui = args.contract.parent().unwrap_or(Path::new(".")).join("host/ui");
     let mut probe = Compiler::default();
     probe.set_include_paths(include.clone());
-    theme_root::guard(&mut probe, &args.contract, &args.theme, main)?;
+    theme_root::guard(&mut probe, &[&args.contract], &args.theme, main)?;
     let probed = pollster::block_on(probe.build_from_path(main));
     for d in probed.diagnostics() {
         eprintln!("{d}");
@@ -560,6 +570,7 @@ fn load(main: &Path, args: &Args) -> Result<ComponentDefinition, Box<dyn Error>>
     let src = theme_root::root_source(&relative(&host_ui, main), &declared);
     let mut compiler = Compiler::default();
     compiler.set_include_paths(include);
+    theme_root::guard(&mut compiler, &[&args.contract, &host_ui], &args.theme, main)?;
     let result = pollster::block_on(compiler.build_from_source(src, host_ui.join("root.slint")));
     for d in result.diagnostics() {
         eprintln!("{d}");
@@ -739,6 +750,10 @@ fn run_screenshot(args: &Args, out: &Path) -> Result<(), Box<dyn Error>> {
     });
     write_png(out, &buf)?;
     println!("wrote {} (sim t={:.2}s)", out.display(), args.at);
+    if let Some((x, y)) = args.pixel {
+        let p = buf[y * WIDTH as usize + x];
+        println!("#{:02x}{:02x}{:02x}", p.red, p.green, p.blue);
+    }
     Ok(())
 }
 

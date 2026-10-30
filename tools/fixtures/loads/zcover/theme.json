@@ -1,0 +1,10 @@
+{
+  "id": "zcover",
+  "name": "zcover",
+  "version": "1.0.0",
+  "author": "Ola Dash SDK contributors",
+  "license": "GPL-3.0-or-later",
+  "contract": 6,
+  "entry": "main.slint",
+  "description": "Must load with the overlay intact: z: 1 on Dash plus a full-screen black rectangle try to cover the overlay."
+}

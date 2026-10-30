@@ -6,5 +6,5 @@
   "license": "GPL-3.0-or-later",
   "contract": 6,
   "entry": "main.slint",
-  "description": "Must fail sim --check: negative fixture for the theme import guard."
+  "description": "Must be refused: imports host/ui/overlay.slint and writes HostState and OverlayConfig to hide the telltales."
 }

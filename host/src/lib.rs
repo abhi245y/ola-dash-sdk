@@ -70,7 +70,7 @@ const FALLBACK: &str = "fallback"; // bundled copy of themes/default
 const LAST_RESORT: &str = "last-resort"; // bundled placeholder, cannot fail to compile
 const HEADUNIT_PKG: &str = "com.andrerinas.headunitrevived";
 /// Highest contract version this host implements (contract/vehicle.slint `contract-version`).
-const HOST_CONTRACT: i64 = 6;
+const HOST_CONTRACT: i64 = 7;
 
 /// Latest value per field, coalesced until the UI thread applies it.
 static PENDING: Mutex<[Option<f64>; SLOTS]> = Mutex::new([None; SLOTS]);
@@ -454,6 +454,14 @@ fn wire(ui: &ComponentInstance, app: &AndroidApp) -> Result<(), String> {
         Value::Void
     })
     .map_err(err)?;
+    // ponytail: log only until E1.S3 wires the host screens.
+    for name in ["open-apps", "open-themes"] {
+        ui.set_global_callback("Actions", name, move |_| {
+            log::info!("action: {name} (not wired yet)");
+            Value::Void
+        })
+        .map_err(err)?;
+    }
     // Media and widget taps go to the plugin host (display-only; it routes to the owner).
     for name in ["play-pause", "next", "previous"] {
         let a = app.clone();

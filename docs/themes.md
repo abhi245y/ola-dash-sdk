@@ -88,7 +88,7 @@ Plain text on the default font, with top telltales. It is the smallest theme tha
 | `version` | string | Required. Theme version, for example `1.0.0`. |
 | `author` | string | Required. Name or handle. |
 | `license` | string | Required. An SPDX identifier. Themes in this repository are `GPL-3.0-or-later`. |
-| `contract` | integer | Required. The lowest contract version the theme needs. Must be at least 1 and no higher than the SDK's `contract-version`. A theme that uses `Actions.open-trunk()` or `Vehicle.trunk-open` needs 6. |
+| `contract` | integer | Required. The lowest contract version the theme needs. Must be at least 1 and no higher than the SDK's `contract-version`. A theme that uses `Actions.open-trunk()` or `Vehicle.trunk-open` needs 6; `Display.night`, `Vehicle.data-stale`, `Actions.open-apps()` or `Actions.open-themes()` needs 7. |
 | `entry` | string | Required. Path to the entry file, relative to the theme folder. Usually `main.slint`. |
 | `description` | string | Required. One sentence. |
 
@@ -164,7 +164,7 @@ Declare only what you need. A theme that omits all four properties works exactly
 
 ## Callbacks allowed
 
-`Media.play-pause()`, `Media.next()`, `Media.previous()`, `Actions.open-android-auto()`, `Actions.open-settings()`, `Actions.open-trunk()` and `Plugins.widget-clicked(id)`. Nothing else. Never add a callback that can change vehicle state.
+`Media.play-pause()`, `Media.next()`, `Media.previous()`, `Actions.open-android-auto()`, `Actions.open-settings()`, `Actions.open-trunk()`, `Actions.open-apps()` (v7), `Actions.open-themes()` (v7) and `Plugins.widget-clicked(id)`. Nothing else. Never add a callback that can change vehicle state.
 
 `Actions.open-trunk()` asks the host to open the seat latch, as the stock trunk button does. The host ignores it unless the scooter is unlocked, in Park and at 0 km/h. The theme should still gate its own key, so the rider does not press a key that does nothing.
 

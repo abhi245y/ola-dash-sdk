@@ -296,6 +296,8 @@ struct Feeder {
     /// `--alert <code>`: holds this host alert instead of the mock cycle.
     alert_override: Option<i64>,
     scenario: Scenario,
+    /// `--night`: Display.night = true.
+    night: bool,
 }
 
 impl Feeder {
@@ -309,6 +311,7 @@ impl Feeder {
             nav: args.nav || env,
             alert_override: args.alert,
             scenario: args.scenario,
+            night: args.night,
         }
     }
 
@@ -435,6 +438,13 @@ impl Feeder {
             println!("action: open-trunk (sim: no-op)");
             Value::Void
         });
+        for name in ["open-apps", "open-themes"] {
+            let _ = inst.set_global_callback("Actions", name, move |_| {
+                println!("action: {name} (sim: no-op)");
+                Value::Void
+            });
+        }
+        self.set(inst, "Display", "night", Value::Bool(self.night));
         let _ = inst.set_global_callback("Plugins", "widget-clicked", |args| {
             println!("plugins: widget-clicked {:?}", args.first());
             Value::Void
@@ -469,6 +479,7 @@ struct Args {
     plugins: bool,
     nav: bool,
     pixel: Option<(usize, usize)>,
+    night: bool,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -483,6 +494,7 @@ fn parse_args() -> Result<Args, String> {
     let mut plugins = false;
     let mut nav = false;
     let mut pixel = None;
+    let mut night = false;
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -505,6 +517,7 @@ fn parse_args() -> Result<Args, String> {
             }
             "--plugins" => plugins = true,
             "--nav" => nav = true,
+            "--night" => night = true,
             "--pixel" => {
                 pixel = Some(it
                     .next()
@@ -522,7 +535,7 @@ fn parse_args() -> Result<Args, String> {
             "-h" | "--help" => {
                 println!("usage: sim <theme-dir> [--screenshot out.png --at SECS] [--contract DIR]");
                 println!("       [--placement top|bottom|left|right] [--alert 1-6]");
-                println!("       [--state ride|park|charge|reverse|trunk|easy-park|locked|locked-error|cooldown] [--plugins] [--nav]");
+                println!("       [--state ride|park|charge|reverse|trunk|easy-park|locked|locked-error|cooldown] [--plugins] [--nav] [--night]");
                 println!("       [--pixel X,Y]  (with --screenshot: also print the colour at that point)");
                 println!("       sim --check <theme-dir> [--contract DIR]");
                 std::process::exit(0);
@@ -543,7 +556,7 @@ fn parse_args() -> Result<Args, String> {
             return Err(format!("--placement needs top, bottom, left or right, got {p}"));
         }
     }
-    Ok(Args { theme, contract, screenshot, at, check, placement, alert, scenario, plugins, nav, pixel })
+    Ok(Args { theme, contract, screenshot, at, check, placement, alert, scenario, plugins, nav, pixel, night })
 }
 
 /// Path of `to` relative to `from` (both absolute, same drive), with '/' separators.

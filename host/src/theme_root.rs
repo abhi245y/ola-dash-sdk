@@ -54,8 +54,8 @@ const HOST_LOCK: Lock = Lock {
 const ROOT: &str = r#"import { Dash } from "{THEME}";
 import { HostOverlay, HostState, OverlayConfig } from "overlay.slint";
 import { LockConfig } from "unlock.slint";
-import { Vehicle, Media, Actions, Battery, Ride, Navigation, Plugins, OverlayPlacement, OverlayStyle, Telltale, AlertPosition, LockStyle } from "vehicle.slint";
-export { Dash, Vehicle, Media, Actions, Battery, Ride, Navigation, Plugins, HostState, OverlayConfig, LockConfig }
+import { Vehicle, Display, Media, Actions, Battery, Ride, Navigation, Plugins, OverlayPlacement, OverlayStyle, Telltale, AlertPosition, LockStyle } from "vehicle.slint";
+export { Dash, Vehicle, Display, Media, Actions, Battery, Ride, Navigation, Plugins, HostState, OverlayConfig, LockConfig }
 export component Host inherits Window {
     callback unlock-key(int);
     // Fired when a mirrored theme setting changes; the host re-applies OverlayConfig.

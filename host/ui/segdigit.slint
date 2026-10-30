@@ -1,0 +1,63 @@
+// Host copy of the seven-segment digit. The host does not import theme files, so the
+// lock screen carries its own. Used only when the theme picks `digits: segment`.
+// Each glyph is seven chamfered polygons in a 100 x 200 box. Segment bits: a=1 b=2 c=4
+// d=8 e=16 f=32 g=64. Unlit segments stay as a faint ghost. `digit` -1 shows ghost only.
+export component LockSegDigit inherits Rectangle {
+    in property <int> digit: -1;
+    in property <color> ink: #ffffff;
+    background: transparent;
+
+    property <[int]> masks: [63, 6, 91, 79, 102, 109, 125, 7, 127, 111];
+    property <int> mask: root.digit < 0 ? 0 : root.masks[root.digit];
+    property <float> ghost: 0.1;
+
+    Path {
+        width: parent.width; height: parent.height;
+        viewbox-width: 100; viewbox-height: 200;
+        fill: root.ink;
+        opacity: Math.mod(floor(root.mask / 1), 2) == 1 ? 1 : root.ghost;
+        commands: "M 13 0 L 87 0 L 94 7 L 87 14 L 13 14 L 6 7 Z";
+    }
+    Path {
+        width: parent.width; height: parent.height;
+        viewbox-width: 100; viewbox-height: 200;
+        fill: root.ink;
+        opacity: Math.mod(floor(root.mask / 2), 2) == 1 ? 1 : root.ghost;
+        commands: "M 93 16 L 100 23 L 100 84 L 93 91 L 86 84 L 86 23 Z";
+    }
+    Path {
+        width: parent.width; height: parent.height;
+        viewbox-width: 100; viewbox-height: 200;
+        fill: root.ink;
+        opacity: Math.mod(floor(root.mask / 4), 2) == 1 ? 1 : root.ghost;
+        commands: "M 93 109 L 100 116 L 100 177 L 93 184 L 86 177 L 86 116 Z";
+    }
+    Path {
+        width: parent.width; height: parent.height;
+        viewbox-width: 100; viewbox-height: 200;
+        fill: root.ink;
+        opacity: Math.mod(floor(root.mask / 8), 2) == 1 ? 1 : root.ghost;
+        commands: "M 13 186 L 87 186 L 94 193 L 87 200 L 13 200 L 6 193 Z";
+    }
+    Path {
+        width: parent.width; height: parent.height;
+        viewbox-width: 100; viewbox-height: 200;
+        fill: root.ink;
+        opacity: Math.mod(floor(root.mask / 16), 2) == 1 ? 1 : root.ghost;
+        commands: "M 7 109 L 14 116 L 14 177 L 7 184 L 0 177 L 0 116 Z";
+    }
+    Path {
+        width: parent.width; height: parent.height;
+        viewbox-width: 100; viewbox-height: 200;
+        fill: root.ink;
+        opacity: Math.mod(floor(root.mask / 32), 2) == 1 ? 1 : root.ghost;
+        commands: "M 7 16 L 14 23 L 14 84 L 7 91 L 0 84 L 0 23 Z";
+    }
+    Path {
+        width: parent.width; height: parent.height;
+        viewbox-width: 100; viewbox-height: 200;
+        fill: root.ink;
+        opacity: Math.mod(floor(root.mask / 64), 2) == 1 ? 1 : root.ghost;
+        commands: "M 13 93 L 87 93 L 94 100 L 87 107 L 13 107 L 6 100 Z";
+    }
+}

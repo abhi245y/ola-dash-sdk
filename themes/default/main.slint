@@ -5,7 +5,7 @@
 // keep y < 48 as plain background. Telltales are drawn by the host.
 // Patterns to copy: the Arc and GaugeTicks helpers (parts.slint), the ModePill row, the
 // park/charging/reverse switch on the centre readout, and the trunk key's three states.
-import { Vehicle, Media, Actions, Battery, Ride, DriveMode, VehicleState, Navigation, Plugins, OverlayPlacement, OverlayStyle, Telltale } from "vehicle.slint";
+import { Vehicle, Media, Actions, Battery, Ride, DriveMode, VehicleState, Navigation, Plugins, OverlayPlacement, OverlayStyle, Telltale, LockStyle, LockKeyShape, LockDigits } from "vehicle.slint";
 import { Arc, GaugeTicks } from "parts.slint";
 import "fonts/Inter-Regular.ttf";
 import "fonts/Inter-SemiBold.ttf";
@@ -80,6 +80,18 @@ export component Dash inherits Window {
     height: 768px;
     background: #05070b;
     default-font-family: "Inter";
+
+    // Lock screen: dark glass, rounded keys with a 1 px border, cyan dots.
+    out property <LockStyle> lock-style: {
+        background: #05070b,
+        foreground: #f4f6fa,
+        muted: #8f9bb0,
+        accent: #33c3f5,
+        key-background: #0c1118,
+        key-border: #223045,
+        key-shape: LockKeyShape.rounded,
+        digits: LockDigits.sans,
+    };
 
     // ---- states the centre readout switches on ----
     property <bool> charge-view: Vehicle.charging || Vehicle.state == VehicleState.charging;

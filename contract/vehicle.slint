@@ -11,7 +11,7 @@
 // History: v2 park, reverse | v3 custom, hyper-available | v4 easy-park |
 //          v5 VehicleState, Battery, Ride, Navigation, Plugins; -1 = not reported yet |
 //          v6 overlay-placement, telltale-order, overlay-style, alert-position (optional Dash props),
-//             trunk-open, Actions.open-trunk
+//             trunk-open, Actions.open-trunk | v6 also: lock-style (optional Dash prop, lock screen)
 
 export enum DriveMode { eco, normal, sport, hyper, unknown, park, reverse, custom, easy-park }
 
@@ -30,6 +30,25 @@ export enum OverlayPlacement { top, bottom, left, right }
 export enum Telltale { left-indicator, right-indicator, high-beam, headlight, ready, locked, side-stand, fault, charging }
 
 export enum AlertPosition { center, upper, lower }
+
+// Passcode keypad style (optional `lock-style` on Dash). The host draws and handles the
+// keypad; the theme supplies colours and two shape choices only. See docs/themes.md.
+export enum LockKeyShape { rounded, square, grid }
+
+// Digit drawing for the keypad and clock: sans uses the font, segment uses the host's
+// seven-segment drawing.
+export enum LockDigits { sans, segment }
+
+export struct LockStyle {
+    background: color,
+    foreground: color,
+    muted: color,
+    accent: color,
+    key-background: color,
+    key-border: color,
+    key-shape: LockKeyShape,
+    digits: LockDigits,
+}
 
 export struct OverlayStyle {
     background: color,

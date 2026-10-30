@@ -22,7 +22,7 @@ History (from the file's comment):
 | 3 | `DriveMode.custom`, `Vehicle.hyper-available` |
 | 4 | `DriveMode.easy-park` |
 | 5 | `VehicleState`, `Battery`, `Ride`, `Navigation`, `Plugins`; `Vehicle.state` |
-| 6 | Optional `Dash` properties for the host overlay: `overlay-placement`, `telltale-order`, `overlay-style`, `alert-position`; enums `OverlayPlacement`, `Telltale`, `AlertPosition`; struct `OverlayStyle`; `Vehicle.trunk-open`; `Actions.open-trunk()` (gated, see below) |
+| 6 | Optional `Dash` properties for the host overlay: `overlay-placement`, `telltale-order`, `overlay-style`, `alert-position`; enums `OverlayPlacement`, `Telltale`, `AlertPosition`; struct `OverlayStyle`; `Vehicle.trunk-open`; `Actions.open-trunk()` (gated, see below). v6 also: optional `Dash` property `lock-style` for the lock screen (added within v6, see below) |
 
 ## Enums
 
@@ -195,6 +195,47 @@ The host normalises the theme's list: unknown and duplicate entries are ignored,
 | `show-labels` | bool | Labels under or beside each telltale |
 
 If `background` and `foreground` fail the 4.5:1 contrast rule (WCAG 2.x), the host uses its own colours and logs the reason under `OlaDash` (`sim` prints it to stderr). Telltale icon colours are host-fixed and do not come from the theme.
+
+## Lock screen style (v6)
+
+A theme may declare one more optional `out` property on `Dash`: `lock-style`. It styles the passcode screen (the screen the host shows while the scooter is locked or unlocking). It is **style data only**. The host draws the keypad, handles every key press, and owns the layout, key order, labels, copy and phase logic. A theme never gets a callback, text or a layout from the lock screen. Absent means the host default style. This was added within v6, so `contract-version` stays 6. See [themes.md](themes.md#lock-screen) and [safety.md](safety.md#the-lock-screen-is-styled-never-handled).
+
+| Property | Type | Default | Notes |
+|---|---|---|---|
+| `lock-style` | `out LockStyle` | host default look | Colours, key shape and digit drawing. All fields are required when the struct is written (use `#00000000` only where the table below allows it). |
+
+### `LockStyle` (v6)
+
+| Field | Type | Rule |
+|---|---|---|
+| `background` | color | Opaque. Foreground must reach 4.5:1 on it. |
+| `foreground` | color | Keypad digits, title, status. 4.5:1 on background. |
+| `muted` | color | Secondary copy, including attempt and cooldown lines. 4.5:1 on background. |
+| `accent` | color | Filled passcode cells, battery fill, LOCKED. 3:1 on background. |
+| `key-background` | color | Opaque, 4.5:1 with `foreground`. `#00000000` means the screen background. |
+| `key-border` | color | Hairlines and key outlines. Decorative, not checked. |
+| `key-shape` | `LockKeyShape` | `rounded`, `square` or `grid`. |
+| `digits` | `LockDigits` | `sans` (font) or `segment` (the host's seven-segment drawing). |
+
+### `LockKeyShape` (v6)
+
+`rounded` (12 px corners, 1 px outline), `square` (4 px corners, 1 px outline), `grid` (no corners, no outline, 1 px hairlines between keys).
+
+### `LockDigits` (v6)
+
+`sans` draws digits with the theme's default font. `segment` draws them with the host's seven-segment shapes in the foreground colour.
+
+### Host checks
+
+When a theme's `lock-style` is read, the host checks it and logs each rejection under `OlaDash` (`sim` prints it to stderr). A rejected value falls back to a host colour that passes the same rule, or to the foreground:
+
+- Background and foreground fail together. If the pair is below 4.5:1, or either is transparent, both become host colours.
+- Muted and accent each fall back on their own rule.
+- A transparent `key-background` uses the screen background.
+- An unknown `key-shape` becomes `rounded`. An unknown `digits` value becomes `sans`.
+- The error copy uses amber when it reads on the background, otherwise the foreground.
+
+The keypad's size and position are fixed by the host (about 155 x 97 px per key, above the 96 x 80 px minimum), so a theme cannot make keys smaller. There are no per-key colours, labels or callbacks.
 
 ## Re-exporting globals
 

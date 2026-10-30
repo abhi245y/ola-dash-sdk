@@ -188,6 +188,47 @@ These come from the contract. No state needs a theme-specific value.
 | Navigation | `Navigation.active` | The instruction, distance and ETA replace the media card. |
 | Alerts | Host overlay | Not drawn by the theme. The captures show the side-stand card over each theme. |
 
+## Lock screen
+
+While the scooter is locked or unlocking, the host covers the dash with the passcode screen. The theme does not draw it. The theme only chooses its look, with the optional `lock-style` property on `Dash` (contract v6, see [contract.md](contract.md#lock-screen-style-v6)):
+
+```slint
+import { LockStyle, LockKeyShape, LockDigits } from "vehicle.slint";
+
+export component Dash inherits Window {
+    out property <LockStyle> lock-style: {
+        background: #05070b,
+        foreground: #f4f6fa,
+        muted: #8f9bb0,
+        accent: #33c3f5,
+        key-background: #0c1118,
+        key-border: #223045,
+        key-shape: LockKeyShape.rounded,
+        digits: LockDigits.sans,
+    };
+}
+```
+
+What the host keeps: the keypad layout and key order (1 to 9, Clear, 0, Delete, and Retry connection when the service fails), the labels and all copy, the passcode cells and their count, attempts, cooldown and error text, the status line's content (clock, battery percentage, padlock and LOCKED), and the phase logic. The theme cannot change any of them.
+
+| Field | Styles |
+|---|---|
+| `background` | The screen. Must be opaque. |
+| `foreground` | Digits, title, clock and battery figures. |
+| `muted` | Secondary copy, attempts, cooldown, Clear and status labels. |
+| `accent` | Filled passcode cells, battery fill, the padlock and LOCKED. |
+| `key-background`, `key-border` | Key faces and outlines. `#00000000` for `key-background` means the screen background. |
+| `key-shape` | `rounded` (12 px corners), `square` (4 px corners) or `grid` (hairline cells, no keys). Square passcode cells go with `square` keys. Other shapes use round cells. |
+| `digits` | `sans` uses the theme's default font. `segment` draws the digits and the clock in the host's seven-segment shapes. |
+
+Contrast is checked on load (see [contract.md](contract.md#host-checks)). A failing value falls back to a host colour and is logged. Minimal leaves `lock-style` out, so it shows the host default look. That is the look to start from when you want a plain screen.
+
+To preview the lock screen, use `--state locked`, `--state locked-error` or `--state cooldown` (below). The captures follow.
+
+| Segment | Data Fields | Default | Minimal |
+|---|---|---|---|
+| ![Segment lock screen](img/themes/segment-locked.png) | ![Data Fields lock screen](img/themes/fields-locked.png) | ![Default lock screen](img/themes/default-locked.png) | ![Minimal lock screen](img/themes/minimal-locked.png) |
+
 ## Fonts
 
 Bundle fonts. Do not rely on the device's fonts:
@@ -256,6 +297,7 @@ Options:
 | Option | Effect |
 |---|---|
 | `--state ride\|park\|charge\|reverse\|trunk\|easy-park` | Holds one vehicle state. `ride` (the default) is the mock loop: riding with indicators, a mode cycle of eco, normal, sport, hyper and custom every 12 s, a side-stand card at 100 to 110 s of each 120 s cycle, and then charging. |
+| `--state locked\|locked-error\|cooldown` | Shows the host lock screen: locked with two digits entered and four attempts left, a wrong passcode with three attempts left, or the cooldown after the attempts run out. The vehicle is locked. |
 | `--alert 1..6` | Holds one host alert on screen, instead of the mock cycle. Code 3 is the side-stand card. |
 | `--plugins` | Feeds three mock plugin widgets (`Plugins.widgets`). |
 | `--nav` | Feeds an active navigation card (`Navigation.active`), which replaces the media card. |
@@ -281,6 +323,9 @@ for th in default segment fields; do
   sim themes/$th --screenshot sim/out/$th-trunk-open.png --at 20 --state trunk --plugins
 done
 sim themes/minimal --screenshot sim/out/minimal-riding.png --at 13 --plugins
+for th in segment fields default minimal; do
+  sim themes/$th --screenshot sim/out/$th-locked.png --at 5 --state locked
+done
 ```
 
 Then strip the metadata into `docs/img/themes/` with `magick in.png -strip -define png:compression-level=9 out.png`. Each capture is under 150 KB.

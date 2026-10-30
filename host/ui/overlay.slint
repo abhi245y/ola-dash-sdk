@@ -317,6 +317,8 @@ export component HostOverlay inherits Rectangle {
         cooldown: HostState.auth-cooldown;
         available: HostState.auth-available;
         test-mode: HostState.test-mode;
+        clock-text: Vehicle.clock-text;
+        battery-pct: Vehicle.battery-pct;
         key(key) => { root.unlock-key(key); }
     }
 

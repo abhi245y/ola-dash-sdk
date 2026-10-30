@@ -37,6 +37,13 @@ This project changes what a rider sees on a vehicle. The rules below apply to th
 
 If a theme or plugin ever hides the overlay, that is a critical bug. Report it under [SECURITY.md](../SECURITY.md).
 
+## The lock screen is styled, never handled
+
+- The passcode keypad and the PIN are host-owned. The host draws every key, the passcode cells, the attempt and cooldown copy, and the keypad layout. Its key presses go to the host's unlock controller, not to the theme.
+- A theme supplies only `lock-style` (see [contract.md](contract.md#lock-screen-style-v6)): colours, key shape and digit drawing. It has no callback, text or layout for the keypad, and it cannot read the digits entered. The contract exposes only the count of digits, and only to the host.
+- The host checks the style's contrast before use. A theme cannot make the attempt count, cooldown or error copy unreadable (these are in the `muted` and error colours, which are checked) or make the keys too small to press.
+- `host/test/unlock-preview.rs` renders the host overlay with the default theme and checks that a tap on a key dispatches the key through the host overlay, with the expected digit, Delete and Clear codes.
+
 ## No vehicle commands from themes or plugins
 
 - The contract exposes read-only vehicle values, harmless callbacks (media control, Android Auto, settings) and one gated vehicle request, `Actions.open-trunk()`. See [contract.md](contract.md).

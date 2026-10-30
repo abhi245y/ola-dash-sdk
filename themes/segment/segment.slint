@@ -81,7 +81,8 @@ component SegCell inherits Rectangle {
     in property <length> cell-h: 200px;
     in property <color> ink: #1d201c;
 
-    property <[int]> pow10: [1, 10, 100, 1000, 10000];
+    // Six places: the odometer is the widest number (six cells).
+    property <[int]> pow10: [1, 10, 100, 1000, 10000, 100000];
     property <[int]> masks: [63, 6, 91, 79, 102, 109, 125, 7, 127, 111];
     property <bool> lit: root.value >= 0 && (root.power == 0 || root.value >= root.pow10[root.power]);
     property <int> digit: Math.mod(floor(root.value / root.pow10[root.power]), 10);
@@ -96,7 +97,7 @@ component SegCell inherits Rectangle {
     }
 }
 
-// Integer right-aligned in `cells` digit cells (at most 5). Each cell is cell-w wide and
+// Integer right-aligned in `cells` digit cells (at most 6). Each cell is cell-w wide and
 // cell-h tall; cells are separated by `gap`. value < 0 shows ghost cells only ("--").
 // For decimals, pass value * 10 and place a SegDot between two cells.
 export component SegNumber inherits Rectangle {
@@ -111,7 +112,7 @@ export component SegNumber inherits Rectangle {
     height: root.cell-h;
     background: transparent;
 
-    for k[i] in [0, 1, 2, 3, 4] : SegCell {
+    for k[i] in [0, 1, 2, 3, 4, 5] : SegCell {
         visible: i < root.cells;
         x: i * (root.cell-w + root.gap);
         y: 0px;

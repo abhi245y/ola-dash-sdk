@@ -6,8 +6,9 @@
 //!   options: --contract <dir>  (default: <theme>/../../contract)
 //!            --placement top|bottom|left|right   preview another overlay placement
 //!            --alert <code>                      hold a host alert (1-6) instead of the mock cycle
-//!            --state ride|park|charge|reverse|trunk|easy-park
-//!                                                 hold one vehicle state (default: the mock ride cycle)
+//!            --state ride|park|charge|reverse|trunk|easy-park|locked|locked-error|cooldown
+//!                                                 hold one vehicle state (default: the mock ride cycle);
+//!                                                 the last three show the lock screen (see docs/themes.md)
 //!            --plugins / --nav                    feed mock plugin widgets / an active navigation card
 //!
 //! The theme is loaded the way the device loads it: inside the host's `Host` root,
@@ -95,6 +96,9 @@ enum Scenario {
     Reverse,
     Trunk,
     EasyPark,
+    Locked,
+    LockedError,
+    Cooldown,
 }
 
 impl Scenario {
@@ -106,8 +110,25 @@ impl Scenario {
             "reverse" => Self::Reverse,
             "trunk" => Self::Trunk,
             "easy-park" => Self::EasyPark,
+            "locked" => Self::Locked,
+            "locked-error" => Self::LockedError,
+            "cooldown" => Self::Cooldown,
             _ => return None,
         })
+    }
+
+    /// Lock-screen preview: HostState (auth-phase, pin-length, attempts, error, cooldown).
+    /// `None` for vehicle states, where the lock screen is hidden.
+    fn lock_state(self) -> Option<[i64; 5]> {
+        match self {
+            // Locked, two digits entered, four attempts left.
+            Self::Locked => Some([1, 2, 4, 0, 0]),
+            // Wrong passcode: the keypad is cleared, three attempts left.
+            Self::LockedError => Some([1, 0, 3, 1, 0]),
+            // Attempts used up: the service cooldown counts down.
+            Self::Cooldown => Some([1, 0, 0, 0, 272]),
+            _ => None,
+        }
     }
 }
 
@@ -232,6 +253,15 @@ fn sim_at(t: f64, sc: Scenario) -> Sim {
             s.mode = "easy-park";
             s.ready = true;
         }
+        Scenario::Locked | Scenario::LockedError | Scenario::Cooldown => {
+            held(&mut s);
+            s.state = "sleep";
+            s.locked = true;
+            s.clock = "18:24".into();
+            s.battery = 70;
+            s.soc = 70.0;
+            s.range = 74;
+        }
     }
     s
 }
@@ -354,8 +384,13 @@ impl Feeder {
             Value::EnumerationValue("VehicleState".into(), s.state.into()),
         );
         // HostState: the unlock screen is hidden in DRIVE (auth-phase 5).
+        let auth = self.scenario.lock_state().unwrap_or([5, 0, -1, 0, 0]);
+        for (prop, v) in ["auth-phase", "pin-length", "auth-attempts", "auth-error", "auth-cooldown"].iter().zip(auth) {
+            self.set(inst, "HostState", prop, Value::Number(v as f64));
+        }
+        // Keys are live while passcode entry is open, and disabled during the cooldown.
+        self.set(inst, "HostState", "auth-available", Value::Bool(matches!(self.scenario, Scenario::Locked | Scenario::LockedError)));
         let alert = self.alert_override.unwrap_or(s.alert);
-        self.set(inst, "HostState", "auth-phase", Value::Number(5.0));
         self.set(inst, "HostState", "alert-code", Value::Number(alert as f64));
         self.set(inst, "HostState", "side-stand", Value::Bool(s.side_stand || alert == 3));
         self.set(inst, "HostState", "fault", Value::Bool(s.fault || alert == 5));
@@ -463,7 +498,7 @@ fn parse_args() -> Result<Args, String> {
                 scenario = it
                     .next()
                     .and_then(|v| Scenario::parse(&v))
-                    .ok_or("--state needs ride, park, charge, reverse, trunk or easy-park")?
+                    .ok_or("--state needs ride, park, charge, reverse, trunk, easy-park, locked, locked-error or cooldown")?
             }
             "--plugins" => plugins = true,
             "--nav" => nav = true,
@@ -477,7 +512,7 @@ fn parse_args() -> Result<Args, String> {
             "-h" | "--help" => {
                 println!("usage: sim <theme-dir> [--screenshot out.png --at SECS] [--contract DIR]");
                 println!("       [--placement top|bottom|left|right] [--alert 1-6]");
-                println!("       [--state ride|park|charge|reverse|trunk|easy-park] [--plugins] [--nav]");
+                println!("       [--state ride|park|charge|reverse|trunk|easy-park|locked|locked-error|cooldown] [--plugins] [--nav]");
                 println!("       sim --check <theme-dir> [--contract DIR]");
                 std::process::exit(0);
             }

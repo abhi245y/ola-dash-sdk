@@ -3,7 +3,7 @@
 // The host strip is on the LEFT rail (72 px, contract v6): everything here starts at x >= 92.
 // Patterns to copy: the giant speed field, the 2 x 3 labelled data grid with hairlines,
 // the unit-at-bottom-right cell, and the switch on the speed field for park, reverse and charge.
-import { Vehicle, Media, Actions, Battery, Ride, DriveMode, VehicleState, Navigation, Plugins, OverlayPlacement, OverlayStyle, Telltale } from "vehicle.slint";
+import { Vehicle, Media, Actions, Battery, Ride, DriveMode, VehicleState, Navigation, Plugins, OverlayPlacement, OverlayStyle, Telltale, LockStyle, LockKeyShape, LockDigits } from "vehicle.slint";
 import "fonts/NotoSans-SemiCondensedBold.ttf";
 import "fonts/NotoSans-SemiCondensed.ttf";
 
@@ -77,6 +77,17 @@ export component Dash inherits Window {
     default-font-family: "Noto Sans SemiCondensed";
 
     out property <color> amber: #ffb020;
+    // Lock screen: matte black, hairline grid keys, amber dots and status.
+    out property <LockStyle> lock-style: {
+        background: #0b0c0e,
+        foreground: #f2f2ef,
+        muted: #8d939d,
+        accent: #ffb020,
+        key-background: #0b0c0e,
+        key-border: #2a2e35,
+        key-shape: LockKeyShape.grid,
+        digits: LockDigits.sans,
+    };
 
     // ---- state the speed field and the mode cell switch on ----
     property <bool> charge-view: Vehicle.charging || Vehicle.state == VehicleState.charging;

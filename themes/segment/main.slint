@@ -3,7 +3,7 @@
 // small-caps legend rail. Fixed 1280x768 layout. The host strip is on TOP (48 px, contract v6).
 // Patterns to copy: the seven-segment kit in segment.slint (SegNumber, SegDigit, SegDot),
 // the unit-of-measure legend rows, the 10-cell SOC bar, and the mode row with one filled key.
-import { Vehicle, Media, Actions, Battery, Ride, DriveMode, VehicleState, Navigation, Plugins, OverlayPlacement, OverlayStyle, Telltale } from "vehicle.slint";
+import { Vehicle, Media, Actions, Battery, Ride, DriveMode, VehicleState, Navigation, Plugins, OverlayPlacement, OverlayStyle, Telltale, LockStyle, LockKeyShape, LockDigits } from "vehicle.slint";
 import { SegDigit, SegNumber, SegDot } from "segment.slint";
 import "fonts/BarlowCondensed-SemiBold.ttf";
 import "fonts/BarlowCondensed-Regular.ttf";
@@ -77,6 +77,17 @@ export component Dash inherits Window {
         Telltale.headlight, Telltale.ready, Telltale.side-stand,
         Telltale.fault, Telltale.locked, Telltale.charging,
     ];
+    // ---- lock screen (contract v6 lock-style): reflective LCD ground, printed square keys, segment digits ----
+    out property <LockStyle> lock-style: {
+        background: #bac3b1,
+        foreground: #1d201c,
+        muted: #2e332b,
+        accent: #1d201c,
+        key-background: #bac3b1,
+        key-border: #1d201c,
+        key-shape: LockKeyShape.square,
+        digits: LockDigits.segment,
+    };
     out property <OverlayStyle> overlay-style: {
         background: #101211,
         foreground: #e8ece4,

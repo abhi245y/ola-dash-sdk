@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- Lock screen style (contract v6, within v6): optional `Dash` property `lock-style` with `LockStyle`, `LockKeyShape` and `LockDigits`. A theme styles the passcode keypad (colours, key shape, digit drawing) and the host keeps the keypad, the PIN and all copy. The host checks contrast and falls back to host colours. Segment, Data Fields and Default declare a style. Minimal shows the host default. The status line (clock, battery, LOCKED) uses the same tokens. Rules are in [docs/contract.md](docs/contract.md#lock-screen-style-v6) and [docs/safety.md](docs/safety.md#the-lock-screen-is-styled-never-handled).
+- `sim --state locked`, `--state locked-error` and `--state cooldown` preview the lock screen.
+- Lock-screen captures for the four reference themes in `docs/img/themes/`.
+
+### Fixed
+
+- Segment theme: the odometer (six digits) lost its last digit and showed a stray zero. Multi-digit segment numbers now use six places, with ghost leading cells.
+
 - Clean-room vehicle interface (`sdk/vehicle-interface/`): an interoperability spec (`SPEC.md`) and AIDL, enum and callback-base files generated from it, written without Ola's code. The host builds from a clean checkout; CI builds the APK. Verified on a Gen 1 scooter against the previous classes (same callbacks and values).
 
 - Contract v6: `Vehicle.trunk-open` (latch state from `isTrunkLock`) and `Actions.open-trunk()`. The host sends the stock trunk command only when the scooter is unlocked, in Park, stopped, latch closed, not in test mode and not within 3 s of the last request. Each request is logged. Guards are in `safety.md`; the gate is `host/java/dev/olatool/dash/TrunkGate.java` with a JVM test.

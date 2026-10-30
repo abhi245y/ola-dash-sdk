@@ -76,6 +76,8 @@ See [architecture.md](architecture.md#home-screen-swap-development-only).
 
 Themes are not built into the APK. The host copies its bundled assets on each start. A user theme lives at `files/themes/<id>/` in the app's private files directory. Copy a theme there and set `files/themes/active`. Themes need no rebuild.
 
+To bundle extra themes into the APK, set `EXTRA_THEMES=<dir>` when running `host/build.sh`: each subfolder with a `theme.json` is copied to `themes/<id>/`, and the host copies it to `files/themes/<id>/` on every start.
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` checks the themes and sim on every push. Its `host` job runs `cargo check` for the Android target. It then builds the debug APK and uploads it as an artifact.

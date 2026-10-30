@@ -88,8 +88,8 @@ export global Vehicle {
 
     // Clock as preformatted text so themes don't do time math.
     in property <string> clock-text;
-    // The host sets this when vehicle data stops arriving; values then show the last known state.
-    in property <bool> data-stale: false;
+    // For when vehicle data stops arriving; values then show the last known state. Not set by the host yet (E0.S3).
+    in property <bool> data-stale;
 }
 
 // Battery pack detail. -1 = not reported yet.
@@ -146,7 +146,7 @@ export global Plugins {
 
 // Host display state.
 export global Display {
-    // True when the host judges it is dark (automatic or forced); themes may switch to a night palette.
+    // True when it is dark (automatic or forced); themes may switch to a night palette. Not set by the host yet (E3.S1).
     in property <bool> night;
 }
 
@@ -154,11 +154,12 @@ export global Display {
 // (lock, lights, modes) are never exposed to themes.
 export global Actions {
     callback open-android-auto();
+    // The host may ignore this (and open-apps, open-themes) unless the scooter is parked.
     callback open-settings();
     // Ask the host to open the seat/trunk, like the stock dash's trunk button.
     // The host ignores it unless the scooter is unlocked, in Park and at 0 km/h.
     callback open-trunk();
-    // Ask the host to open its apps / theme screens (v7).
+    // Ask the host to open its apps / theme screens (v7). The host ignores them unless the scooter is parked.
     callback open-apps();
     callback open-themes();
 }

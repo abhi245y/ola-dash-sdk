@@ -17,7 +17,7 @@ VehicleBridge.java          host/java/dev/olatool/dash/
         v
 Rust host (liboladash.so)   host/src/lib.rs
    |- theme loader          loads themes/<id>/main.slint at runtime (slint-interpreter)
-   |- contract globals      Vehicle, Battery, Ride, Media, Navigation, Plugins, Actions
+   |- contract globals      Vehicle, Display, Battery, Ride, Media, Navigation, Plugins, Actions
    |- safety overlay        host/ui/overlay.slint, drawn above the theme
    '- plugin data           JSON snapshot from PluginHost (widgets, media, navigation)
         ^  JNI PluginHost.nativeSetPlugins(json)

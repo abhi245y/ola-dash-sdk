@@ -10,6 +10,7 @@
 //!                                                 hold one vehicle state (default: the mock ride cycle);
 //!                                                 the last three show the lock screen (see docs/themes.md)
 //!            --plugins / --nav                    feed mock plugin widgets / an active navigation card
+//!            --night                              set Display.night
 //!
 //! The theme is loaded the way the device loads it: inside the host's `Host` root,
 //! with `HostOverlay` drawn above it (host/src/theme_root.rs, shared with the host).

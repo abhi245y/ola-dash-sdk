@@ -70,13 +70,13 @@ History (from the file's comment):
 | `ready-to-ride` | `in bool` | false | Equals `state == VehicleState.drive`. Kept for v1 themes. |
 | `trunk-open` | `in bool` | false | v6. True while the seat/trunk latch is open. It closes when the seat is pressed down. Themes may ignore it. Derived from `isTrunkLock` as `!locked`; that polarity is inferred from logs and not yet verified on a scooter. |
 | `clock-text` | `in string` | "" | Preformatted clock, for example `10:24` |
-| `data-stale` | `in bool` | false | v7. The host sets it when vehicle data stops arriving; the other values then show the last known state. Themes may show a hint or ignore it; the host overlay shows its own badge. |
+| `data-stale` | `in bool` | false | v7. For when vehicle data stops arriving; the other values then show the last known state. Not set by the host yet (E0.S3). Themes may show a hint or ignore it. |
 
 ## `Display` global (v7)
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
-| `night` | `in bool` | false | True when the host judges it is dark. Themes may switch to a night palette or ignore it. |
+| `night` | `in bool` | false | True when it is dark. Not set by the host yet (E3.S1). Themes may switch to a night palette or ignore it. |
 
 ## `Battery` global (v5)
 
@@ -150,9 +150,9 @@ Harmless actions, plus one gated vehicle request. Other vehicle commands (lock, 
 | Member | Type | Notes |
 |---|---|---|
 | `open-android-auto()` | callback | Launches Android Auto |
-| `open-settings()` | callback | Opens system settings |
-| `open-apps()` | callback | v7. Asks the host to open its apps screen. The host does nothing yet (it logs the call). |
-| `open-themes()` | callback | v7. Asks the host to open its themes screen. The host does nothing yet (it logs the call). |
+| `open-settings()` | callback | Opens system settings. The host may ignore it unless the scooter is parked. |
+| `open-apps()` | callback | v7. Asks the host to open its apps screen. The host ignores it unless the scooter is parked; it only logs the call yet. |
+| `open-themes()` | callback | v7. Asks the host to open its themes screen. The host ignores it unless the scooter is parked; it only logs the call yet. |
 | `open-trunk()` | callback | v6. Asks the host to open the seat/trunk, like the stock trunk button. See below. |
 
 ### `open-trunk()` (v6)

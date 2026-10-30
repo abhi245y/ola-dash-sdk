@@ -74,9 +74,9 @@ See [architecture.md](architecture.md#home-screen-swap-development-only).
 
 ## Themes on the device
 
-Themes are not built into the APK. The host copies its bundled assets on each start. A user theme lives at `files/themes/<id>/` in the app's private files directory. Copy a theme there and set `files/themes/active`. Themes need no rebuild.
+Reference themes are not built into the APK. The host copies its bundled assets on each start. A user theme lives at `files/themes/<id>/` in the app's private files directory. Copy a theme there and set `files/themes/active`. Themes need no rebuild.
 
-To bundle extra themes into the APK, set `EXTRA_THEMES=<dir>` when running `host/build.sh`: each subfolder with a `theme.json` is copied to `themes/<id>/`, and the host copies it to `files/themes/<id>/` on every start.
+To bundle extra themes into the APK, set `EXTRA_THEMES=<dir>` when running `host/build.sh`: each subfolder with a `theme.json` is copied to `themes/<id>/`, and the host overwrites `files/themes/<id>/` with it on every start, so bundled ids are reserved: a user or store theme with the same id is replaced. Ids are `[A-Za-z0-9_-]`, and `active` is not allowed.
 
 ## Continuous integration
 

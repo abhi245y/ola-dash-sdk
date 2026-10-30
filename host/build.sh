@@ -43,8 +43,10 @@ cp -r "$ROOT/themes/default/." "$B/assets/fallback/"       # bundled default the
 # Optional EXTRA_THEMES=<dir>: each subfolder with a theme.json is bundled as themes/<id>/.
 for d in ${EXTRA_THEMES:+"$EXTRA_THEMES"/*/}; do
     [ -f "$d/theme.json" ] || continue
+    id=$(basename "$d")
+    case $id in active|*[!A-Za-z0-9_-]*) echo "bad theme id: $id" >&2; exit 1;; esac
     mkdir -p "$B/assets/themes"
-    cp -r "$d" "$B/assets/themes/$(basename "$d")"
+    cp -r "$d" "$B/assets/themes/$id"
 done
 cp "$HERE/ui/last-resort/main.slint" "$B/assets/last-resort/"  # placeholder (last-resort tier)
 

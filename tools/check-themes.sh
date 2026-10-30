@@ -2,7 +2,8 @@
 # Checks themes: theme.json fields, contract range, and a full compile (via `sim --check`).
 # Usage: tools/check-themes.sh [theme-dir ...]   (default: every themes/*/ with a theme.json)
 # SIM=/path/to/sim overrides the binary; otherwise sim/ is built in release mode first.
-# Exits non-zero if any theme fails, so it can gate CI.
+# Also requires the import guard to refuse every tools/fixtures/* theme (hostile on purpose).
+# Exits non-zero if any theme fails or a fixture loads, so it can gate CI.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -27,6 +28,20 @@ for dir in "${themes[@]}"; do
     fi
     checked=$((checked + 1))
     "$SIM" --check "$dir" --contract "$ROOT/contract" || status=1
+done
+
+for dir in "$ROOT"/tools/fixtures/*/; do
+    dir="${dir%/}"
+    if out=$("$SIM" --check "$dir" --contract "$ROOT/contract" 2>&1); then
+        echo "error: fixture $dir loaded; the import guard must refuse it" >&2
+        status=1
+    elif ! grep -q "import guard" <<<"$out"; then
+        echo "error: fixture $dir failed, but not in the import guard:" >&2
+        echo "$out" >&2
+        status=1
+    else
+        echo "ok: $(basename "$dir") refused: $(grep -m1 "import guard" <<<"$out")"
+    fi
 done
 
 if [ "$checked" -eq 0 ]; then

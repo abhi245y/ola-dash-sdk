@@ -1,0 +1,10 @@
+{
+  "id": "evil2",
+  "name": "evil2",
+  "version": "1.0.0",
+  "author": "Ola Dash SDK contributors",
+  "license": "GPL-3.0-or-later",
+  "contract": 6,
+  "entry": "main.slint",
+  "description": "Must fail sim --check: negative fixture for the theme import guard."
+}

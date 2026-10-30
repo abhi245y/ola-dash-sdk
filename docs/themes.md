@@ -111,6 +111,7 @@ export component Dash inherits Window {
 - The root component is exported as `Dash`, sized 1280 x 768 logical px (landscape).
 - **Re-export the globals (for `sim`).** `sim` loads the theme file as the root component and sets `Vehicle.*` and `Media.*` on that instance. slint-interpreter only exposes globals the main file exports, so `sim` needs the `export { ... }` line; without it the values never arrive. The host wraps the theme and re-exports the globals itself, so the export line is not what the device depends on. Keep it in every theme, and export every global the theme reads (`Battery`, `Ride`, `Navigation`, `Plugins`).
 - Import the contract as `"vehicle.slint"`. The host and `sim` put `contract/` on the include path, so no copy is needed.
+- **What a theme may import.** Files in its own folder and in `contract/`, and fonts and images. A theme cannot import `host/ui/*.slint`, follow a symlink, or use `PopupWindow`, `ContextMenuArea`, `MenuBar` or `std-widgets.slint` (the word anywhere in a theme file, comments included, is enough to refuse it). The host draws the safety overlay and the passcode keypad above the theme, and a popup would be drawn above them. A refused theme does not load: `sim --check` prints `import guard: ...` and the device falls back to the bundled theme.
 
 - **`Dash` must inherit `Window`:** `export component Dash inherits Window { ... }`. The host wraps it in its own root window and reads `default-font-family` from it; `sim` loads it directly.
 

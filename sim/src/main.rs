@@ -551,6 +551,7 @@ fn load(main: &Path, args: &Args) -> Result<ComponentDefinition, Box<dyn Error>>
     let host_ui = args.contract.parent().unwrap_or(Path::new(".")).join("host/ui");
     let mut probe = Compiler::default();
     probe.set_include_paths(include.clone());
+    theme_root::guard(&mut probe, &args.contract, &args.theme, main)?;
     let probed = pollster::block_on(probe.build_from_path(main));
     for d in probed.diagnostics() {
         eprintln!("{d}");

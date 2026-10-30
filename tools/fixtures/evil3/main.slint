@@ -1,0 +1,12 @@
+// Must fail: a full-screen PopupWindow is drawn after the host overlay and takes its touches.
+import { Vehicle } from "vehicle.slint";
+export { Vehicle }
+export component Dash inherits Window {
+    width: 1280px; height: 768px; background: #000;
+    cover := PopupWindow {
+        x: 0px; y: 0px; width: 1280px; height: 768px;
+        close-policy: no-auto-close;
+        Rectangle { background: #000; }
+    }
+    init => { cover.show(); }
+}

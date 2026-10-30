@@ -1093,7 +1093,7 @@ or length, and read back in the same order. The enclosing argument is nullable (
    booleans are written as int 1 or 0 in order. sendHyperChargerDueStatus takes a nullable
    enumeration and then a boolean. Both follow the rules in section 5.3.
 8. Parameter names (the Java identifiers of arguments) are not on the wire and may differ.
-9. Cross-check. Every callback method name seen in the ride logs of 2026-10-30 (tmp/rl2c) appears in
+9. Cross-check. Every callback method name seen in the maintainer's ride logs of 2026-10-30 (summarised in docs/ride-log-2026-10-30.md; raw logs not published) appears in
    section 5.4. Every enumeration constant name seen in those logs appears in section 6. Argument types
    were not compared against the logs.
 10. AIDL declarations. The 37 enumerations and 3 parcelables must be declared in AIDL as parcelable

@@ -5,14 +5,13 @@ Nothing here is promised. Items are ordered roughly by how much they unblock.
 ## Next
 
 - **Release flavor.** A build with `android:debuggable` off and the test channel compiled out, so "debug builds only" is true for the installed software.
-- **Plugin host implementation.** Bind enabled plugins, implement `IDashHost`, route `onAction`, and feed `Plugins.widgets`, `Media` and `Navigation` from plugins. Spec: [plugins.md](plugins.md).
 
 ## Later
 
 - **Stock media and navigation plugins.** Reference plugins for the common media and turn-by-turn cases, so themes can be tested against real data.
 - **Theme store index.** A static, signed index of community themes with the `theme.json` metadata, so the host can list and install them. No install from arbitrary URLs.
 - **Settings UI.** Choose the theme, enable plugins per slot, and review the logs from the dash itself, while stopped.
-- **CI APK builds.** Build and sign the release APK in CI once the vendor classes are replaced.
+- **CI release APKs.** CI already builds the debug APK; add a signed release build once the release flavor exists.
 
 ## Hardware and platform
 

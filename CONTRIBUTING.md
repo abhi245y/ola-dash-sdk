@@ -14,7 +14,7 @@ Before you start, read [docs/safety.md](docs/safety.md). The safety rules are no
 ## Development setup
 
 - **Themes and sim:** a recent stable Rust toolchain plus fontconfig development files (`fontconfig-devel` on Fedora, `libfontconfig1-dev` on Debian and Ubuntu).
-- **Host:** needs the Android toolchain and the vendor classes. See [docs/building.md](docs/building.md). Contributors without the vendor classes can still work on the sim, themes, contract, docs and tools.
+- **Host:** needs the Android toolchain (SDK, NDK, JDK 17). The vehicle interface is clean-room and in the repo. See [docs/building.md](docs/building.md).
 
 ```sh
 tools/check-themes.sh                                   # must pass before a PR
@@ -36,10 +36,7 @@ Full rules: [docs/themes.md](docs/themes.md).
 
 ## Adding a plugin
 
-The plugin API is a specification. The host implementation is in progress, so plugin work today means:
-
-- Proposing a change to the API through an issue (plugin submission template), or
-- Building a plugin against the AIDL in `sdk/plugin-api/aidl/` as an independent APK. Do not add it to this repository without discussion first.
+Plugins are independent APKs built against the AIDL in `sdk/plugin-api/aidl/`; start from `plugins/example-sysinfo/`. Propose API changes through an issue (plugin submission template), and discuss before adding a plugin to this repository.
 
 See [docs/plugins.md](docs/plugins.md).
 

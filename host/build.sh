@@ -41,8 +41,10 @@ cp "$ROOT/contract/vehicle.slint" "$B/assets/contract/"
 cp "$HERE/ui/"*.slint "$B/assets/host/"
 cp -r "$ROOT/themes/default/." "$B/assets/fallback/"       # bundled default theme (fallback tier)
 # Optional EXTRA_THEMES=<dir>: each subfolder with a theme.json is bundled as themes/<id>/.
-[ -z "${EXTRA_THEMES:-}" ] || for d in "$EXTRA_THEMES"/*/; do
-    [ -f "$d/theme.json" ] && { mkdir -p "$B/assets/themes"; cp -r "$d" "$B/assets/themes/$(basename "$d")"; } || true
+for d in ${EXTRA_THEMES:+"$EXTRA_THEMES"/*/}; do
+    [ -f "$d/theme.json" ] || continue
+    mkdir -p "$B/assets/themes"
+    cp -r "$d" "$B/assets/themes/$(basename "$d")"
 done
 cp "$HERE/ui/last-resort/main.slint" "$B/assets/last-resort/"  # placeholder (last-resort tier)
 

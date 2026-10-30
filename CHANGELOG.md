@@ -7,6 +7,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Added
 
 - Park gate: `TrunkGate.parked` (the trunk request's park rule, also true while unlocked and charging, never in test mode) is pushed to `HostState.parked`, and `parked -> false while paused` is logged when the host is in the background. Nothing reads it yet. `sim` derives it from the scenario.
+- `host/build.sh`: optional `EXTRA_THEMES=<dir>` bundles each subfolder with a `theme.json` into the APK as `themes/<id>/`.
 - Lock screen style (contract v6, within v6): optional `Dash` property `lock-style` with `LockStyle`, `LockKeyShape` and `LockDigits`. A theme styles the passcode keypad (colours, key shape, digit drawing) and the host keeps the keypad, the PIN and all copy. The host checks contrast and falls back to host colours. Segment, Data Fields and Default declare a style. Minimal shows the host default. The status line (clock, battery, LOCKED) uses the same tokens. Rules are in [docs/contract.md](docs/contract.md#lock-screen-style-v6) and [docs/safety.md](docs/safety.md#the-lock-screen-is-styled-never-handled).
 - `sim --state locked`, `--state locked-error` and `--state cooldown` preview the lock screen.
 - Lock-screen captures for the four reference themes in `docs/img/themes/`.

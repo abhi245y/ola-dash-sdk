@@ -9,6 +9,7 @@ import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.os.RemoteException;
+import android.os.SystemClock;
 import android.util.Log;
 
 import java.lang.reflect.Method;
@@ -168,6 +169,7 @@ final class VehicleBridge {
         power = (PowerManager) app.getSystemService(Context.POWER_SERVICE);
         setBool(HYPER_AVAILABLE, app.getSharedPreferences("dash", 0).getBoolean("hyper", true));
         Trace.start(app);
+        nativeSet(DATA_STALE, lastStale ? 1 : 0); // static state survives activity recreation, the UI is fresh
         unlockController = new UnlockController(app, VehicleBridge::nativeSet);
         unlockController.start();
         work.post(VehicleBridge::connect);
@@ -245,16 +247,18 @@ final class VehicleBridge {
         nativeSet(PARKED, p ? 1 : 0);
     }
 
-    // ponytail: 5 s until M-rate (session A) calibrates it
+    // ponytail: 5 s until M-rate (session A) calibrates it. Ride log 2026-10-30: <= 96 ms gaps between
+    // setNum-fed callbacks in DRIVE; if M-rate at road speed shows longer gaps, touch lastCallbackMs
+    // in Trace.call (every callback) instead.
     private static final long STALE_MS = 5000L;
-    private static volatile long lastCallbackMs = System.currentTimeMillis();
+    private static volatile long lastCallbackMs = SystemClock.elapsedRealtime();
     private static volatile boolean disconnected;
     private static boolean lastStale;
 
     /** HostState.data-stale: parser gone, or no real callback for STALE_MS while driving. Direct nativeSet: id 38 is not replayed from REAL. */
     private static synchronized void pushStale() {
         boolean s = disconnected || (stateIndex(lastState) == 4
-                && System.currentTimeMillis() - lastCallbackMs > STALE_MS);
+                && SystemClock.elapsedRealtime() - lastCallbackMs > STALE_MS);
         if (s != lastStale) {
             lastStale = s;
             Trace.event("data-stale " + s);
@@ -289,7 +293,7 @@ final class VehicleBridge {
     private static void subscribe(IBinder vehicleBinder) {
         vehicle = vehicleBinder;
         disconnected = false;
-        lastCallbackMs = System.currentTimeMillis();
+        lastCallbackMs = SystemClock.elapsedRealtime();
         pushStale();
         try {
             IVehicleService vs = IVehicleService.Stub.asInterface(vehicleBinder);
@@ -474,7 +478,7 @@ final class VehicleBridge {
     private static void setNum(int id, double v) {
         if (realVehicleEvent()) {
             REAL[id] = v;
-            lastCallbackMs = System.currentTimeMillis();
+            lastCallbackMs = SystemClock.elapsedRealtime();
         }
         nativeSet(id, v);
     }

@@ -88,7 +88,7 @@ export global Vehicle {
 
     // Clock as preformatted text so themes don't do time math.
     in property <string> clock-text;
-    // True when the vehicle parser is gone, or no vehicle callback arrived for 5 s while in drive; the other values then show the last known state. The host draws its own NO DATA badge either way.
+    // True when the vehicle parser is gone, or no vehicle data callback arrived for 5 s while in drive; the other values then show the last known state. The host draws its own NO DATA badge either way.
     in property <bool> data-stale;
 }
 

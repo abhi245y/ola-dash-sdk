@@ -67,6 +67,7 @@ public final class MainActivity extends NativeActivity {
             Log.e(TAG, "asset copy failed", e);
         }
         super.onCreate(state);
+        // Unverified until M-sleep (session A): does the locked panel still sleep with this flag?
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         VehicleBridge.start(this);
         PluginHost.start(this);

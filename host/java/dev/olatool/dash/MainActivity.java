@@ -9,6 +9,7 @@ import android.content.pm.ApplicationInfo;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.Settings;
 import android.util.Log;
 import android.view.WindowManager;
 
@@ -60,6 +61,8 @@ public final class MainActivity extends NativeActivity {
         @Override
         public void run() {
             Calendar c = Calendar.getInstance();
+            VehicleBridge.setClockTrusted(Settings.Global.getInt(getContentResolver(),
+                    Settings.Global.AUTO_TIME, 0) == 1 && c.get(Calendar.YEAR) >= 2025);
             VehicleBridge.setClock(c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE));
             VehicleBridge.setDate(c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1, c.get(Calendar.DAY_OF_MONTH));
             handler.postDelayed(this, 60_000L - (System.currentTimeMillis() % 60_000L));

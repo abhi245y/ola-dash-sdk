@@ -183,7 +183,7 @@ export component Stepper inherits Rectangle {
         pressed => { root.stepped(-1); }
     }
     HostText {
-        x: 80px; y: 0px; width: 96px; height: 64px;
+        x: 80px; y: 0px; width: root.width - 160px; height: 64px;
         text: root.value;
         color: LockConfig.style.foreground;
         font-size: 26px;
@@ -193,7 +193,7 @@ export component Stepper inherits Rectangle {
         overflow: elide;
     }
     StepButton {
-        x: 192px; y: 0px;
+        x: root.width - 64px; y: 0px;
         label: "+";
         action-label: "Increase " + root.label;
         enabled: root.can-increase;

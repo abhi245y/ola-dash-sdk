@@ -55,6 +55,8 @@ sim/target/release/sim themes/minimal --first-run --night --settings tmp/setting
 
 `--settings FILE` loads and saves preferences through the same Rust code as the host. Create the parent directory first. Without the flag, preferences start at defaults and changes stay in memory. For a repeatable night / 12-hour capture, use a file containing `{"night":"on","clock24":false}`. `--night` overrides the loaded night value for the preview without writing it. Clock changes appear on the next sim update. Invalid JSON is renamed to `FILE.bad`; updates use `FILE.tmp` followed by rename. `tools/check-themes.sh` also probes the selected Off option in Display for the accent colour, that the segment theme keeps its 24-hour clock with `clock24` false, and that the lock clock shows its AM/PM label.
 
+Auto night: with `--settings FILE` containing `{"night":"auto"}`, `--clock 21:00` selects night, `--clock 12:00` selects day, and `--clock 21:00 --untrusted-clock` selects day; `check-themes.sh` probes these Settings backgrounds and Auto selection, and sim Rust tests cover schedule bounds, parsing, trust, unknown clocks and live edits.
+
 Plugin inventory/enablement, settings persistence and clock-format unit tests are included in the sim test target, alongside the host root tests:
 
 ```sh

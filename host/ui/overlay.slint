@@ -85,11 +85,17 @@ export global HostState {
     in property <string> clock-text;
     // Numeric 24-hour hhmm for lock digits; -1 means unknown. Text follows the preference.
     in property <int> clock-hhmm: -1;
+    in property <bool> clock-trusted: false;
     in property <bool> clock24: true;
     in property <int> battery-pct: -1;
     in property <bool> data-stale: false;
-    // Day (false) or night, set with Display.night by Settings (Off / On) or sim --night.
-    // E3.S1 adds automatic switching.
+    // Saved preference (0 Off, 1 On, 2 Auto), independent of the effective style.
+    in property <int> night-mode: 0;
+    in property <int> night-start: 1140;
+    in property <int> night-end: 390;
+    in property <string> night-start-text: "19:00";
+    in property <string> night-end-text: "06:30";
+    // Effective day/night style, set together with Display.night by Rust.
     in property <bool> night: false;
     // Lock-screen date, "Fri 31 Oct". Empty hides it.
     in property <string> date-text;

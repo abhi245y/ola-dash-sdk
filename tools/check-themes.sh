@@ -146,6 +146,30 @@ else
     echo "error: Display Off option not selected (pixel 736,192 is $got, want #ffc94a)" >&2
     status=1
 fi
+# (1200,600) is bare SettingsScreen background: right of the pane and below
+# Close, above the footer, and clear of the strip. Minimal uses host lock defaults.
+printf '%s\n' '{"night":"auto"}' > "$clock_settings"
+for probe in "21:00 trusted #0b1c1c" "12:00 trusted #f6f3ec" "21:00 untrusted #f6f3ec"; do
+    read -r hhmm trust want <<<"$probe"
+    flags=()
+    [ "$trust" = untrusted ] && flags=(--untrusted-clock)
+    got=$("$SIM" "$ROOT/themes/minimal" --contract "$ROOT/contract" --settings "$clock_settings" --clock "$hhmm" "${flags[@]}" --state park --screen settings --pane display --at 5 --screenshot "$png" --pixel 1200,600 | tail -n 1) || got=error
+    if [ "$got" = "$want" ]; then
+        echo "ok: Auto night ($hhmm $trust, pixel 1200,600 is $got)"
+    else
+        echo "error: Auto night ($hhmm $trust, pixel 1200,600 is $got, want $want)" >&2
+        status=1
+    fi
+done
+# Three 420 px Choice pills start at x=652, y=176; Auto starts at x=942.67.
+# (968,192) is inside Auto's accent fill, off text and corners, even during day.
+got=$("$SIM" "$ROOT/themes/minimal" --contract "$ROOT/contract" --settings "$clock_settings" --clock 12:00 --state park --screen settings --pane display --at 5 --screenshot "$png" --pixel 968,192 | tail -n 1) || got=error
+if [ "$got" = "#ffc94a" ]; then
+    echo "ok: Display Auto option selected during day (pixel 968,192 is $got)"
+else
+    echo "error: Display Auto option not selected during day (pixel 968,192 is $got, want #ffc94a)" >&2
+    status=1
+fi
 # Theme rows begin at (432,176), 96 px apart: Minimal is third after Default and
 # Data Fields. (448,408) is in its left padding, clear of text and the 24 px corners.
 got=$("$SIM" "$ROOT/themes/minimal" --contract "$ROOT/contract" --state park --screen settings --pane theme --at 13 --screenshot "$png" --pixel 448,408 | tail -n 1) || got=error

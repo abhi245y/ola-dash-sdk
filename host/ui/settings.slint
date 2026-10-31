@@ -86,12 +86,12 @@ export component SettingsScreen inherits Rectangle {
     if root.pane == "Display" : Pane {
         x: 432px; y: 88px; width: root.width - 640px; height: root.height - 248px;
         title: "Display";
-        VerticalLayout {
-            alignment: start;
-            spacing: 32px;
-            HorizontalLayout {
-                spacing: 24px;
+        Rectangle {
+            x: 0px; y: 0px; width: parent.width; height: parent.body-height;
+            Rectangle {
+                x: 0px; y: 0px; width: parent.width; height: 64px;
                 HostText {
+                    x: 0px; y: 0px; width: parent.width - 444px; height: parent.height;
                     text: "Night mode";
                     color: LockConfig.style.foreground;
                     font-size: 26px;
@@ -99,15 +99,58 @@ export component SettingsScreen inherits Rectangle {
                     vertical-alignment: center;
                 }
                 Choice {
-                    width: 360px;
-                    options: ["Off", "On"];
-                    selected: HostState.night ? 1 : 0;
-                    chosen(index) => { root.set-setting("night", index == 0 ? "off" : "on"); }
+                    x: parent.width - self.width; y: 0px; width: 420px;
+                    options: ["Off", "On", "Auto"];
+                    selected: HostState.night-mode;
+                    chosen(index) => { root.set-setting("night", index == 0 ? "off" : index == 1 ? "on" : "auto"); }
                 }
             }
-            HorizontalLayout {
-                spacing: 24px;
+            if HostState.night-mode == 2 : Rectangle {
+                x: 0px; y: 96px; width: parent.width; height: 64px;
                 HostText {
+                    x: 0px; y: 0px; width: parent.width - 444px; height: parent.height;
+                    text: "Night from";
+                    color: LockConfig.style.foreground;
+                    font-size: 26px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+                Stepper {
+                    x: parent.width - self.width; y: 0px; width: 420px;
+                    label: "Night from";
+                    value: HostState.night-start-text;
+                    stepped(delta) => { root.set-setting("night-start", Math.mod(HostState.night-start + delta * 15 + 1440, 1440) + ""); }
+                }
+            }
+            if HostState.night-mode == 2 : Rectangle {
+                x: 0px; y: 192px; width: parent.width; height: 64px;
+                HostText {
+                    x: 0px; y: 0px; width: parent.width - 444px; height: parent.height;
+                    text: "Night until";
+                    color: LockConfig.style.foreground;
+                    font-size: 26px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+                Stepper {
+                    x: parent.width - self.width; y: 0px; width: 420px;
+                    label: "Night until";
+                    value: HostState.night-end-text;
+                    stepped(delta) => { root.set-setting("night-end", Math.mod(HostState.night-end + delta * 15 + 1440, 1440) + ""); }
+                }
+            }
+            if HostState.night-mode == 2 && !HostState.clock-trusted : HostText {
+                x: 0px; y: 272px; width: parent.width; height: 24px;
+                text: "Automatic time off, using day";
+                color: LockConfig.style.muted;
+                font-size: 18px;
+            }
+            Rectangle {
+                x: 0px;
+                y: HostState.night-mode == 2 ? (HostState.clock-trusted ? 288px : 328px) : 96px;
+                width: parent.width; height: 64px;
+                HostText {
+                    x: 0px; y: 0px; width: parent.width - 384px; height: parent.height;
                     text: "Clock";
                     color: LockConfig.style.foreground;
                     font-size: 26px;
@@ -115,7 +158,7 @@ export component SettingsScreen inherits Rectangle {
                     vertical-alignment: center;
                 }
                 Choice {
-                    width: 360px;
+                    x: parent.width - self.width; y: 0px; width: 420px;
                     options: ["24-hour", "12-hour"];
                     selected: root.clock24 ? 0 : 1;
                     chosen(index) => { root.set-setting("clock24", index == 0 ? "true" : "false"); }

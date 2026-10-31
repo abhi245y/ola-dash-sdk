@@ -111,6 +111,9 @@ pub fn declared(result: &CompilationResult) -> Result<Vec<String>, String> {
 /// serves the first exact weight, so a theme font with this name could stand in for the host's.
 pub const HOST_FONT: &str = "OlaDash Host";
 
+/// Largest theme font file `vet_fonts` reads.
+const MAX_FONT: u64 = 16 << 20;
+
 /// `Vehicle` properties the host draws, with their `HostState` copy. The host and the sim set
 /// both; a theme can write `Vehicle.*` (they are `in`), so the overlay reads only the copy.
 pub const HOST_COPY: [(&str, &str); 9] = [
@@ -124,30 +127,49 @@ pub const HOST_COPY: [(&str, &str); 9] = [
 /// (`std-widgets.slint` because its widgets embed popups; `Tooltip` lowers to a `PopupWindow`).
 const BANNED: [&str; 6] = ["PopupWindow", "ContextMenuArea", "MenuBar", "Tooltip", "DragArea", "std-widgets.slint"];
 
+fn deny(path: &Path, why: &str) -> io::Error {
+    io::Error::new(io::ErrorKind::PermissionDenied, format!("import guard: {}: {why}", path.display()))
+}
+
+/// The first font path in theme source that leaves the theme folder (`..` segment or absolute).
+/// Font imports are read outside the file loader, so `vet_fonts` cannot see them. Scans every
+/// string ending in a font extension, not just `import`, so a comment or stray quote fails closed.
+fn font_escape(src: &str) -> Option<&str> {
+    let low = src.to_ascii_lowercase();
+    [".ttf", ".ttc", ".otf"].iter().flat_map(|e| low.match_indices(e)).find_map(|(i, e)| {
+        let end = i + e.len();
+        let lit = &src[src[..i].rfind('"')? + 1..end];
+        (low[end..].starts_with('"') && (lit.starts_with('/') || lit.split(['/', '\\']).any(|s| s == "..")))
+            .then_some(lit)
+    })
+}
+
 /// Reads `path` if it is a plain file under `theme` or one of `allowed` (all canonical),
 /// and, inside `theme`, free of `BANNED` words.
 fn vet(path: &Path, allowed: &[PathBuf], theme: &Path) -> io::Result<String> {
-    let deny = |why: &str| io::Error::new(io::ErrorKind::PermissionDenied, format!("import guard: {}: {why}", path.display()));
     if std::fs::symlink_metadata(path)?.file_type().is_symlink() {
-        return Err(deny("symlinks are not allowed in themes"));
+        return Err(deny(path, "symlinks are not allowed in themes"));
     }
     let real = path.canonicalize()?;
     let in_theme = real.starts_with(theme);
     if !in_theme && !allowed.iter().any(|d| real.starts_with(d)) {
-        return Err(deny("a theme may only import its own folder and the contract"));
+        return Err(deny(path, "a theme may only import its own folder and the contract"));
     }
     let src = std::fs::read_to_string(&real)?;
-    match BANNED.iter().find(|w| in_theme && src.contains(**w)) {
-        Some(w) => Err(deny(&format!("themes may not use {w}"))),
+    if let Some(w) = BANNED.iter().find(|w| in_theme && src.contains(**w)) {
+        return Err(deny(path, &format!("themes may not use {w}")));
+    }
+    match font_escape(&src).filter(|_| in_theme) {
+        Some(f) => Err(deny(path, &format!("a font import must stay inside the theme folder: {f}"))),
         None => Ok(src),
     }
 }
 
 /// Refuses a font file in `dir` (any depth) whose bytes name the host font, in either name-table
 /// encoding (ASCII, UTF-16BE) and any case: fontique matches family names without case.
-/// Fonts are read outside the file loader, so this walks the folder instead; symlinks fail closed.
+/// Fonts are read outside the file loader, so this walks the folder instead (`font_escape` keeps
+/// imports inside it); symlinks and fonts over `MAX_FONT` fail closed.
 fn vet_fonts(dir: &Path) -> io::Result<()> {
-    let deny = |p: &Path, why: &str| io::Error::new(io::ErrorKind::PermissionDenied, format!("import guard: {}: {why}", p.display()));
     let utf16: Vec<u8> = HOST_FONT.encode_utf16().flat_map(u16::to_be_bytes).collect();
     for entry in std::fs::read_dir(dir)? {
         let path = entry?.path();
@@ -157,6 +179,9 @@ fn vet_fonts(dir: &Path) -> io::Result<()> {
         } else if kind.is_dir() {
             vet_fonts(&path)?;
         } else if matches!(path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).as_deref(), Some("ttf" | "otf" | "ttc" | "otc")) {
+            if std::fs::metadata(&path)?.len() > MAX_FONT {
+                return Err(deny(&path, "font files may not be larger than 16 MiB"));
+            }
             let bytes = std::fs::read(&path)?;
             if [HOST_FONT.as_bytes(), &utf16].iter().any(|n| bytes.windows(n.len()).any(|w| w.eq_ignore_ascii_case(n))) {
                 return Err(deny(&path, &format!("a theme font may not use the host font name \"{HOST_FONT}\"")));
@@ -168,10 +193,11 @@ fn vet_fonts(dir: &Path) -> io::Result<()> {
 
 /// Gate for a compile of a theme: vets `entry` (`build_from_path` reads it without the loader)
 /// and every import the loader serves. `allowed` is the contract dir, plus the host dir for the
-/// root compile. The probe is the gate: on the root compile the host dir is reachable from theme
-/// files too, so there this only closes paths outside theme, contract and host.
+/// root compile. The probe is the gate (`gate`, which also scans the theme's fonts): on the root
+/// compile the host dir is reachable from theme files too, so there this only closes paths
+/// outside theme, contract and host.
 /// Always `Some(..)`: `None` would fall through to the disk.
-pub fn guard(c: &mut Compiler, allowed: &[&Path], theme: &Path, entry: &Path) -> Result<(), String> {
+pub fn guard(c: &mut Compiler, allowed: &[&Path], theme: &Path, entry: &Path, gate: bool) -> Result<(), String> {
     let canon = |p: &Path| p.canonicalize().map_err(|e| format!("{}: {e}", p.display()));
     if std::fs::symlink_metadata(theme).map_err(|e| format!("{}: {e}", theme.display()))?.file_type().is_symlink() {
         return Err(format!("import guard: {}: the theme folder is a symlink", theme.display()));
@@ -179,7 +205,9 @@ pub fn guard(c: &mut Compiler, allowed: &[&Path], theme: &Path, entry: &Path) ->
     let allowed = allowed.iter().map(|p| canon(p)).collect::<Result<Vec<_>, _>>()?;
     let theme = canon(theme)?;
     vet(entry, &allowed, &theme).map_err(|e| e.to_string())?;
-    vet_fonts(&theme).map_err(|e| e.to_string())?;
+    if gate {
+        vet_fonts(&theme).map_err(|e| e.to_string())?;
+    }
     c.set_file_loader(move |p| Box::pin(std::future::ready(Some(vet(p, &allowed, &theme)))));
     Ok(())
 }
@@ -575,6 +603,8 @@ mod tests {
     fn host_text_and_font_files_carry_the_host_family() {
         assert!(include_str!("../ui/hosttext.slint").contains(&format!("font-family: \"{HOST_FONT}\"")));
         let utf16: Vec<u8> = HOST_FONT.encode_utf16().flat_map(u16::to_be_bytes).collect();
+        // sim includes this file with `#[path]`, so CARGO_MANIFEST_DIR is sim/ there and host/ here:
+        // `../host` is the host crate from both.
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../host/ui/fonts");
         for f in ["Regular", "SemiBold", "Bold"] {
             let bytes = std::fs::read(dir.join(format!("OlaDashHost-{f}.ttf"))).unwrap();
@@ -585,10 +615,34 @@ mod tests {
 
     #[test]
     fn host_screens_use_host_text_only() {
-        for src in [include_str!("../ui/overlay.slint"), include_str!("../ui/unlock.slint")] {
-            for (i, _) in src.match_indices("Text {") {
-                assert!(src[..i].ends_with("Host"), "bare Text near: {}", &src[i.saturating_sub(40)..i + 6]);
+        // Every host screen, so a new one is covered without touching this test.
+        let ui = Path::new(env!("CARGO_MANIFEST_DIR")).join("../host/ui");
+        let mut seen = 0;
+        for f in std::fs::read_dir(ui).unwrap().map(|f| f.unwrap().path()) {
+            if !f.extension().is_some_and(|e| e == "slint") || f.ends_with("hosttext.slint") {
+                continue;
+            }
+            seen += 1;
+            let src = std::fs::read_to_string(&f).unwrap();
+            assert!(!src.contains("font-family:"), "{}: host text gets its family from HostText", f.display());
+            for (i, _) in src.match_indices("Text") {
+                let after = src[i + 4..].trim_start();
+                let alone = !src[..i].ends_with(|c: char| c.is_alphanumeric());
+                assert!(!(alone && after.starts_with('{')), "{}: bare Text near: {}", f.display(), &src[i.saturating_sub(40)..i + 6]);
             }
         }
+        assert!(seen >= 3);
+    }
+
+    #[test]
+    fn guard_refuses_font_imports_that_leave_the_theme() {
+        let (root, c, t) = tree("fontpath");
+        for bad in ["../other/x.ttf", "/data/x.otf", "fonts/../../x.TTC", "a\\..\\x.ttf"] {
+            std::fs::write(t.join("bad.slint"), format!("// \"\nimport \"{bad}\";")).unwrap();
+            assert!(vet(&t.join("bad.slint"), &[c.clone()], &t).unwrap_err().to_string().contains("font import"), "{bad}");
+        }
+        std::fs::write(t.join("ok.slint"), "import \"fonts/a.ttf\"; import \"fonts/v1..2/b.otf\";").unwrap();
+        assert!(vet(&t.join("ok.slint"), &[c.clone()], &t).is_ok());
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

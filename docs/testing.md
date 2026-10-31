@@ -42,6 +42,8 @@ The live window (no `--screenshot`) runs the same mock data in real time and nee
 
 `--opt id=value` overrides a typed theme option for one run (repeatable), for example `sim tools/fixtures/loads/options --contract contract --opt accent=#ff0000 --screenshot options.png`.
 
+Theme customization: `sim tools/fixtures/loads/options --contract contract --state park --screen settings --pane theme --theme-view options --screenshot options.png`; `check-themes.sh` probes On, the default swatch and its ring, and Rust tests cover integer bounds, invalid saved values and per-theme persistence.
+
 Settings opens on Display by default; `--pane display|theme|plugins|about` chooses the pane. `--first-run` previews setup; Apply and Done log without restarting:
 
 ```sh

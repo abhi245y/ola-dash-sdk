@@ -9,4 +9,16 @@ export component Dash inherits Window {
         width: parent.width; height: parent.height - 48px;
         background: root.opt-accent;
     }
+    // Keep the centre accent probe clear while making the other options visible too.
+    if root.opt-enabled : Rectangle {
+        x: 64px; y: 96px; width: 64px; height: 64px;
+        border-radius: root.opt-style == "wide" ? 32px : 8px;
+        background: #ffffff;
+    }
+    Rectangle {
+        x: 160px; y: 96px; width: (root.opt-count + 3) * 24px; height: 64px;
+        border-width: root.opt-style == "wide" ? 8px : 2px;
+        border-color: #ffffff;
+        background: transparent;
+    }
 }

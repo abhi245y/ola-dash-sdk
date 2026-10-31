@@ -6,6 +6,7 @@ use std::cell::RefCell;
 use std::ffi::c_void;
 use std::mem::ManuallyDrop;
 use std::path::Path;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Mutex;
 use std::time::Instant;
@@ -336,7 +337,7 @@ fn timing(stage: &str, since: Instant) {
     log::info!("timing {stage} {} ms", since.elapsed().as_millis());
 }
 
-fn build_root(files: &Path, theme: &str) -> Result<ComponentInstance, String> {
+fn build_root(files: &Path, theme: &str, active_theme: &str, settings: settings::SharedSettings) -> Result<ComponentInstance, String> {
     // Folder relative to files/, and the entry file inside it.
     let (rel, entry) = match theme {
         // The default theme ships inside the APK as the fallback copy.
@@ -385,7 +386,7 @@ fn build_root(files: &Path, theme: &str) -> Result<ComponentInstance, String> {
     let t = Instant::now();
     let ui = def.create().map_err(|e| e.to_string())?;
     timing("create", t);
-    theme_options::set_defaults(&ui, &options)?;
+    theme_options::bind(&ui, &options, active_theme, settings, &[], log_warn)?;
     theme_root::bind(&ui, log_warn)?;
     Ok(ui)
 }
@@ -395,16 +396,17 @@ fn log_warn(msg: &str) {
 }
 
 /// Theme first; any compile or create failure falls back to the bundled placeholder.
-fn load_ui(files: &Path) -> Result<ComponentInstance, String> {
+fn load_ui(files: &Path, settings: settings::SharedSettings) -> Result<ComponentInstance, String> {
     let theme = theme_switch::active(files);
-    build_root(files, &theme)
+    build_root(files, &theme, &theme, settings.clone())
         .or_else(|e| {
             log::error!("theme '{theme}' rejected, using fallback:\n{e}");
-            build_root(files, FALLBACK)
+            // Options and saved values belong to the theme actually rendered.
+            build_root(files, FALLBACK, DEFAULT_THEME, settings.clone())
         })
         .or_else(|e| {
             log::error!("fallback rejected, using last-resort:\n{e}");
-            build_root(files, LAST_RESORT)
+            build_root(files, LAST_RESORT, DEFAULT_THEME, settings)
         })
 }
 
@@ -633,13 +635,13 @@ fn wire_plugins(ui: &ComponentInstance, app: &AndroidApp, files: &Path) -> Resul
 
 fn run(app: &AndroidApp, start: Instant) -> Result<(), String> {
     let files = app.internal_data_path().ok_or("no internal data path")?;
-    let settings = settings::Settings::load(Some(&files.join("settings.json")), log_warn);
-    let ui = load_ui(&files)?;
+    let settings = Rc::new(RefCell::new(settings::Settings::load(Some(&files.join("settings.json")), log_warn)));
+    let ui = load_ui(&files, settings.clone())?;
     ui.set_property("themes", theme_switch::model(theme_switch::installed(&files, HOST_CONTRACT)))
         .map_err(|e| format!("themes: {e:?}"))?;
     ui.set_property("active-theme", Value::String(theme_switch::active(&files).into()))
         .map_err(|e| format!("active-theme: {e:?}"))?;
-    ui.set_property("first-run", Value::Bool(!settings.setup_done()))
+    ui.set_property("first-run", Value::Bool(!settings.borrow().setup_done()))
         .map_err(|e| format!("first-run: {e:?}"))?;
     settings::bind(&ui, settings, log_warn, refresh_clock)?;
     ui.set_global_property("HostState", "version-text", Value::String(env!("CARGO_PKG_VERSION").into()))

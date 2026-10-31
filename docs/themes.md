@@ -127,14 +127,14 @@ Options are additive within contract 7; existing themes need no changes. Declare
 "options": [
   { "id": "accent", "type": "color", "default": "#33c3f5", "label": "Accent" },
   { "id": "digits", "type": "bool", "default": true, "label": "Digital speed" },
-  { "id": "ticks", "type": "int", "default": 10, "label": "Tick count" },
+  { "id": "ticks", "type": "int", "default": 10, "min": 2, "max": 20, "label": "Tick count" },
   { "id": "needle", "type": "choice", "default": "thin", "label": "Needle", "values": ["thin", "wide"] }
 ]
 ```
 
-Each `id` must match `[a-z0-9-]{1,32}` and be unique. Each `label` must be a non-empty string of at most 32 characters. Defaults must match the type: `color` is a six-digit `#rrggbb` string, `bool` a JSON boolean, `int` a JSON integer, and `choice` one of its `values`. Only `choice` may carry `values`: 2–8 unique, non-empty strings, each at most 24 characters.
+Each `id` must match `[a-z0-9-]{1,32}` and be unique. Each `label` must be a non-empty string of at most 32 characters. Defaults must match the type: `color` is a six-digit `#rrggbb` string, `bool` a JSON boolean, `int` a 32-bit JSON integer, and `choice` one of its `values`. Integer options may set `min` and `max` (32-bit JSON integers, default 0 and 100); `min` must be less than `max`, and the default must be within the inclusive range. Only `choice` may carry `values`: 2–8 unique, non-empty strings, each at most 24 characters.
 
-Opt in on `Dash` with matching `in property` declarations. Keep a theme-local default for standalone previews; the host overrides each kept option with its manifest default after creating the root:
+Opt in on `Dash` with matching `in property` declarations. Keep a theme-local default for standalone previews; the host overrides each kept option with its validated saved value, or its manifest default, after creating the root:
 
 ```slint
 in property <color> opt-accent: #33c3f5;
@@ -145,9 +145,9 @@ in property <string> opt-needle: "thin";
 
 Use only `color`, `bool`, `int` and `string` (for `choice`). The probe maps them to `Brush`, `Bool`, `Number` and `String`. An `int` option declared as `length` or `float` also probes as `Number` and passes that probe. A `length` binding (or an `out` property) then fails the root compile, which `sim --check` catches and the device handles through its normal fallback; a `float` compiles silently. Declare `in property <int>` for an integer option.
 
-Missing or mismatched properties are skipped with one `theme option '<id>' skipped: ...` log line on the device. An invalid manifest options array logs once and disables all options without rejecting the theme; a root compile failure uses the normal fallback. `sim --check` rejects invalid arrays, missing or mismatched properties, and root compile failures. Options bind only into the theme's `Dash`, never `HostState`, the overlay or host screens. There is no options UI or saved option values yet (E3.S1).
+Missing or mismatched properties are skipped with one `theme option '<id>' skipped: ...` log line on the device. An invalid manifest options array logs once and disables all options without rejecting the theme; a root compile failure uses the normal fallback. `sim --check` rejects invalid arrays, missing or mismatched properties, and root compile failures. Options bind only into the theme's `Dash`, never `HostState`, the overlay or host screens. Riders change options in Settings > Theme > Customize while parked; changes apply live and are saved per theme in `settings.json` (`"theme-options": { "<theme-id>": { "<option-id>": <value> } }`). An invalid saved value falls back to the manifest default.
 
-Preview with repeatable `--opt id=value`, for example `sim tools/fixtures/loads/options --contract contract --opt accent=#ff0000 --opt enabled=false`. Values must fit the declared type (`true` or `false` for booleans); invalid values fail the run. Later overrides of the same id win. An id absent from the kept options changes nothing and logs exactly once: `theme option '<id>' skipped: not declared by the theme`.
+Preview with repeatable `--opt id=value`, for example `sim tools/fixtures/loads/options --contract contract --opt accent=#ff0000 --opt enabled=false`. Values must fit the declared type (`true` or `false` for booleans), integer range and choice list; invalid values fail the run. Overrides win over saved values for that run without writing them; later overrides of the same id win. An id absent from the kept options changes nothing and logs exactly once: `theme option '<id>' skipped: not declared by the theme`.
 
 ## Overlay placement and the reserved strip
 

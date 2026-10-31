@@ -17,7 +17,7 @@ export component RailRow inherits Rectangle {
     accessible-label: root.label;
     accessible-action-default => { root.pressed(); }
     HostText {
-        x: 24px; width: parent.width - 48px; height: parent.height;
+        x: 24px; y: 0px; width: parent.width - 48px; height: parent.height;
         text: root.label;
         color: root.ink;
         font-size: 26px;
@@ -51,12 +51,15 @@ export component CloseButton inherits Rectangle {
 export component PillButton inherits Rectangle {
     in property <string> label;
     in property <bool> enabled: true;
+    // Secondary pills (navigation) use the key style; the accent is for the main action.
+    in property <bool> primary: true;
     callback pressed();
-    property <color> fill: root.enabled ? LockConfig.style.accent : LockConfig.style.key-background;
-    property <color> ink: root.enabled ? LockConfig.on-accent : LockConfig.style.muted;
+    property <bool> filled: root.enabled && root.primary;
+    property <color> fill: root.filled ? LockConfig.style.accent : LockConfig.style.key-background;
+    property <color> ink: root.filled ? LockConfig.on-accent : root.enabled ? LockConfig.style.foreground : LockConfig.style.muted;
     width: 240px; height: 64px;
     border-radius: 32px;
-    border-width: root.enabled ? 0px : 1px;
+    border-width: root.filled ? 0px : 1px;
     border-color: LockConfig.style.key-border;
     opacity: root.enabled ? 1 : 0.5;
     background: touch.pressed ? root.fill.mix(root.ink, 0.15) : root.fill;
@@ -65,6 +68,7 @@ export component PillButton inherits Rectangle {
     accessible-enabled: root.enabled;
     accessible-action-default => { if root.enabled { root.pressed(); } }
     HostText {
+        x: 0px; y: 0px;
         width: parent.width; height: parent.height;
         text: root.label;
         color: root.ink;
@@ -118,6 +122,7 @@ export component Choice inherits HorizontalLayout {
         accessible-checked: root.selected == i;
         accessible-action-default => { root.chosen(i); }
         HostText {
+            x: 0px; y: 0px;
             width: parent.width; height: parent.height;
             text: option;
             overflow: elide;
@@ -128,5 +133,108 @@ export component Choice inherits HorizontalLayout {
             vertical-alignment: center;
         }
         touch := TouchArea { clicked => { root.chosen(i); } }
+    }
+}
+
+component StepButton inherits Rectangle {
+    in property <string> label;
+    in property <string> action-label;
+    in property <bool> enabled: true;
+    callback pressed();
+    width: 64px; height: 64px;
+    border-radius: 32px;
+    border-width: 1px;
+    border-color: LockConfig.style.key-border;
+    opacity: root.enabled ? 1 : 0.5;
+    background: touch.pressed ? LockConfig.style.key-background.mix(LockConfig.style.foreground, 0.15)
+        : LockConfig.style.key-background;
+    accessible-role: button;
+    accessible-label: root.action-label;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if root.enabled { root.pressed(); } }
+    HostText {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        text: root.label;
+        color: LockConfig.style.foreground;
+        font-size: 26px;
+        font-weight: 700;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    touch := TouchArea {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        enabled: root.enabled;
+        clicked => { if root.enabled { root.pressed(); } }
+    }
+}
+
+export component Stepper inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <bool> can-decrease: true;
+    in property <bool> can-increase: true;
+    callback stepped(int);
+    width: 256px; height: 64px;
+    StepButton {
+        x: 0px; y: 0px;
+        label: "-";
+        action-label: "Decrease " + root.label;
+        enabled: root.can-decrease;
+        pressed => { root.stepped(-1); }
+    }
+    HostText {
+        x: 80px; y: 0px; width: 96px; height: 64px;
+        text: root.value;
+        color: LockConfig.style.foreground;
+        font-size: 26px;
+        font-weight: 700;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    StepButton {
+        x: 192px; y: 0px;
+        label: "+";
+        action-label: "Increase " + root.label;
+        enabled: root.can-increase;
+        pressed => { root.stepped(1); }
+    }
+}
+
+export struct OptionSwatch { color: color, text: string }
+
+export component Swatches inherits Rectangle {
+    in property <[OptionSwatch]> options;
+    in property <color> selected;
+    in property <string> label;
+    callback chosen(string);
+    // 48 px discs, 12 px gaps; each disc has a centred 64 x 64 touch target.
+    width: max(0, root.options.length - 1) * 60px + 64px;
+    height: 64px;
+    for swatch[i] in root.options : Rectangle {
+        x: i * 60px; y: 0px; width: 64px; height: 64px;
+        accessible-role: button;
+        accessible-label: root.label + " " + swatch.text;
+        accessible-checkable: true;
+        accessible-checked: root.selected == swatch.color;
+        accessible-action-default => { root.chosen(swatch.text); }
+        Rectangle {
+            x: 2px; y: 2px; width: 60px; height: 60px;
+            border-radius: 30px;
+            border-width: root.selected == swatch.color ? 3px : 0px;
+            border-color: LockConfig.style.foreground;
+            background: transparent;
+        }
+        Rectangle {
+            x: 8px; y: 8px; width: 48px; height: 48px;
+            border-radius: 24px;
+            border-width: 1px; // keeps a swatch that matches the row visible
+            border-color: LockConfig.style.key-border;
+            background: swatch.color;
+        }
+        TouchArea {
+            x: 0px; y: 0px; width: 64px; height: 64px;
+            clicked => { root.chosen(swatch.text); }
+        }
     }
 }

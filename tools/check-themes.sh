@@ -90,6 +90,21 @@ for accent in default '#ff0000'; do
         status=1
     fi
 done
+# Theme customization rows start at (432,176), 96 px apart. The second row's
+# bool Choice starts at (848,280); (976,296) is inside On, off text and corners.
+# The first row's eight swatches start at (564,184), with 60 px pitch; the default
+# disc centre (596,216) stays #123456; (596,187) is inside its 3 px foreground ring.
+# PR B's Dash probe at (640,384) is unchanged.
+for probe in "976,296 #ffc94a" "596,216 #123456" "596,187 #0f2a2a"; do
+    read -r xy want <<<"$probe"
+    got=$("$SIM" "$ROOT/tools/fixtures/loads/options" --contract "$ROOT/contract" --state park --screen settings --pane theme --theme-view options --at 5 --screenshot "$png" --pixel "$xy" | tail -n 1) || got=error
+    if [ "$got" = "$want" ]; then
+        echo "ok: theme option control (pixel $xy is $got)"
+    else
+        echo "error: theme option control (pixel $xy is $got, want $want)" >&2
+        status=1
+    fi
+done
 if out=$("$SIM" "$ROOT/themes/default" --contract "$ROOT/contract" --opt accent=#ff0000 --at 5 --screenshot "$png" 2>&1); then
     if [ "$(grep -Fxc "theme option 'accent' skipped: not declared by the theme" <<<"$out")" -eq 1 ]; then
         echo "ok: undeclared accent skipped once; default theme still renders"

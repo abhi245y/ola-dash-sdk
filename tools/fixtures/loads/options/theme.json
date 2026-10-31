@@ -10,7 +10,7 @@
   "options": [
     { "id": "accent", "type": "color", "default": "#123456", "label": "Accent" },
     { "id": "enabled", "type": "bool", "default": true, "label": "Enabled" },
-    { "id": "count", "type": "int", "default": 3, "label": "Count" },
+    { "id": "count", "type": "int", "default": 3, "label": "Count", "min": -2, "max": 8 },
     { "id": "style", "type": "choice", "default": "wide", "label": "Style", "values": ["thin", "wide"] }
   ]
 }

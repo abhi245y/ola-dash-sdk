@@ -1,6 +1,75 @@
 import { LockConfig } from "unlock.slint";
 import { HostText } from "hosttext.slint";
-import { Choice } from "kit.slint";
+import { Choice, PillButton } from "kit.slint";
+
+export struct ThemeInfo { id: string, name: string, description: string }
+
+export component FirstRunScreen inherits Rectangle {
+    in property <[ThemeInfo]> themes;
+    in property <string> active-theme;
+    in property <bool> night;
+    callback set-setting(string, string);
+    callback done(string);
+    property <string> theme-selection;
+    init => { root.theme-selection = root.active-theme; }
+    // Choice has up to four entries; keep an active theme outside that subset unchanged.
+    property <[string]> theme-names: root.themes.length == 0 ? []
+        : root.themes.length == 1 ? [root.themes[0].name]
+        : root.themes.length == 2 ? [root.themes[0].name, root.themes[1].name]
+        : root.themes.length == 3 ? [root.themes[0].name, root.themes[1].name, root.themes[2].name]
+        : [root.themes[0].name, root.themes[1].name, root.themes[2].name, root.themes[3].name];
+    property <int> theme-index: root.themes.length > 0 && root.themes[0].id == root.theme-selection ? 0
+        : root.themes.length > 1 && root.themes[1].id == root.theme-selection ? 1
+        : root.themes.length > 2 && root.themes[2].id == root.theme-selection ? 2
+        : root.themes.length > 3 && root.themes[3].id == root.theme-selection ? 3 : -1;
+    background: LockConfig.style.background;
+    TouchArea { }
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 880px; height: 352px;
+        HostText {
+            x: 0px; y: 0px; width: parent.width; height: 56px;
+            text: "Set up your dash";
+            color: LockConfig.style.foreground;
+            font-size: 40px;
+            font-weight: 800;
+        }
+        HostText {
+            x: 0px; y: 96px; width: 168px; height: 64px;
+            text: "Theme";
+            color: LockConfig.style.foreground;
+            font-size: 26px;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+        Choice {
+            x: 192px; y: 96px; width: parent.width - 192px;
+            options: root.theme-names;
+            selected: root.theme-index;
+            chosen(index) => { root.theme-selection = root.themes[index].id; }
+        }
+        HostText {
+            x: 0px; y: 192px; width: 168px; height: 64px;
+            text: "Night mode";
+            color: LockConfig.style.foreground;
+            font-size: 26px;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+        Choice {
+            x: 192px; y: 192px; width: parent.width - 192px;
+            options: ["Off", "On"];
+            selected: root.night ? 1 : 0;
+            chosen(index) => { root.set-setting("night", index == 0 ? "off" : "on"); }
+        }
+        PillButton {
+            x: parent.width - self.width; y: 288px;
+            label: "Done";
+            pressed => { root.done(root.theme-selection); }
+        }
+    }
+}
 
 export component SwitchingScreen inherits Rectangle {
     in property <string> name;

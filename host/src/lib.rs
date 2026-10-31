@@ -585,6 +585,12 @@ fn run(app: &AndroidApp, start: Instant) -> Result<(), String> {
     let files = app.internal_data_path().ok_or("no internal data path")?;
     let settings = settings::Settings::load(Some(&files.join("settings.json")), log_warn);
     let ui = load_ui(&files)?;
+    ui.set_property("themes", theme_switch::model(theme_switch::installed(&files, HOST_CONTRACT)))
+        .map_err(|e| format!("themes: {e:?}"))?;
+    ui.set_property("active-theme", Value::String(theme_switch::active(&files).into()))
+        .map_err(|e| format!("active-theme: {e:?}"))?;
+    ui.set_property("first-run", Value::Bool(!settings.setup_done()))
+        .map_err(|e| format!("first-run: {e:?}"))?;
     settings::bind(&ui, settings, log_warn, refresh_clock)?;
     ui.set_global_property("HostState", "version-text", Value::String(env!("CARGO_PKG_VERSION").into()))
         .map_err(|e| format!("HostState.version-text: {e:?}"))?;

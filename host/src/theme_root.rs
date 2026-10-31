@@ -74,7 +74,7 @@ const ROOT: &str = r#"import { Dash } from "{THEME}";
 import { HostOverlay, HostState, OverlayConfig } from "overlay.slint";
 import { LockConfig } from "unlock.slint";
 import { SettingsScreen } from "settings.slint";
-import { SwitchingScreen, ConfirmThemeScreen } from "theme-switch.slint";
+import { ThemeInfo, SwitchingScreen, ConfirmThemeScreen, FirstRunScreen } from "theme-switch.slint";
 import { Vehicle, Display, Media, Actions, Battery, Ride, Navigation, Plugins, OverlayPlacement, OverlayStyle, Telltale, AlertPosition, LockStyle } from "vehicle.slint";
 export { Dash, Vehicle, Display, Media, Actions, Battery, Ride, Navigation, Plugins, HostState, OverlayConfig, LockConfig }
 export component Host inherits Window {
@@ -82,6 +82,9 @@ export component Host inherits Window {
     in-out property <int> settings-pane: 0;
     in-out property <bool> clock24: true;
     in-out property <bool> confirm-theme: false;
+    in-out property <bool> first-run: false;
+    in property <[ThemeInfo]> themes;
+    in property <string> active-theme;
     in-out property <int> confirm-seconds: 10;
     in-out property <string> switching-name;
     callback apply-theme(string);
@@ -90,23 +93,20 @@ export component Host inherits Window {
     callback set-setting(string, string);
     out property <bool> host-screens-allowed: HostState.parked && HostState.alert-code == 0
         && HostState.auth-phase >= 4 && !HostState.test-mode;
-    changed host-screens-allowed => {
+    function settle() {
         if !root.host-screens-allowed { root.screen = "dash"; }
         else if root.confirm-theme { root.screen = "confirm-theme"; }
-    }
-    changed confirm-theme => {
-        if root.confirm-theme && root.host-screens-allowed { root.screen = "confirm-theme"; }
-        else if !root.confirm-theme && root.screen == "confirm-theme" { root.screen = "dash"; }
-    }
-    changed screen => {
-        if !root.host-screens-allowed || (root.screen != "dash" && root.screen != "settings"
-            && root.screen != "switching" && root.screen != "confirm-theme") {
+        else if root.first-run && root.screen != "switching" { root.screen = "first-run"; }
+        else if root.screen != "dash" && root.screen != "settings" && root.screen != "switching" {
             root.screen = "dash";
-        } else if root.confirm-theme { root.screen = "confirm-theme"; }
-        else if root.screen == "confirm-theme" { root.screen = "dash"; }
+        }
     }
+    changed host-screens-allowed => { root.settle(); }
+    changed confirm-theme => { root.settle(); }
+    changed first-run => { root.settle(); }
+    changed screen => { root.settle(); }
     public function switch-theme(id: string) {
-        if root.host-screens-allowed && !root.confirm-theme && root.screen != "switching" {
+        if root.host-screens-allowed && !root.confirm-theme && !root.first-run && root.screen != "switching" {
             root.switching-name = id;
             root.screen = "switching";
             root.apply-theme(id);
@@ -127,7 +127,7 @@ export component Host inherits Window {
         }
     }
     public function open-settings() -> bool {
-        if root.host-screens-allowed && !root.confirm-theme && root.screen != "switching" {
+        if root.host-screens-allowed && !root.confirm-theme && !root.first-run && root.screen != "switching" {
             root.screen = "settings";
             return true;
         }
@@ -153,7 +153,10 @@ export component Host inherits Window {
         width: parent.width; height: parent.height;
         selected <=> root.settings-pane;
         clock24: root.clock24;
+        themes: root.themes;
+        active-theme: root.active-theme;
         set-setting(key, value) => { root.set-setting(key, value); }
+        apply-theme(id) => { root.switch-theme(id); }
         closed => { root.screen = "dash"; }
     }
     if root.screen == "switching" && root.host-screens-allowed : SwitchingScreen {
@@ -165,6 +168,21 @@ export component Host inherits Window {
         seconds: root.confirm-seconds;
         keep => { root.keep-current-theme(); }
         revert => { root.revert-current-theme(); }
+    }
+    if root.screen == "first-run" && root.host-screens-allowed : FirstRunScreen {
+        width: parent.width; height: parent.height;
+        themes: root.themes;
+        active-theme: root.active-theme;
+        night: HostState.night;
+        set-setting(key, value) => { root.set-setting(key, value); }
+        done(id) => {
+            if root.host-screens-allowed && root.first-run && !root.confirm-theme {
+                root.set-setting("setup", "done");
+                root.first-run = false;
+                if id != root.active-theme { root.switch-theme(id); }
+                else { root.screen = "dash"; }
+            }
+        }
     }
     HostOverlay {
         width: parent.width; height: parent.height;
@@ -325,6 +343,7 @@ pub fn bind(ui: &ComponentInstance, log: fn(&str)) -> Result<(), String> {
             if let Some(ui) = weak.upgrade() {
                 if matches!(ui.invoke("open-settings", &[]), Ok(Value::Bool(true))) {
                     ignored.set(false);
+                    if name == "open-themes" { let _ = ui.set_property("settings-pane", Value::Number(1.0)); }
                 } else if !ignored.replace(true) {
                     log(&format!("action: {name} ignored (requires parked, no alert, unlocked and not test mode)"));
                 }
@@ -635,8 +654,10 @@ mod tests {
 
     #[test]
     fn root_draws_settings_before_host_overlay() {
-        assert!(ROOT.find("SettingsScreen {").unwrap() < ROOT.find("HostOverlay {").unwrap());
-        assert!(ROOT.contains("changed host-screens-allowed")
+        for screen in ["SettingsScreen {", "SwitchingScreen {", "ConfirmThemeScreen {", "FirstRunScreen {"] {
+            assert!(ROOT.find(screen).unwrap() < ROOT.find("HostOverlay {").unwrap(), "{screen}");
+        }
+        assert!(ROOT.contains("changed host-screens-allowed => { root.settle(); }")
             && ROOT.contains("HostState.parked && HostState.alert-code == 0\n        && HostState.auth-phase >= 4 && !HostState.test-mode"));
     }
 

@@ -48,8 +48,40 @@ export component CloseButton inherits Rectangle {
     touch := TouchArea { clicked => { root.pressed(); } }
 }
 
+export component PillButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> enabled: true;
+    callback pressed();
+    property <color> fill: root.enabled ? LockConfig.style.accent : LockConfig.style.key-background;
+    property <color> ink: root.enabled ? LockConfig.on-accent : LockConfig.style.muted;
+    width: 240px; height: 64px;
+    border-radius: 32px;
+    border-width: root.enabled ? 0px : 1px;
+    border-color: LockConfig.style.key-border;
+    opacity: root.enabled ? 1 : 0.5;
+    background: touch.pressed ? root.fill.mix(root.ink, 0.15) : root.fill;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if root.enabled { root.pressed(); } }
+    HostText {
+        width: parent.width; height: parent.height;
+        text: root.label;
+        color: root.ink;
+        font-size: 26px;
+        font-weight: 700;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.pressed(); }
+    }
+}
+
 export component Pane inherits Rectangle {
     in property <string> title;
+    out property <length> body-height: root.height - 88px;
     HostText {
         x: 0px; y: 0px;
         width: parent.width; height: 56px;
@@ -60,7 +92,7 @@ export component Pane inherits Rectangle {
         vertical-alignment: center;
     }
     Rectangle {
-        x: 0px; y: 88px; width: parent.width; height: parent.height - 88px;
+        x: 0px; y: 88px; width: parent.width; height: root.body-height;
         @children
     }
 }
@@ -88,6 +120,7 @@ export component Choice inherits HorizontalLayout {
         HostText {
             width: parent.width; height: parent.height;
             text: option;
+            overflow: elide;
             color: parent.ink;
             font-size: 22px;
             font-weight: 700;

@@ -13,10 +13,11 @@
 //!            --night                              set Display.night and HostState.night
 //!            --stale                              set Vehicle.data-stale (shows the NO DATA badge)
 //!            --screen dash|settings               preview a host screen (settings needs --state park)
-//!            --pane display|about                 settings pane (default: display)
+//!            --pane display|theme|about            settings pane (default: display)
 //!            --settings <file>                    load and save host preferences (default: in memory)
 //!            --switch <id>                        preview switching without exiting (defaults to park)
 //!            --confirm-theme                      preview Keep / Revert countdown (defaults to park)
+//!            --first-run                          preview setup card (defaults to park)
 //!
 //! The theme is loaded the way the device loads it: inside the host's `Host` root,
 //! with `HostOverlay` drawn above it (host/src/theme_root.rs, shared with the host).
@@ -506,6 +507,7 @@ struct Args {
     settings: Option<PathBuf>,
     switch: Option<String>,
     confirm_theme: bool,
+    first_run: bool,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -528,6 +530,7 @@ fn parse_args() -> Result<Args, String> {
     let mut settings = None;
     let mut switch = None;
     let mut confirm_theme = false;
+    let mut first_run = false;
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -560,8 +563,9 @@ fn parse_args() -> Result<Args, String> {
             "--pane" => {
                 pane = match it.next().as_deref() {
                     Some("display") => 0,
-                    Some("about") => 1,
-                    _ => return Err("--pane needs display or about".into()),
+                    Some("theme") => 1,
+                    Some("about") => 2,
+                    _ => return Err("--pane needs display, theme or about".into()),
                 };
             }
             "--settings" => {
@@ -572,6 +576,7 @@ fn parse_args() -> Result<Args, String> {
                     .ok_or("--switch needs a theme id (1-64 ASCII letters, digits, _ or -)")?);
             }
             "--confirm-theme" => confirm_theme = true,
+            "--first-run" => first_run = true,
             "--pixel" => {
                 pixel = Some(it
                     .next()
@@ -592,8 +597,8 @@ fn parse_args() -> Result<Args, String> {
                 println!("       [--state ride|park|charge|reverse|trunk|easy-park|locked|locked-error|cooldown|restart] [--plugins] [--nav] [--night] [--stale]");
                 println!("       [--pixel X,Y]  (with --screenshot: also print the colour at that point)");
                 println!("       [--screen dash|settings]  (settings needs --state park)");
-                println!("       [--pane display|about] [--settings FILE]");
-                println!("       [--switch ID | --confirm-theme]  (default to --state park; no restart or theme-file writes)");
+                println!("       [--pane display|theme|about] [--settings FILE]");
+                println!("       [--switch ID | --confirm-theme | --first-run]  (default to --state park; no restart or theme-file writes)");
                 println!("       sim --check <theme-dir> [--contract DIR]");
                 std::process::exit(0);
             }
@@ -602,10 +607,10 @@ fn parse_args() -> Result<Args, String> {
         }
     }
     let theme = theme.ok_or("usage: sim <theme-dir> [...]")?;
-    if switch.is_some() && confirm_theme {
-        return Err("--switch and --confirm-theme are mutually exclusive".into());
+    if u8::from(switch.is_some()) + u8::from(confirm_theme) + u8::from(first_run) > 1 {
+        return Err("--switch, --confirm-theme and --first-run are mutually exclusive".into());
     }
-    if !state_given && (switch.is_some() || confirm_theme) { scenario = Scenario::Park; }
+    if !state_given && (switch.is_some() || confirm_theme || first_run) { scenario = Scenario::Park; }
     // Default: the repo layout themes/<name>/ next to contract/.
     let contract = contract.unwrap_or_else(|| theme.join("../../contract"));
     // The compiler wants absolute include paths.
@@ -617,7 +622,7 @@ fn parse_args() -> Result<Args, String> {
             return Err(format!("--placement needs top, bottom, left or right, got {p}"));
         }
     }
-    Ok(Args { theme, contract, screenshot, at, check, placement, alert, scenario, plugins, nav, pixel, night, stale, screen, pane, settings, switch, confirm_theme })
+    Ok(Args { theme, contract, screenshot, at, check, placement, alert, scenario, plugins, nav, pixel, night, stale, screen, pane, settings, switch, confirm_theme, first_run })
 }
 
 /// Path of `to` relative to `from` (both absolute, same drive), with '/' separators.
@@ -683,6 +688,10 @@ fn bind_settings(inst: &ComponentInstance, args: &Args) -> Result<(), Box<dyn Er
 }
 
 fn preview_screen(inst: &ComponentInstance, args: &Args) -> Result<(), Box<dyn Error>> {
+    let mut themes = theme_switch::scan(args.theme.parent().unwrap_or(Path::new(".")), current_contract(&args.contract)?);
+    themes.sort_by_key(|theme| theme.id != theme_switch::DEFAULT_THEME);
+    inst.set_property("themes", theme_switch::model(themes))?;
+    inst.set_property("active-theme", Value::String(args.theme.file_name().unwrap().to_string_lossy().into_owned().into()))?;
     inst.set_callback("apply-theme", |args| {
         println!("theme switch: {:?} (sim: no restart)", args.first());
         Value::Void
@@ -699,6 +708,7 @@ fn preview_screen(inst: &ComponentInstance, args: &Args) -> Result<(), Box<dyn E
     }
     inst.set_property("screen", Value::String(args.screen.clone().into()))?;
     inst.set_property("confirm-theme", Value::Bool(args.confirm_theme))?;
+    inst.set_property("first-run", Value::Bool(args.first_run))?;
     if let Some(id) = &args.switch {
         inst.invoke("switch-theme", &[Value::String(id.clone().into())])?;
     }

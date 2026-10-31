@@ -2,18 +2,29 @@ import { Vehicle } from "vehicle.slint";
 import { HostState } from "overlay.slint";
 import { LockConfig } from "unlock.slint";
 import { HostText } from "hosttext.slint";
-import { RailRow, CloseButton, Pane, Choice } from "kit.slint";
+import { RailRow, CloseButton, Pane, Choice, PillButton } from "kit.slint";
+import { ThemeInfo } from "theme-switch.slint";
 
 // Interactive host screen: parked only, enforced by Host in theme_root.rs.
 export component SettingsScreen inherits Rectangle {
     callback closed();
     callback set-setting(string, string);
+    callback apply-theme(string);
+    in property <[ThemeInfo]> themes;
+    in property <string> active-theme;
     in property <bool> clock24: true;
     in-out property <int> selected: 0;
-    property <[string]> panes: ["Display", "About"];
+    property <[string]> panes: ["Display", "Theme", "About"];
     property <string> pane: panes[selected];
     in-out property <int> cursor: 0;
-    init => { root.cursor = root.selected; }
+    property <string> theme-selection;
+    init => {
+        root.cursor = root.selected;
+        root.theme-selection = root.active-theme;
+    }
+    changed selected => {
+        if root.pane == "Theme" { root.theme-selection = root.active-theme; }
+    }
     public function move(delta: int) {
         root.cursor = max(0, min(root.panes.length - 1, root.cursor + delta));
     }
@@ -79,6 +90,62 @@ export component SettingsScreen inherits Rectangle {
                     chosen(index) => { root.set-setting("clock24", index == 0 ? "true" : "false"); }
                 }
             }
+        }
+    }
+    if root.pane == "Theme" : Pane {
+        x: 432px; y: 88px; width: root.width - 640px; height: root.height - 248px;
+        title: "Theme";
+        Flickable {
+            x: 0px; y: 0px; width: parent.width; height: parent.body-height - 88px;
+            content-width: self.width;
+            content-height: max(self.height, root.themes.length * 96px - 16px);
+            for theme[i] in root.themes : Rectangle {
+                x: 0px; y: i * 96px; width: parent.width; height: 80px;
+                border-radius: 24px;
+                border-width: 1px;
+                border-color: LockConfig.style.key-border;
+                property <bool> selected: root.theme-selection == theme.id;
+                property <color> ink: self.selected ? LockConfig.on-accent : LockConfig.style.foreground;
+                property <color> secondary: self.selected ? LockConfig.on-accent : LockConfig.style.muted;
+                property <length> text-width: self.width - (theme.id == root.active-theme ? 152px : 48px);
+                background: self.selected ? LockConfig.style.accent : LockConfig.style.key-background;
+                accessible-role: button;
+                accessible-label: theme.name;
+                accessible-checkable: true;
+                accessible-checked: self.selected;
+                accessible-action-default => { root.theme-selection = theme.id; }
+                HostText {
+                    x: 24px; y: 8px; width: parent.text-width; height: 32px;
+                    text: theme.name;
+                    color: parent.ink;
+                    font-size: 26px;
+                    font-weight: 700;
+                    overflow: elide;
+                }
+                HostText {
+                    x: 24px; y: 44px; width: parent.text-width; height: 24px;
+                    text: theme.description;
+                    color: parent.secondary;
+                    font-size: 18px;
+                    overflow: elide;
+                }
+                if theme.id == root.active-theme : HostText {
+                    x: parent.width - 120px; width: 96px; height: parent.height;
+                    text: "In use";
+                    color: parent.secondary;
+                    font-size: 18px;
+                    font-weight: 700;
+                    horizontal-alignment: right;
+                    vertical-alignment: center;
+                }
+                TouchArea { clicked => { root.theme-selection = theme.id; } }
+            }
+        }
+        PillButton {
+            x: parent.width - self.width; y: parent.body-height - self.height;
+            label: "Apply";
+            enabled: root.theme-selection != "" && root.theme-selection != root.active-theme;
+            pressed => { root.apply-theme(root.theme-selection); }
         }
     }
     if root.pane == "About" : Pane {

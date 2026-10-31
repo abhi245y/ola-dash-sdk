@@ -83,7 +83,7 @@ Plain text on the default font, with top telltales. It is the smallest theme tha
 
 | Key | Type | Rule |
 |---|---|---|
-| `id` | string | Required. Only `a-z`, `0-9`, `-`. Must equal the folder name. |
+| `id` | string | Required. Only `a-z`, `0-9`, `-`. Must equal the folder name. Not `active`, `previous`, `bad`, `strikes` or `restart` (host selection files). |
 | `name` | string | Required. Display name. |
 | `version` | string | Required. Theme version, for example `1.0.0`. |
 | `author` | string | Required. Name or handle. |

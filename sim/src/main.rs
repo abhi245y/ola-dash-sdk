@@ -13,7 +13,8 @@
 //!            --night                              set Display.night and HostState.night
 //!            --stale                              set Vehicle.data-stale (shows the NO DATA badge)
 //!            --screen dash|settings               preview a host screen (settings needs --state park)
-//!            --pane display|theme|about            settings pane (default: display)
+//!            --pane display|theme|plugins|about    settings pane (default: display)
+//!            --plugins-file <file>                plugin inventory (default: empty; toggles stay in memory)
 //!            --settings <file>                    load and save host preferences (default: in memory)
 //!            --switch <id>                        preview switching without exiting (defaults to park)
 //!            --confirm-theme                      preview Keep / Revert countdown (defaults to park)
@@ -48,6 +49,9 @@ mod settings;
 #[allow(dead_code)] // the sim only previews; selection writes are host-only
 #[path = "../../host/src/theme_switch.rs"]
 mod theme_switch;
+#[allow(dead_code)] // enablement file writes are host-only; the sim toggles in memory
+#[path = "../../host/src/plugins.rs"]
+mod plugins;
 
 /// Keys every theme.json must carry (see docs/themes.md).
 const REQUIRED_STR_KEYS: [&str; 7] = ["id", "name", "version", "author", "license", "entry", "description"];
@@ -504,6 +508,7 @@ struct Args {
     stale: bool,
     screen: String,
     pane: i32,
+    plugins_file: Option<PathBuf>,
     settings: Option<PathBuf>,
     switch: Option<String>,
     confirm_theme: bool,
@@ -527,6 +532,7 @@ fn parse_args() -> Result<Args, String> {
     let mut stale = false;
     let mut screen = "dash".to_string();
     let mut pane = 0;
+    let mut plugins_file = None;
     let mut settings = None;
     let mut switch = None;
     let mut confirm_theme = false;
@@ -564,9 +570,13 @@ fn parse_args() -> Result<Args, String> {
                 pane = match it.next().as_deref() {
                     Some("display") => 0,
                     Some("theme") => 1,
-                    Some("about") => 2,
-                    _ => return Err("--pane needs display, theme or about".into()),
+                    Some("plugins") => 2,
+                    Some("about") => 3,
+                    _ => return Err("--pane needs display, theme, plugins or about".into()),
                 };
+            }
+            "--plugins-file" => {
+                plugins_file = Some(PathBuf::from(it.next().ok_or("--plugins-file needs a file")?));
             }
             "--settings" => {
                 settings = Some(PathBuf::from(it.next().ok_or("--settings needs a file")?));
@@ -597,7 +607,7 @@ fn parse_args() -> Result<Args, String> {
                 println!("       [--state ride|park|charge|reverse|trunk|easy-park|locked|locked-error|cooldown|restart] [--plugins] [--nav] [--night] [--stale]");
                 println!("       [--pixel X,Y]  (with --screenshot: also print the colour at that point)");
                 println!("       [--screen dash|settings]  (settings needs --state park)");
-                println!("       [--pane display|theme|about] [--settings FILE]");
+                println!("       [--pane display|theme|plugins|about] [--settings FILE] [--plugins-file FILE]");
                 println!("       [--switch ID | --confirm-theme | --first-run]  (default to --state park; no restart or theme-file writes)");
                 println!("       sim --check <theme-dir> [--contract DIR]");
                 std::process::exit(0);
@@ -622,7 +632,7 @@ fn parse_args() -> Result<Args, String> {
             return Err(format!("--placement needs top, bottom, left or right, got {p}"));
         }
     }
-    Ok(Args { theme, contract, screenshot, at, check, placement, alert, scenario, plugins, nav, pixel, night, stale, screen, pane, settings, switch, confirm_theme, first_run })
+    Ok(Args { theme, contract, screenshot, at, check, placement, alert, scenario, plugins, nav, pixel, night, stale, screen, pane, plugins_file, settings, switch, confirm_theme, first_run })
 }
 
 /// Path of `to` relative to `from` (both absolute, same drive), with '/' separators.
@@ -688,6 +698,7 @@ fn bind_settings(inst: &ComponentInstance, args: &Args) -> Result<(), Box<dyn Er
 }
 
 fn preview_screen(inst: &ComponentInstance, args: &Args) -> Result<(), Box<dyn Error>> {
+    preview_plugins(inst, args.plugins_file.as_deref())?;
     let mut themes = theme_switch::scan(args.theme.parent().unwrap_or(Path::new(".")), current_contract(&args.contract)?);
     themes.sort_by_key(|theme| theme.id != theme_switch::DEFAULT_THEME);
     inst.set_property("themes", theme_switch::model(themes))?;
@@ -712,6 +723,54 @@ fn preview_screen(inst: &ComponentInstance, args: &Args) -> Result<(), Box<dyn E
     if let Some(id) = &args.switch {
         inst.invoke("switch-theme", &[Value::String(id.clone().into())])?;
     }
+    Ok(())
+}
+
+/// Uses the host inventory parser, with a sim-only `enabled` seed and no enablement writes.
+fn preview_plugins(inst: &ComponentInstance, path: Option<&Path>) -> Result<(), Box<dyn Error>> {
+    let text = match path {
+        Some(path) => std::fs::read_to_string(path)?,
+        None => String::new(),
+    };
+    let mut rows = plugins::parse_installed(&text);
+    if let Ok(serde_json::Value::Array(entries)) = serde_json::from_str(&text) {
+        for row in &mut rows {
+            row.enabled = entries.iter().take(32).find(|entry| entry["package"].as_str() == Some(row.package.as_str()))
+                .and_then(|entry| entry["enabled"].as_bool()).unwrap_or(false);
+        }
+    }
+    inst.set_property("plugins", plugins::model(rows.clone()))?;
+    let rows = Rc::new(RefCell::new(rows));
+    let weak = inst.as_weak();
+    let loaded = rows.clone();
+    inst.set_callback("load-plugins", move |_| {
+        if let Some(inst) = weak.upgrade() {
+            if matches!(inst.get_property("host-screens-allowed"), Ok(Value::Bool(true))) {
+                let model = plugins::model(loaded.borrow().clone());
+                let _ = inst.set_property("plugins", model);
+            }
+        }
+        Value::Void
+    })?;
+    let weak = inst.as_weak();
+    inst.set_callback("set-plugin", move |args| {
+        let Some(inst) = weak.upgrade() else { return Value::Void };
+        if !matches!(inst.get_property("host-screens-allowed"), Ok(Value::Bool(true))) {
+            return Value::Void;
+        }
+        if let [Value::String(package), Value::Bool(on)] = args {
+            let model = {
+                let mut rows = rows.borrow_mut();
+                for row in rows.iter_mut().filter(|row| row.package == package.as_str()) {
+                    row.enabled = *on;
+                }
+                plugins::model(rows.clone())
+            };
+            println!("set-plugin({package}, {on}) (sim: in memory)");
+            let _ = inst.set_property("plugins", model);
+        }
+        Value::Void
+    })?;
     Ok(())
 }
 

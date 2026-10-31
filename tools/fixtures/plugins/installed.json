@@ -1,0 +1,13 @@
+[
+  {
+    "package": "dev.olatool.dash.plugin.sysinfo",
+    "label": "Dash Sysinfo",
+    "slots": "widgets",
+    "enabled": true
+  },
+  {
+    "package": "dev.example.dash.media",
+    "label": "Example Widgets and Media",
+    "slots": "widgets,media"
+  }
+]

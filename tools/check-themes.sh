@@ -106,6 +106,16 @@ else
     echo "error: active theme row not selected (pixel 448,408 is $got, want #ffc94a)" >&2
     status=1
 fi
+# Plugins rows start at (432,176), width 640 and height 80. Choice starts at
+# (848,184); its On pill starts at (956,184), size 92 x 64. (976,200) is
+# inside the enabled first row's On fill, clear of its text and rounded edge.
+got=$("$SIM" "$ROOT/themes/minimal" --contract "$ROOT/contract" --state park --screen settings --pane plugins --plugins-file "$ROOT/tools/fixtures/plugins/installed.json" --at 13 --screenshot "$png" --pixel 976,200 | tail -n 1) || got=error
+if [ "$got" = "#ffc94a" ]; then
+    echo "ok: plugin On option selected (pixel 976,200 is $got)"
+else
+    echo "error: plugin On option not selected (pixel 976,200 is $got, want #ffc94a)" >&2
+    status=1
+fi
 # First-run column: (200,208), 880 px wide; Done at (840,496), size 240 x 64.
 # (864,528) is in the pill's left padding, clear of its text and rounded edge.
 got=$("$SIM" "$ROOT/themes/minimal" --contract "$ROOT/contract" --first-run --at 5 --screenshot "$png" --pixel 864,528 | tail -n 1) || got=error

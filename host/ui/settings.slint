@@ -5,25 +5,37 @@ import { HostText } from "hosttext.slint";
 import { RailRow, CloseButton, Pane, Choice, PillButton } from "kit.slint";
 import { ThemeInfo } from "theme-switch.slint";
 
+export struct PluginInfo {
+    package: string,
+    label: string,
+    slots: string,
+    enabled: bool,
+}
+
 // Interactive host screen: parked only, enforced by Host in theme_root.rs.
 export component SettingsScreen inherits Rectangle {
     callback closed();
     callback set-setting(string, string);
     callback apply-theme(string);
+    callback load-plugins();
+    callback set-plugin(string, bool);
     in property <[ThemeInfo]> themes;
+    in property <[PluginInfo]> plugins;
     in property <string> active-theme;
     in property <bool> clock24: true;
     in-out property <int> selected: 0;
-    property <[string]> panes: ["Display", "Theme", "About"];
+    property <[string]> panes: ["Display", "Theme", "Plugins", "About"];
     property <string> pane: panes[selected];
     in-out property <int> cursor: 0;
     property <string> theme-selection;
     init => {
         root.cursor = root.selected;
         root.theme-selection = root.active-theme;
+        if root.pane == "Plugins" { root.load-plugins(); }
     }
     changed selected => {
         if root.pane == "Theme" { root.theme-selection = root.active-theme; }
+        if root.pane == "Plugins" { root.load-plugins(); }
     }
     public function move(delta: int) {
         root.cursor = max(0, min(root.panes.length - 1, root.cursor + delta));
@@ -146,6 +158,51 @@ export component SettingsScreen inherits Rectangle {
             label: "Apply";
             enabled: root.theme-selection != "" && root.theme-selection != root.active-theme;
             pressed => { root.apply-theme(root.theme-selection); }
+        }
+    }
+    if root.pane == "Plugins" : Pane {
+        x: 432px; y: 88px; width: root.width - 640px; height: root.height - 248px;
+        title: "Plugins";
+        Flickable {
+            x: 0px; y: 0px; width: parent.width; height: parent.body-height;
+            content-width: self.width;
+            content-height: max(self.height, root.plugins.length * 96px - 16px);
+            if root.plugins.length == 0 : HostText {
+                x: 0px; y: 0px; width: parent.width; height: 32px;
+                text: "No plugins installed";
+                color: LockConfig.style.muted;
+                font-size: 22px;
+            }
+            for plugin[i] in root.plugins : Rectangle {
+                x: 0px; y: i * 96px; width: parent.width; height: 80px;
+                clip: true;
+                border-radius: 24px;
+                border-width: 1px;
+                border-color: LockConfig.style.key-border;
+                background: LockConfig.style.key-background;
+                HostText {
+                    x: 24px; y: 8px; width: parent.width - 272px; height: 32px;
+                    text: plugin.label;
+                    color: LockConfig.style.foreground;
+                    font-size: 26px;
+                    font-weight: 700;
+                    overflow: elide;
+                }
+                HostText {
+                    x: 24px; y: 44px; width: parent.width - 272px; height: 24px;
+                    text: plugin.slots;
+                    color: LockConfig.style.muted;
+                    font-size: 18px;
+                    overflow: elide;
+                }
+                Choice {
+                    x: parent.width - 224px; y: (parent.height - self.height) / 2;
+                    width: 200px;
+                    options: ["Off", "On"];
+                    selected: plugin.enabled ? 1 : 0;
+                    chosen(index) => { root.set-plugin(plugin.package, index == 1); }
+                }
+            }
         }
     }
     if root.pane == "About" : Pane {

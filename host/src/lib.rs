@@ -16,6 +16,7 @@ use jni::{jni_sig, jni_str, EnvUnowned, JavaVM};
 use slint::{ModelRc, VecModel};
 use slint_interpreter::{Compiler, ComponentHandle, ComponentInstance, Value};
 
+mod plugins;
 mod settings;
 mod theme_root;
 mod theme_switch;
@@ -206,7 +207,7 @@ fn request_trunk(app: &AndroidApp) {
     }
 }
 
-/// Sends "media.<x>" or "widget.<id>" to PluginHost.action() through MainActivity.onDashAction.
+/// Sends media, widget or host refresh actions through MainActivity.onDashAction.
 fn dash_action(app: &AndroidApp, action: &str) {
     let vm = unsafe { JavaVM::from_raw(app.vm_as_ptr() as *mut _) };
     let res = vm.attach_current_thread(|env| -> jni::errors::Result<()> {
@@ -581,6 +582,39 @@ fn wire_theme(ui: &ComponentInstance, app: &AndroidApp, files: &Path) -> Result<
     Ok(())
 }
 
+fn wire_plugins(ui: &ComponentInstance, app: &AndroidApp, files: &Path) -> Result<(), String> {
+    let weak = ui.as_weak();
+    let dir = files.to_path_buf();
+    ui.set_callback("load-plugins", move |_| {
+        if let Some(ui) = weak.upgrade() {
+            if matches!(ui.get_property("host-screens-allowed"), Ok(Value::Bool(true))) {
+                if let Err(e) = ui.set_property("plugins", plugins::model(plugins::list(&dir))) {
+                    log::warn!("load-plugins: {e:?}");
+                }
+            }
+        }
+        Value::Void
+    }).map_err(|e| format!("load-plugins: {e:?}"))?;
+    let weak = ui.as_weak();
+    let dir = files.to_path_buf();
+    let a = app.clone();
+    ui.set_callback("set-plugin", move |args| {
+        let Some(ui) = weak.upgrade() else { return Value::Void };
+        if !matches!(ui.get_property("host-screens-allowed"), Ok(Value::Bool(true))) {
+            return Value::Void;
+        }
+        if let [Value::String(package), Value::Bool(on)] = args {
+            let saved = plugins::set_enabled(&dir, package.as_str(), *on);
+            if let Err(e) = &saved { log::warn!("set-plugin '{package}' failed: {e}"); }
+            if let Err(e) = ui.set_property("plugins", plugins::model(plugins::list(&dir))) {
+                log::warn!("reload plugins: {e:?}");
+            }
+            if saved.is_ok() { dash_action(&a, "plugins.refresh"); }
+        }
+        Value::Void
+    }).map_err(|e| format!("set-plugin: {e:?}"))
+}
+
 fn run(app: &AndroidApp, start: Instant) -> Result<(), String> {
     let files = app.internal_data_path().ok_or("no internal data path")?;
     let settings = settings::Settings::load(Some(&files.join("settings.json")), log_warn);
@@ -596,6 +630,7 @@ fn run(app: &AndroidApp, start: Instant) -> Result<(), String> {
         .map_err(|e| format!("HostState.version-text: {e:?}"))?;
     wire(&ui, app)?;
     wire_theme(&ui, app, &files)?;
+    wire_plugins(&ui, app, &files)?;
     ui.set_property("confirm-theme", Value::Bool(files.join("themes/previous").exists()))
         .map_err(|e| format!("confirm-theme: {e:?}"))?;
     let restart = theme_switch::take_restart(&files);

@@ -34,7 +34,7 @@ dev.example.dash.weather
 dev.example.dash.nav:navigation
 ```
 
-On the debug build (the only build so far), `run-as` writes the file as the app's own user, so the host can read it:
+On a debug build, `run-as` writes the file as the app's own user, so the host can read it:
 
 ```sh
 adb shell 'run-as dev.olatool.dash sh -c "mkdir -p files/plugins && echo dev.example.dash.weather > files/plugins/enabled"'

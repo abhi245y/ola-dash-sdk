@@ -56,15 +56,19 @@ Output: `host/out/ola-dash-debug.apk`. The APK is debug-signed and debuggable (t
 ### Release build
 
 ```sh
-OLADASH_KEYSTORE=/path/release.jks OLADASH_KEY_ALIAS=release \
-OLADASH_KS_PASS=... OLADASH_KEY_PASS=... host/build.sh --release
+export OLADASH_KEYSTORE=/path/release.jks OLADASH_KEY_ALIAS=release
+read -rs OLADASH_KS_PASS; read -rs OLADASH_KEY_PASS; export OLADASH_KS_PASS OLADASH_KEY_PASS
+host/build.sh --release
 ```
+
+(Or keep the four `export` lines in a private `release.env` and `set -a; . release.env`. Do not put passwords on the command line.)
 
 All four variables are required; the build stops with a message if one is unset. Output: `host/out/ola-dash-release.apk`.
 
 - Not debuggable, so the test channel (gated on `FLAG_DEBUGGABLE` in `MainActivity`) is not registered. After signing, the build fails and deletes the APK if `aapt2 dump badging` contains `application-debuggable`.
-- `versionCode` and `versionName` come from `git describe --tags --match 'v*'`: tag `v1.2.3` gives code 10203 (`MAJOR*10000 + MINOR*100 + PATCH`) and name `1.2.3`; commits after the tag give a name such as `1.2.3-4-gabc1234` with the same code. With no `v*` tag the defaults (1, `0.1.0`) are used. On a build host without `.git`, set `OLADASH_VERSION=v1.2.3` (or the full `git describe` output). Minor and patch must stay below 100.
+- `versionCode` and `versionName` come from `git describe --tags --match 'v[0-9]*'`: tag `v1.2.3` gives code 10203 (`MAJOR*10000 + MINOR*100 + PATCH`) and name `1.2.3`; commits after the tag give a name such as `1.2.3-4-gabc1234` with the same code. The build refuses without a `v*` tag. On a build host without `.git`, set `OLADASH_VERSION=v1.2.3` (or the full `git describe` output). Minor and patch must stay below 100. Do not tag pre-releases `v*` (an rc and the final would share a versionCode).
 - Runs `apksigner verify --print-certs` and prints the signer's SHA-256 digest, the value to publish for users to compare.
+- A debug and a release APK have different signers, so switching between them needs `adb uninstall dev.olatool.dash`, which wipes `files/` (themes, `plugins/enabled`, strikes).
 
 ## Install and uninstall
 

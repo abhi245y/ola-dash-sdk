@@ -8,7 +8,7 @@
 set -euo pipefail
 
 RELEASE=0
-case "${1:-}" in
+case "$*" in
     "") ;;
     --release) RELEASE=1 ;;
     *) echo "usage: host/build.sh [--release]" >&2; exit 2 ;;
@@ -81,18 +81,17 @@ find "$B/classes" -name '*.class' > "$B/classes.txt"
 d8 --release --min-api "$API" --lib "$PLATFORM" --output "$B/dex" @"$B/classes.txt"
 
 # Debug keeps the defaults and --debug-mode (the manifest no longer says debuggable).
-# Release: version from the latest v* tag (code = MAJOR*10000+MINOR*100+PATCH), else the defaults.
+# Release: version from the latest v* tag or OLADASH_VERSION (code = MAJOR*10000+MINOR*100+PATCH); required.
 VCODE=1 VNAME=0.1.0 DEBUGMODE=--debug-mode
 if [ "$RELEASE" = 1 ]; then
     DEBUGMODE=
     # OLADASH_VERSION (e.g. v1.2.3) stands in for the tag where .git is not synced (build host).
-    if DESC=${OLADASH_VERSION:-$(git -C "$ROOT" describe --tags --match 'v[0-9]*' 2>/dev/null)}; [ -n "$DESC" ]; then
-        TAG=${DESC%%-*}; VNAME=${DESC#v}
-        IFS=. read -r MA MI PA <<<"${TAG#v}"
-        PA=${PA:-0}
-        [[ "$MA$MI$PA" =~ ^[0-9]+$ && $MI -lt 100 && $PA -lt 100 ]] || { echo "release build: bad version $DESC" >&2; exit 1; }
-        VCODE=$((MA * 10000 + MI * 100 + PA))
-    fi
+    DESC=${OLADASH_VERSION:-$(git -C "$ROOT" describe --tags --match 'v[0-9]*' 2>/dev/null || :)}
+    [ -n "$DESC" ] || { echo "release build: no v* tag; set OLADASH_VERSION" >&2; exit 1; }
+    TAG=${DESC%%-*}; VNAME=${DESC#v}
+    [[ $TAG =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] && (( 10#${BASH_REMATCH[2]} < 100 && 10#${BASH_REMATCH[3]} < 100 )) \
+        || { echo "release build: bad version $DESC" >&2; exit 1; }
+    VCODE=$((10#${BASH_REMATCH[1]} * 10000 + 10#${BASH_REMATCH[2]} * 100 + 10#${BASH_REMATCH[3]}))
 fi
 
 # 4. Manifest + assets -> base APK, then add dex and the native library.
@@ -115,9 +114,8 @@ if [ "$RELEASE" = 1 ]; then
     OUT="$HERE/out/ola-dash-release.apk"
     apksigner sign --ks "$OLADASH_KEYSTORE" --ks-pass env:OLADASH_KS_PASS --key-pass env:OLADASH_KEY_PASS \
         --ks-key-alias "$OLADASH_KEY_ALIAS" --out "$OUT" "$B/aligned.apk"
-    if aapt2 dump badging "$OUT" | grep -q application-debuggable; then
-        rm -f "$OUT"; echo "release APK is debuggable; refusing" >&2; exit 1
-    fi
+    BADGING=$(aapt2 dump badging "$OUT")   # set -e aborts if aapt2 fails (no pipe: grep -q would SIGPIPE it)
+    case $BADGING in *application-debuggable*) rm -f "$OUT"; echo "release APK is debuggable; refusing" >&2; exit 1;; esac
     apksigner verify --print-certs "$OUT" | tee "$B/certs.txt"
     echo "signer SHA-256: $(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$B/certs.txt")"
 else

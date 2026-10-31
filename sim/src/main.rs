@@ -455,7 +455,7 @@ impl Feeder {
         }
         self.set(inst, "Display", "night", Value::Bool(self.night));
         self.set(inst, "HostState", "night", Value::Bool(self.night));
-        self.set(inst, "HostState", "date-text", Value::String("Fri 31 Oct".into()));
+        self.set(inst, "HostState", "date-text", Value::String(theme_root::date_text(20251031).into()));
         let _ = inst.set_global_callback("Plugins", "widget-clicked", |args| {
             println!("plugins: widget-clicked {:?}", args.first());
             Value::Void

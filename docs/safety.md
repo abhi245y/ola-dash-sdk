@@ -27,7 +27,7 @@ This project changes what a rider sees on a vehicle. The rules below apply to th
 - Whether the overlay is shown. It is always drawn, above the theme.
 - Telltale and alert colours. Semantic colours (green indicators and ready, blue high beam, amber side stand, red fault and alert frames) are fixed by the host. Lit telltales are solid glyphs in those colours; unlit ones are 40 % outlines of the strip foreground, so every telltale is always visible. The strip is dark in day and night (48 px top or bottom, 72 px left or right) and carries warning lights only: the clock and battery show on the lock screen, not in the strip.
 - Minimum sizes: telltale icons at least 28 px, alert text at least 32 px.
-- Contrast. A background and foreground pair below 4.5:1 is replaced by the host default.
+- Contrast. A strip background and foreground pair below 4.5:1, or a background on which a lit telltale colour is below 3:1, is replaced by the host default.
 - Icons. Themes cannot supply their own telltale icons.
 - What the overlay shows. It reads host-owned copies (`HostState.left-indicator`, `locked`, `clock-text`, `battery-pct` and the rest of the telltale values), not `Vehicle.*`. A theme can write `Vehicle.*`, and that changes only the theme's own view.
 - The font of host text. The overlay, alert cards and lock screen use the host's font family `OlaDash Host`. `sim --check` refuses a theme that ships a font file carrying that name, so a theme cannot swap in blank or look-alike glyphs.

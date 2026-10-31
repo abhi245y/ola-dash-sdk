@@ -34,6 +34,14 @@ const ALERT_POSITIONS: [&str; 3] = ["center", "upper", "lower"];
 /// strip is dark in both modes. Also the fallback when a theme fails the contrast rule.
 const STRIP_BG: [Color; 2] = [Color::from_rgb_u8(0x0f, 0x2a, 0x2a), Color::from_rgb_u8(0x07, 0x14, 0x14)];
 const STRIP_FG: Color = Color::from_rgb_u8(0xef, 0xe6, 0xd6);
+/// The lit telltale colours (OverlayTokens ind-color, beam-color, lock-color, amber, red). A strip
+/// background must show each at 3:1 or more, because the glyphs have no lamp window of their own.
+const STATUS: [Color; 5] = [
+    Color::from_rgb_u8(0x5c, 0xff, 0x9d), Color::from_rgb_u8(0x3d, 0xa5, 0xff), Color::from_rgb_u8(0xd0, 0xd0, 0xd0),
+    Color::from_rgb_u8(0xff, 0xb0, 0x20), Color::from_rgb_u8(0xff, 0x3b, 0x30),
+];
+/// WCAG 2.x minimum for non-text contrast.
+const MIN_GLYPH: f64 = 3.0;
 /// WCAG 2.x minimum contrast for text.
 const MIN_CONTRAST: f64 = 4.5;
 /// The tokens' `ink`: text on the accent fill.
@@ -257,25 +265,17 @@ pub fn apply(ui: &ComponentInstance, log: fn(&str)) {
         .filter(|n| ALERT_POSITIONS.contains(&n.as_str()))
         .unwrap_or_else(|| "center".into());
     let order = telltale_order(get("theme-telltale-order"), &mut warn);
-    let (mut bg, mut fg, mut radius, mut labels) = (STRIP_BG[night as usize], STRIP_FG, 8.0_f32, false);
+    let (mut bg, mut fg, mut labels) = (STRIP_BG[night as usize], STRIP_FG, false);
     if let Some(Value::Struct(s)) = get("theme-overlay-style") {
         let brush = |f: &str| match s.get_field(f) {
             Some(Value::Brush(Brush::SolidColor(c))) => Some(*c),
             _ => None,
         };
         if let (Some(b), Some(f)) = (brush("background"), brush("foreground")) {
-            let ratio = contrast(b, f);
-            if ratio >= MIN_CONTRAST {
-                bg = b;
-                fg = f;
-            } else {
-                warn(format!(
-                    "overlay-style rejected: contrast {ratio:.2} < {MIN_CONTRAST} between background and foreground; using host colours"
-                ));
+            match strip_rejection(b, f) {
+                None => (bg, fg) = (b, f),
+                Some(why) => warn(format!("overlay-style rejected: {why}; using host colours")),
             }
-        }
-        if let Some(Value::Number(r)) = s.get_field("corner-radius") {
-            radius = (*r as f32).max(0.0);
         }
         if let Some(Value::Bool(b)) = s.get_field("show-labels") {
             labels = *b;
@@ -291,7 +291,6 @@ pub fn apply(ui: &ComponentInstance, log: fn(&str)) {
     set("alert-position", Value::EnumerationValue("AlertPosition".into(), alert));
     set("background", Value::Brush(Brush::SolidColor(bg)));
     set("foreground", Value::Brush(Brush::SolidColor(fg)));
-    set("corner-radius", Value::Number(radius as f64));
     set("show-labels", Value::Bool(labels));
     let model: Vec<Value> = order
         .into_iter()
@@ -299,6 +298,31 @@ pub fn apply(ui: &ComponentInstance, log: fn(&str)) {
         .collect();
     set("telltale-order", Value::Model(ModelRc::new(VecModel::from(model))));
     apply_lock(ui, get("theme-lock-style").as_ref(), night, log);
+}
+
+/// Lock-screen date from `yyyymmdd`, as "Fri 31 Oct". Empty for an impossible date.
+pub fn date_text(ymd: u32) -> String {
+    let (y, m, d) = (ymd / 10000, ymd / 100 % 100, ymd % 100);
+    if !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+        return String::new();
+    }
+    // Sakamoto's weekday, 0 = Sunday.
+    let y = if m < 3 { y - 1 } else { y };
+    let dow = (y + y / 4 - y / 100 + y / 400 + [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4][m as usize - 1] + d) % 7;
+    let day = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dow as usize];
+    let month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][m as usize - 1];
+    format!("{day} {d} {month}")
+}
+
+/// Why a theme's strip colours are refused, or `None`: foreground on background reaches 4.5:1 and
+/// every lit telltale colour reaches 3:1 on the background.
+fn strip_rejection(bg: Color, fg: Color) -> Option<String> {
+    let ratio = contrast(bg, fg);
+    if ratio < MIN_CONTRAST {
+        return Some(format!("contrast {ratio:.2} < {MIN_CONTRAST} between background and foreground"));
+    }
+    let glyph = STATUS.iter().map(|c| contrast(bg, *c)).fold(f64::MAX, f64::min);
+    (glyph < MIN_GLYPH).then(|| format!("a telltale colour has contrast {glyph:.2} < {MIN_GLYPH} on the background"))
 }
 
 /// Lock-screen style: colours and two shape choices from the theme's `lock-style`, checked
@@ -403,7 +427,7 @@ pub fn resolve_lock(raw: Option<&RawLock>, host: &Lock, warn: &mut dyn FnMut(Str
     // The host ink when it reads on the accent, else the better of the two screen colours.
     let on_accent = |a: Color| {
         let best = if contrast(bg, a) > contrast(fg, a) { bg } else { fg };
-        if contrast(INK, a) >= MIN_CONTRAST || contrast(INK, a) >= contrast(best, a) { INK } else { best }
+        if contrast(INK, a) >= MIN_CONTRAST { INK } else { best }
     };
     let accent = if opaque(r.accent) && contrast(on_accent(r.accent), r.accent) >= MIN_CONTRAST {
         r.accent
@@ -430,8 +454,11 @@ pub fn resolve_lock(raw: Option<&RawLock>, host: &Lock, warn: &mut dyn FnMut(Str
             "sans"
         }
     };
-    // Error copy stays readable on any background: the host's when it passes, else the foreground.
-    let error = if contrast(host.error, bg) >= MIN_CONTRAST { host.error } else { fg };
+    // Error copy stays readable on any background: this mode's host colour when it passes, else the other mode's, else the foreground.
+    let error = [host.error, HOST_LOCK_DAY.error, HOST_LOCK_NIGHT.error]
+        .into_iter()
+        .find(|c| contrast(*c, bg) >= MIN_CONTRAST)
+        .unwrap_or(fg);
     Lock { bg, fg, muted, accent, on_accent: on_accent(accent), key_bg, key_border: r.key_border, error, shape, digits }
 }
 
@@ -576,10 +603,38 @@ mod tests {
     }
 
     #[test]
-    fn strip_defaults_are_dark_and_readable_in_both_modes() {
+    fn strip_defaults_show_every_telltale_in_both_modes() {
         for bg in STRIP_BG {
-            assert!(contrast(bg, STRIP_FG) >= MIN_CONTRAST);
+            assert_eq!(strip_rejection(bg, STRIP_FG), None);
+            for c in STATUS {
+                assert!(contrast(bg, c) >= MIN_GLYPH);
+            }
         }
+        // The status colours here are the ones the overlay draws.
+        let slint = include_str!("../ui/overlay.slint");
+        for c in STATUS {
+            let hex = format!("#{:02x}{:02x}{:02x};", c.red(), c.green(), c.blue());
+            assert!(slint.contains(&hex), "{hex}");
+        }
+    }
+
+    #[test]
+    fn strip_rejects_a_background_that_hides_a_lit_telltale() {
+        // Red on red passes 4.5:1 with black text but the fault light would vanish.
+        let (red, black) = (Color::from_rgb_u8(0xff, 0x3b, 0x30), Color::from_rgb_u8(0, 0, 0));
+        assert!(contrast(red, black) >= MIN_CONTRAST);
+        assert!(strip_rejection(red, black).unwrap().contains("telltale"));
+        assert!(strip_rejection(black, black).unwrap().contains("background and foreground"));
+    }
+
+    #[test]
+    fn date_text_names_the_weekday() {
+        assert_eq!(date_text(20251031), "Fri 31 Oct");
+        assert_eq!(date_text(20261031), "Sat 31 Oct");
+        assert_eq!(date_text(20280229), "Tue 29 Feb");
+        assert_eq!(date_text(20000101), "Sat 1 Jan");
+        assert_eq!(date_text(20251301), "");
+        assert_eq!(date_text(0), "");
     }
 
     #[test]

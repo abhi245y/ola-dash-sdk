@@ -45,7 +45,7 @@ component Key inherits Rectangle {
     border-width: root.grid || root.quiet || root.strong ? 0px : 1px;
     border-color: LockConfig.style.key-border;
     // Disabled keys fade toward the screen; pressed keys lean toward the text colour.
-    background: !root.enabled ? root.fill.mix(LockConfig.style.background, 0.5)
+    background: !root.enabled ? (root.quiet && !root.grid ? transparent : root.fill.mix(LockConfig.style.background, 0.5))
         : touch.pressed ? root.fill.mix(root.ink, 0.15)
         : root.fill;
     accessible-role: button;
@@ -75,26 +75,6 @@ component Key inherits Rectangle {
     }
 }
 
-// Battery glyph, 40 x 20: outline, nub and a fill for the charge.
-component BatteryGlyph inherits Rectangle {
-    in property <int> pct;
-    width: 40px;
-    height: 20px;
-    Rectangle {
-        width: 36px;
-        border-width: 2px;
-        border-color: LockConfig.style.foreground;
-        border-radius: 4px;
-        Rectangle {
-            x: 4px; y: 4px;
-            width: max(0px, (parent.width - 8px) * root.pct / 100);
-            height: parent.height - 8px;
-            background: LockConfig.style.accent;
-        }
-    }
-    Rectangle { x: 37px; y: 6px; width: 3px; height: 8px; background: LockConfig.style.foreground; }
-}
-
 export component UnlockScreen inherits Rectangle {
     in property <int> phase;
     in property <int> pin-length;
@@ -120,16 +100,18 @@ export component UnlockScreen inherits Rectangle {
     // column is the 444 px before it. HostOverlay draws the alert footer in the left column.
     property <length> kx: root.width - 104px - 596px;
     property <length> gap: root.grid ? 1px : 16px;
-    property <string> hint: root.phase == 0 ? (root.error == 2 ? "Cannot reach the passcode service. Retry the connection." : "Waiting for vehicle status.")
-        : root.phase == 3 ? "Waiting for the scooter to confirm unlock."
-        : root.phase == 2 ? (root.error == 2 ? "Verification is taking longer than expected. Please wait." : "Please wait.")
-        : root.test-mode ? "Exit test mode before unlocking."
-        : root.attempts == 0 ? (root.cooldown > 0 ? "Try again in " + root.cooldown + " seconds." : "Waiting for passcode access to reset.")
-        : "Use your existing scooter passcode.";
-    property <string> status: root.error == 1 ? "Incorrect passcode. " + root.attempts + " attempts remaining."
-        : root.error == 2 ? "Passcode service unavailable. Retry the connection."
-        : root.error == 3 ? "Unlock was not confirmed. Check the scooter, then retry."
-        : root.attempts > 0 ? root.attempts + " attempts remaining" : "";
+    property <string> left: root.attempts + (root.attempts == 1 ? " attempt" : " attempts") + " remaining";
+    // The line under the caption: empty in the normal state until attempts are known.
+    property <string> line: root.phase == 0 ? (root.error == 2 ? "Cannot reach the passcode service, retry the connection" : "Waiting for vehicle status")
+        : root.phase == 3 ? "Waiting for the scooter to confirm unlock"
+        : root.phase == 2 ? (root.error == 2 ? "Verification is taking longer than expected, please wait" : "Please wait")
+        : root.test-mode ? "Exit test mode before unlocking"
+        : root.attempts == 0 ? ""
+        : root.error == 1 ? "Incorrect passcode" + (root.attempts > 0 ? ", " + root.left : "")
+        : root.error == 2 ? "Passcode service unavailable, retry the connection"
+        : root.error == 3 ? "Unlock was not confirmed, check the scooter and retry"
+        : root.attempts > 0 ? root.left : "";
+    property <bool> failed: root.phase == 1 && root.error != 0 && root.attempts != 0 && !root.test-mode;
 
     background: LockConfig.style.background;
 
@@ -174,12 +156,8 @@ export component UnlockScreen inherits Rectangle {
         font-size: 22px;
         vertical-alignment: center;
     }
-    BatteryGlyph {
-        x: 104px; y: 274px;
-        pct: root.pct;
-    }
     if !root.segment : HostText {
-        x: 156px; y: 256px; width: 240px; height: 56px;
+        x: 104px; y: 256px; width: 240px; height: 56px;
         text: root.battery-pct < 0 ? "--" : root.battery-pct + "%";
         color: LockConfig.style.foreground;
         font-size: 44px;
@@ -187,7 +165,7 @@ export component UnlockScreen inherits Rectangle {
         vertical-alignment: center;
     }
     if root.segment : Rectangle {
-        x: 156px; y: 264px; width: 240px; height: 40px;
+        x: 104px; y: 264px; width: 240px; height: 40px;
         background: transparent;
         LockSegDigit {
             x: 0px; width: 22px; height: 40px; ink: LockConfig.style.foreground;
@@ -217,8 +195,8 @@ export component UnlockScreen inherits Rectangle {
         text: root.phase == 0 ? (root.error == 2 ? "Connection unavailable" : "Connecting")
             : root.phase == 3 ? "Unlocking"
             : root.phase == 2 ? "Checking passcode"
-            : root.attempts == 0 ? "Try again shortly"
-            : "Enter passcode";
+            : root.attempts == 0 ? (root.cooldown > 0 ? "Try again in " + root.cooldown + " s" : "Try again shortly")
+            : "Enter your scooter passcode";
         color: LockConfig.style.foreground;
         font-size: 40px;
         font-weight: 800;
@@ -226,14 +204,10 @@ export component UnlockScreen inherits Rectangle {
         vertical-alignment: center;
     }
 
-    // One line of copy: the error (with the cooldown while attempts are out), else the hint
-    // and the attempts left.
     HostText {
         x: root.kx; y: 112px; width: 596px; height: 56px;
-        text: root.phase == 1 && root.error != 0 ? (root.attempts == 0 ? root.status + "\n" + root.hint : root.status)
-            : root.phase == 1 && root.status != "" ? root.hint + "\n" + root.status
-            : root.hint;
-        color: root.phase == 1 && root.error != 0 ? LockConfig.error : LockConfig.style.muted;
+        text: root.line;
+        color: root.failed ? LockConfig.error : LockConfig.style.muted;
         font-size: 22px;
         wrap: word-wrap;
         overflow: elide;

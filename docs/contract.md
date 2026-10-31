@@ -199,12 +199,12 @@ The host normalises the theme's list: unknown and duplicate entries are ignored,
 
 | Field | Type | Notes |
 |---|---|---|
-| `background` | color | Strip background. Must contrast with `foreground` at 4.5:1 or more. |
+| `background` | color | Strip background. Must contrast with `foreground` at 4.5:1 or more, and every lit telltale colour (`#5cff9d`, `#3da5ff`, `#d0d0d0`, `#ffb020`, `#ff3b30`) must reach 3:1 on it. |
 | `foreground` | color | Label colour |
 | `corner-radius` | length | Parsed and kept for v6 themes. The host draws solid glyphs with no rounded window, so it has no visible effect |
 | `show-labels` | bool | Labels under or beside each telltale |
 
-If `background` and `foreground` fail the 4.5:1 contrast rule (WCAG 2.x), the host uses its own colours and logs the reason under `OlaDash` (`sim` prints it to stderr). Telltale icon colours are host-fixed and do not come from the theme.
+If `background` and `foreground` fail the 4.5:1 contrast rule (WCAG 2.x) or a telltale colour fails 3:1, the host uses its own colours and logs the reason under `OlaDash` (`sim` prints it to stderr). Telltale icon colours are host-fixed and do not come from the theme.
 
 ## Lock screen style (v6)
 

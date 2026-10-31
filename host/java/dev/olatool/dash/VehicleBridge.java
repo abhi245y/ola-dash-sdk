@@ -63,7 +63,7 @@ final class VehicleBridge {
 
     static final int SPEED_KMH = 1, BATTERY_PCT = 2, RANGE_KM = 3, MODE = 4, CHARGING = 5,
             ODO_KM = 6, TRIP_KM = 7, LEFT_IND = 8, RIGHT_IND = 9, HIGH_BEAM = 10, HEADLIGHT = 11,
-            LOCKED = 12, READY = 13, HYPER_AVAILABLE = 14, ALERT_CODE = 20, SIDE_STAND = 21, FAULT = 22, CLOCK_HHMM = 30,
+            LOCKED = 12, READY = 13, HYPER_AVAILABLE = 14, ALERT_CODE = 20, SIDE_STAND = 21, FAULT = 22, DATE_YMD = 23, CLOCK_HHMM = 30,
             TEST_MODE = 31, AUTH_PHASE = 32, PIN_LENGTH = 33, AUTH_ATTEMPTS = 34,
             AUTH_ERROR = 35, AUTH_COOLDOWN = 36, AUTH_AVAILABLE = 37, DATA_STALE = 38, PARKED = 39;
     // Contract v5. Ids match host/src/lib.rs. Unreported values are -1.
@@ -195,6 +195,11 @@ final class VehicleBridge {
 
     static void setClock(int hour, int minute) {
         nativeSet(CLOCK_HHMM, hour * 100 + minute);
+    }
+
+    /** month is 1-12. Host-only like the clock: never replayed. */
+    static void setDate(int year, int month, int day) {
+        nativeSet(DATE_YMD, year * 10000 + month * 100 + day);
     }
 
     /**

@@ -46,8 +46,6 @@ export global OverlayTokens {
     out property <length> card-h: 240px;
     out property <length> card-radius: 20px;
     out property <length> card-frame: 4px;
-    out property <length> alert-title-size: 32px;
-    out property <length> alert-hint-size: 32px;
 
     // motion
     // blink period for indicators (host-fixed sync); pulse period for critical frames
@@ -59,9 +57,8 @@ export global OverlayTokens {
 export global OverlayConfig {
     in property <OverlayPlacement> placement: OverlayPlacement.top;
     in property <AlertPosition> alert-position: AlertPosition.center;
-    in property <color> background: #0a0a0a;
-    in property <color> foreground: #f4f6fa;
-    in property <length> corner-radius: 8px;
+    in property <color> background: #0f2a2a;
+    in property <color> foreground: #efe6d6;
     in property <bool> show-labels: false;
     // Always 9 entries, every telltale once (the host normalises the theme's list).
     in property <[Telltale]> telltale-order: [
@@ -262,20 +259,20 @@ component AlertCard inherits Rectangle {
         HostText {
             text: root.title;
             color: OverlayTokens.card-text;
-            font-size: max(OverlayTokens.alert-text-min, OverlayTokens.alert-title-size);
+            font-size: max(OverlayTokens.alert-text-min, 32px);
             font-weight: 800;
             overflow: elide;
         }
         HostText {
             text: root.hint;
             color: OverlayTokens.card-hint;
-            font-size: max(OverlayTokens.alert-text-min, OverlayTokens.alert-hint-size);
+            font-size: max(OverlayTokens.alert-text-min, 32px);
             overflow: elide;
         }
         if root.dismissable : HostText {
             text: "Tap to dismiss";
             color: OverlayTokens.card-hint;
-            font-size: max(OverlayTokens.alert-text-min, OverlayTokens.alert-hint-size);
+            font-size: max(OverlayTokens.alert-text-min, 32px);
             font-weight: 700;
         }
     }
@@ -291,11 +288,11 @@ export component HostOverlay inherits Rectangle {
         : HostState.alert-code == 3 ? "SIDE STAND DOWN"
         : HostState.alert-code == 4 ? "STEERING LOCK ALERT"
         : HostState.alert-code == 5 ? "VEHICLE FAULT" : "LOW BATTERY";
-    property <string> alert-hint: HostState.alert-code == 1 ? "Fall detected — check rider and scooter"
-        : HostState.alert-code == 2 ? "Tow / theft alert"
-        : HostState.alert-code == 3 ? "Raise the side stand to ride"
-        : HostState.alert-code == 4 ? "Steering lock — unlock steering before riding"
-        : HostState.alert-code == 5 ? "Vehicle fault — stop when safe" : "Battery low — charge soon";
+    property <string> alert-hint: HostState.alert-code == 1 ? "Check rider and scooter"
+        : HostState.alert-code == 2 ? "Scooter moved while locked"
+        : HostState.alert-code == 3 ? "Raise the stand to ride"
+        : HostState.alert-code == 4 ? "Unlock the steering before riding"
+        : HostState.alert-code == 5 ? "Stop when safe" : "Charge soon";
     // Side stand and low battery are amber; the rest are red.
     property <bool> alert-amber: HostState.alert-code == 3 || HostState.alert-code == 6;
     property <Telltale> alert-icon: HostState.alert-code == 3 ? Telltale.side-stand
@@ -353,7 +350,7 @@ export component HostOverlay inherits Rectangle {
             height: parent.height;
             text: root.alert-title;
             color: OverlayTokens.card-text;
-            font-size: max(OverlayTokens.alert-text-min, OverlayTokens.alert-title-size);
+            font-size: max(OverlayTokens.alert-text-min, 32px);
             font-weight: 800;
             wrap: word-wrap;
             horizontal-alignment: center;

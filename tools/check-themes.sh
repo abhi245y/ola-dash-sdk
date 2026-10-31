@@ -87,6 +87,14 @@ for state in park ride; do
         status=1
     fi
 done
+# Display choice: the default Off option uses the checked lock accent.
+got=$("$SIM" "$ROOT/themes/minimal" --contract "$ROOT/contract" --state park --screen settings --pane display --at 13 --screenshot "$png" --pixel 736,192 | tail -n 1) || got=error
+if [ "$got" = "#ffc94a" ]; then
+    echo "ok: Display Off option selected (pixel 736,192 is $got)"
+else
+    echo "error: Display Off option not selected (pixel 736,192 is $got, want #ffc94a)" >&2
+    status=1
+fi
 # Hub end cells stay clear of all nine telltales in every strip placement.
 for probe in "top 1220,24" "bottom 1220,744" "left 8,736" "right 1216,736"; do
     read -r placement xy <<<"$probe"

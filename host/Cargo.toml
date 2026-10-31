@@ -17,7 +17,7 @@ jni = "0.22"
 log = "0.4"
 android_logger = "0.15"
 spin_on = "0.1"
-# Already in the lock file (slint dependency); parses theme.json only.
+# Already in the lock file (slint dependency); parses themes and host settings.
 serde_json = "1"
 
 [profile.release]

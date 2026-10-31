@@ -2,12 +2,23 @@ import { Vehicle } from "vehicle.slint";
 import { HostState } from "overlay.slint";
 import { LockConfig } from "unlock.slint";
 import { HostText } from "hosttext.slint";
-import { RailRow, CloseButton, Pane } from "kit.slint";
+import { RailRow, CloseButton, Pane, Choice } from "kit.slint";
 
 // Interactive host screen: parked only, enforced by Host in theme_root.rs.
 export component SettingsScreen inherits Rectangle {
-    callback close();
-    property <string> pane: "About";
+    callback closed();
+    callback set-setting(string, string);
+    in property <bool> clock24: true;
+    in-out property <string> pane: "Display";
+    property <[string]> panes: ["Display", "About"];
+    in-out property <int> cursor: 0;
+    public function move(delta: int) {
+        root.cursor = max(0, min(root.panes.length - 1, root.cursor + delta));
+    }
+    public function select() {
+        root.pane = root.panes[root.cursor];
+    }
+    public function close() { root.closed(); }
     background: LockConfig.style.background;
     TouchArea { }
 
@@ -17,16 +28,56 @@ export component SettingsScreen inherits Rectangle {
         border-width: 1px;
         border-color: LockConfig.style.key-border;
         background: LockConfig.style.key-background;
-        for entry[i] in ["About"] : RailRow {
+        for entry[i] in root.panes : RailRow {
             x: 16px; y: 16px + i * 88px; width: parent.width - 32px;
             label: entry;
             selected: root.pane == entry;
-            pressed => { root.pane = entry; }
+            pressed => { root.cursor = i; root.select(); }
         }
     }
     CloseButton {
         x: root.width - 168px; y: 80px;
         pressed => { root.close(); }
+    }
+    if root.pane == "Display" : Pane {
+        x: 432px; y: 88px; width: root.width - 640px; height: root.height - 248px;
+        title: "Display";
+        VerticalLayout {
+            alignment: start;
+            spacing: 32px;
+            HorizontalLayout {
+                spacing: 24px;
+                HostText {
+                    text: "Night mode";
+                    color: LockConfig.style.foreground;
+                    font-size: 26px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+                Choice {
+                    width: 360px;
+                    options: ["Off", "On"];
+                    selected: HostState.night ? 1 : 0;
+                    chosen(index) => { root.set-setting("night", index == 0 ? "off" : "on"); }
+                }
+            }
+            HorizontalLayout {
+                spacing: 24px;
+                HostText {
+                    text: "Clock";
+                    color: LockConfig.style.foreground;
+                    font-size: 26px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+                Choice {
+                    width: 360px;
+                    options: ["24-hour", "12-hour"];
+                    selected: root.clock24 ? 0 : 1;
+                    chosen(index) => { root.set-setting("clock24", index == 0 ? "true" : "false"); }
+                }
+            }
+        }
     }
     if root.pane == "About" : Pane {
         x: 432px; y: 88px; width: root.width - 640px; height: root.height - 248px;

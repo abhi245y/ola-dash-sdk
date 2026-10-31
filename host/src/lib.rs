@@ -6,7 +6,7 @@ use std::cell::RefCell;
 use std::ffi::c_void;
 use std::mem::ManuallyDrop;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Mutex;
 use std::time::Instant;
 
@@ -16,6 +16,7 @@ use jni::{jni_sig, jni_str, EnvUnowned, JavaVM};
 use slint::{ModelRc, VecModel};
 use slint_interpreter::{Compiler, ComponentHandle, ComponentInstance, Value};
 
+mod settings;
 mod theme_root;
 
 // Field ids. Must match VehicleBridge.java.
@@ -78,6 +79,8 @@ const HOST_CONTRACT: i64 = 7;
 /// Latest value per field, coalesced until the UI thread applies it.
 static PENDING: Mutex<[Option<f64>; SLOTS]> = Mutex::new([None; SLOTS]);
 static SCHEDULED: AtomicBool = AtomicBool::new(false);
+/// Last raw clock value, or u32::MAX until the first clock update arrives.
+static LAST_HHMM: AtomicU32 = AtomicU32::new(u32::MAX);
 /// Any touch or key input since the keep-alive last asked (stock HMI: mTouchReceived).
 static TOUCHED: AtomicBool = AtomicBool::new(false);
 /// Latest plugin snapshot from PluginHost.java (JSON), applied on the UI thread.
@@ -242,9 +245,9 @@ fn apply(ui: &ComponentInstance, id: usize, v: f64) {
         READY => ("Vehicle", "ready-to-ride", b),
         HYPER_AVAILABLE => ("Vehicle", "hyper-available", b),
         CLOCK_HHMM => {
-            let hhmm = v as u32;
-            let text = format!("{:02}:{:02}", hhmm / 100, hhmm % 100);
-            ("Vehicle", "clock-text", Value::String(text.into()))
+            LAST_HHMM.store(v as u32, Ordering::Relaxed);
+            refresh_clock(ui);
+            return;
         }
         DATE_YMD => ("HostState", "date-text", Value::String(theme_root::date_text(v as u32).into())),
         ALERT_CODE => ("HostState", "alert-code", n),
@@ -287,6 +290,18 @@ fn apply(ui: &ComponentInstance, id: usize, v: f64) {
     }
     if let Err(e) = ui.set_global_property(global, prop, val) {
         log::warn!("set {global}.{prop} failed: {e:?}");
+    }
+}
+
+fn refresh_clock(ui: &ComponentInstance) {
+    let hhmm = LAST_HHMM.load(Ordering::Relaxed);
+    if hhmm == u32::MAX { return; }
+    let clock24 = !matches!(ui.get_property("clock24"), Ok(Value::Bool(false)));
+    let text = settings::clock_text(hhmm, clock24);
+    for global in ["HostState", "Vehicle"] {
+        if let Err(e) = ui.set_global_property(global, "clock-text", Value::String(text.clone().into())) {
+            log::warn!("set {global}.clock-text failed: {e:?}");
+        }
     }
 }
 
@@ -361,7 +376,6 @@ fn build_root(files: &Path, theme: &str) -> Result<ComponentInstance, String> {
     let t = Instant::now();
     let ui = def.create().map_err(|e| e.to_string())?;
     timing("create", t);
-    // HostState.night stays day until E3.S1 sets it together with Display.night.
     theme_root::bind(&ui, log_warn)?;
     Ok(ui)
 }
@@ -481,7 +495,9 @@ fn wire(ui: &ComponentInstance, app: &AndroidApp) -> Result<(), String> {
 
 fn run(app: &AndroidApp, start: Instant) -> Result<(), String> {
     let files = app.internal_data_path().ok_or("no internal data path")?;
+    let settings = settings::Settings::load(Some(&files.join("settings.json")), log_warn);
     let ui = load_ui(&files)?;
+    settings::bind(&ui, settings, log_warn, refresh_clock)?;
     ui.set_global_property("HostState", "version-text", Value::String(env!("CARGO_PKG_VERSION").into()))
         .map_err(|e| format!("HostState.version-text: {e:?}"))?;
     wire(&ui, app)?;

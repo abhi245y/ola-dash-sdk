@@ -78,6 +78,9 @@ import { Vehicle, Display, Media, Actions, Battery, Ride, Navigation, Plugins, O
 export { Dash, Vehicle, Display, Media, Actions, Battery, Ride, Navigation, Plugins, HostState, OverlayConfig, LockConfig }
 export component Host inherits Window {
     in-out property <string> screen: "dash";
+    in-out property <string> settings-pane: "Display";
+    in-out property <bool> clock24: true;
+    callback set-setting(string, string);
     out property <bool> host-screens-allowed: HostState.parked && HostState.alert-code == 0
         && HostState.auth-phase >= 4 && !HostState.test-mode;
     changed host-screens-allowed => {
@@ -113,7 +116,10 @@ export component Host inherits Window {
     }
     if root.screen == "settings" && root.host-screens-allowed : SettingsScreen {
         width: parent.width; height: parent.height;
-        close => { root.screen = "dash"; }
+        pane <=> root.settings-pane;
+        clock24: root.clock24;
+        set-setting(key, value) => { root.set-setting(key, value); }
+        closed => { root.screen = "dash"; }
     }
     HostOverlay {
         width: parent.width; height: parent.height;

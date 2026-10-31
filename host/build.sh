@@ -112,10 +112,12 @@ PY
 zipalign -p -f 4 "$B/unsigned.apk" "$B/aligned.apk"
 if [ "$RELEASE" = 1 ]; then
     OUT="$HERE/out/ola-dash-release.apk"
+    # Checked before signing, so no signed debuggable APK ever exists. set -e aborts if aapt2
+    # fails (no pipe: grep -q would SIGPIPE it).
+    BADGING=$(aapt2 dump badging "$B/aligned.apk")
+    case $BADGING in *application-debuggable*) echo "release APK is debuggable; refusing" >&2; exit 1;; esac
     apksigner sign --ks "$OLADASH_KEYSTORE" --ks-pass env:OLADASH_KS_PASS --key-pass env:OLADASH_KEY_PASS \
         --ks-key-alias "$OLADASH_KEY_ALIAS" --out "$OUT" "$B/aligned.apk"
-    BADGING=$(aapt2 dump badging "$OUT")   # set -e aborts if aapt2 fails (no pipe: grep -q would SIGPIPE it)
-    case $BADGING in *application-debuggable*) rm -f "$OUT"; echo "release APK is debuggable; refusing" >&2; exit 1;; esac
     apksigner verify --print-certs "$OUT" | tee "$B/certs.txt"
     echo "signer SHA-256: $(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$B/certs.txt")"
 else

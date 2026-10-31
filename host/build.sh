@@ -97,7 +97,7 @@ fi
 
 # 4. Manifest + assets -> base APK, then add dex and the native library.
 aapt2 link -I "$PLATFORM" --manifest "$HERE/AndroidManifest.xml" -A "$B/assets" \
-    --min-sdk-version "$API" --target-sdk-version 34 --version-code "$VCODE" --version-name "$VNAME" $DEBUGMODE \
+    --min-sdk-version "$API" --target-sdk-version 34 --version-code "$VCODE" --version-name "$VNAME" --replace-version $DEBUGMODE \
     -o "$B/base.apk"
 python3 - "$B/base.apk" "$B/dex/classes.dex" "$B/liboladash.so" "$B/unsigned.apk" <<'PY'
 import sys, zipfile

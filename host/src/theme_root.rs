@@ -73,9 +73,28 @@ const HOST_LOCK_NIGHT: Lock = Lock {
 const ROOT: &str = r#"import { Dash } from "{THEME}";
 import { HostOverlay, HostState, OverlayConfig } from "overlay.slint";
 import { LockConfig } from "unlock.slint";
+import { SettingsScreen } from "settings.slint";
 import { Vehicle, Display, Media, Actions, Battery, Ride, Navigation, Plugins, OverlayPlacement, OverlayStyle, Telltale, AlertPosition, LockStyle } from "vehicle.slint";
 export { Dash, Vehicle, Display, Media, Actions, Battery, Ride, Navigation, Plugins, HostState, OverlayConfig, LockConfig }
 export component Host inherits Window {
+    in-out property <string> screen: "dash";
+    out property <bool> host-screens-allowed: HostState.parked && HostState.alert-code == 0
+        && HostState.auth-phase >= 4 && !HostState.test-mode;
+    changed host-screens-allowed => {
+        if !root.host-screens-allowed { root.screen = "dash"; }
+    }
+    changed screen => {
+        if !root.host-screens-allowed || (root.screen != "dash" && root.screen != "settings") {
+            root.screen = "dash";
+        }
+    }
+    public function open-settings() -> bool {
+        if root.host-screens-allowed {
+            root.screen = "settings";
+            return true;
+        }
+        return false;
+    }
     callback unlock-key(int);
     // Fired when a mirrored theme setting changes; the host re-applies OverlayConfig.
     callback theme-overlay-changed();
@@ -92,9 +111,14 @@ export component Host inherits Window {
         width: parent.width; height: parent.height;
         dash := Dash { width: parent.width; height: parent.height; }
     }
+    if root.screen == "settings" && root.host-screens-allowed : SettingsScreen {
+        width: parent.width; height: parent.height;
+        close => { root.screen = "dash"; }
+    }
     HostOverlay {
         width: parent.width; height: parent.height;
         unlock-key(key) => { root.unlock-key(key); }
+        open-hub => { root.open-settings(); }
     }
 }
 "#;
@@ -235,10 +259,21 @@ pub fn guard(c: &mut Compiler, allowed: &[&Path], theme: &Path, entry: &Path, ga
     Ok(())
 }
 
-/// Connects the theme-change callback and applies the settings once.
+/// Connects host screen actions and the theme-change callback, and applies settings once.
 /// `log` receives each warning (for example a rejected colour pair).
 pub fn bind(ui: &ComponentInstance, log: fn(&str)) -> Result<(), String> {
     apply(ui, log);
+    for name in ["open-settings", "open-themes"] {
+        let weak = ui.as_weak();
+        ui.set_global_callback("Actions", name, move |_| {
+            if let Some(ui) = weak.upgrade() {
+                if !matches!(ui.invoke("open-settings", &[]), Ok(Value::Bool(true))) {
+                    log(&format!("action: {name} ignored (requires parked, no alert, unlocked and not test mode)"));
+                }
+            }
+            Value::Void
+        }).map_err(|e| format!("Actions.{name}: {e:?}"))?;
+    }
     let weak = ui.as_weak();
     ui.set_callback("theme-overlay-changed", move |_| {
         if let Some(ui) = weak.upgrade() {
@@ -541,6 +576,11 @@ mod tests {
     use super::*;
 
     #[test]
+    fn root_draws_settings_before_host_overlay() {
+        assert!(ROOT.find("SettingsScreen {").unwrap() < ROOT.find("HostOverlay {").unwrap());
+    }
+
+    #[test]
     fn order_keeps_theme_order_and_appends_the_rest() {
         let mut logs = Vec::new();
         let theme = Value::Model(ModelRc::new(VecModel::from(vec![
@@ -738,7 +778,7 @@ mod tests {
                 assert!(!(alone && after.starts_with('{')), "{}: bare Text near: {}", f.display(), &src[i.saturating_sub(40)..i + 6]);
             }
         }
-        assert!(seen >= 3);
+        assert!(seen >= 5);
     }
 
     #[test]

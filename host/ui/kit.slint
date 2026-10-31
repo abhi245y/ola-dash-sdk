@@ -1,0 +1,62 @@
+import { LockConfig } from "unlock.slint";
+import { HostText } from "hosttext.slint";
+
+export component RailRow inherits Rectangle {
+    in property <string> label;
+    in property <bool> selected;
+    callback pressed();
+    height: 72px;
+    border-radius: 36px;
+    border-width: 1px;
+    border-color: LockConfig.style.key-border;
+    background: touch.pressed ? LockConfig.style.key-border
+        : root.selected ? LockConfig.style.accent : LockConfig.style.key-background;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.pressed(); }
+    HostText {
+        x: 24px; width: parent.width - 48px; height: parent.height;
+        text: root.label;
+        color: root.selected ? LockConfig.on-accent : LockConfig.style.foreground;
+        font-size: 26px;
+        font-weight: 700;
+        vertical-alignment: center;
+    }
+    touch := TouchArea { clicked => { root.pressed(); } }
+}
+
+export component CloseButton inherits Rectangle {
+    callback pressed();
+    width: 64px; height: 64px;
+    border-radius: 32px;
+    border-width: 1px;
+    border-color: LockConfig.style.key-border;
+    background: touch.pressed ? LockConfig.style.key-border : LockConfig.style.key-background;
+    accessible-role: button;
+    accessible-label: "Close settings";
+    accessible-action-default => { root.pressed(); }
+    Path {
+        x: 20px; y: 20px; width: 24px; height: 24px;
+        viewbox-width: 24; viewbox-height: 24;
+        fill: LockConfig.style.foreground;
+        commands: "M 2 0 L 12 10 L 22 0 L 24 2 L 14 12 L 24 22 L 22 24 L 12 14 L 2 24 L 0 22 L 10 12 L 0 2 Z";
+    }
+    touch := TouchArea { clicked => { root.pressed(); } }
+}
+
+export component Pane inherits Rectangle {
+    in property <string> title;
+    HostText {
+        x: 0px; y: 0px;
+        width: parent.width; height: 56px;
+        text: root.title;
+        color: LockConfig.style.foreground;
+        font-size: 40px;
+        font-weight: 800;
+        vertical-alignment: center;
+    }
+    Rectangle {
+        x: 0px; y: 88px; width: parent.width; height: parent.height - 88px;
+        @children
+    }
+}

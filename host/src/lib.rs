@@ -386,7 +386,6 @@ fn load_ui(files: &Path) -> Result<ComponentInstance, String> {
 
 enum Target {
     Package(&'static str),
-    Settings,
 }
 
 /// Start an activity from the NativeActivity through JNI (no app classes needed).
@@ -414,14 +413,6 @@ fn launch(app: &AndroidApp, target: Target) {
                     &[JValue::Object(&name)],
                 )?
                 .l()?
-            }
-            Target::Settings => {
-                let action = env.new_string("android.settings.SETTINGS")?;
-                env.new_object(
-                    jni_str!("android/content/Intent"),
-                    jni_sig!("(Ljava/lang/String;)V"),
-                    &[JValue::Object(&action)],
-                )?
             }
         };
         if intent.is_null() {
@@ -471,20 +462,11 @@ fn wire(ui: &ComponentInstance, app: &AndroidApp) -> Result<(), String> {
         Value::Void
     })
     .map_err(err)?;
-    let a = app.clone();
-    ui.set_global_callback("Actions", "open-settings", move |_| {
-        launch(&a, Target::Settings);
+    ui.set_global_callback("Actions", "open-apps", |_| {
+        log::info!("action: open-apps (not built yet)");
         Value::Void
     })
     .map_err(err)?;
-    // ponytail: log only until E1.S3 wires the host screens.
-    for name in ["open-apps", "open-themes"] {
-        ui.set_global_callback("Actions", name, move |_| {
-            log::info!("action: {name} (not wired yet)");
-            Value::Void
-        })
-        .map_err(err)?;
-    }
     // Media and widget taps go to the plugin host (display-only; it routes to the owner).
     for name in ["play-pause", "next", "previous"] {
         let a = app.clone();
@@ -508,6 +490,8 @@ fn wire(ui: &ComponentInstance, app: &AndroidApp) -> Result<(), String> {
 fn run(app: &AndroidApp, start: Instant) -> Result<(), String> {
     let files = app.internal_data_path().ok_or("no internal data path")?;
     let ui = load_ui(&files)?;
+    ui.set_global_property("HostState", "version-text", Value::String(env!("CARGO_PKG_VERSION").into()))
+        .map_err(|e| format!("HostState.version-text: {e:?}"))?;
     wire(&ui, app)?;
     // First frame is measured from android_main entry (the load start), not process start.
     let mut first = Some(start);

@@ -34,6 +34,8 @@ export global OverlayTokens {
     out property <color> amber: #ffb020;
     out property <color> red: #ff3b30;
     out property <color> test-fill: #ff2fd2;
+    out property <color> accent: #ffc94a;
+    out property <color> ink: #0f2a2a;
 
     // alert cards: the `surface` card on a 60 % scrim, the same in day and night
     out property <color> scrim: #00000099;
@@ -86,6 +88,7 @@ export global HostState {
     in property <bool> night: false;
     // Lock-screen date, "Fri 31 Oct". Empty hides it.
     in property <string> date-text;
+    in property <string> version-text;
     // 0 none, 1 fall/accident, 2 tow/theft, 3 side stand, 4 steering lock,
     // 5 vehicle fault, 6 low battery.
     in property <int> alert-code: 0;
@@ -280,6 +283,9 @@ component AlertCard inherits Rectangle {
 
 export component HostOverlay inherits Rectangle {
     callback unlock-key(int);
+    callback open-hub();
+    property <bool> hub-visible: HostState.parked && HostState.alert-code == 0
+        && HostState.auth-phase >= 4 && !HostState.test-mode && !HostState.data-stale;
     // Phases 0-3 (connecting, locked, verifying, unlocking) cover the dash. From PARK on
     // (phase 4) the dash shows; DRIVE and charging are never covered.
     property <bool> unlock-visible: HostState.auth-phase >= 0 && HostState.auth-phase < 4 && !HostState.test-mode;
@@ -382,6 +388,28 @@ export component HostOverlay inherits Rectangle {
         height: root.vertical ? root.height : OverlayTokens.strip-h;
         vertical: root.vertical;
         labels: OverlayConfig.show-labels;
+    }
+
+    if root.hub-visible : Rectangle {
+        x: root.vertical
+            ? (OverlayConfig.placement == OverlayPlacement.right ? root.width - OverlayTokens.strip-w : 0px)
+            : root.width - 64px;
+        y: root.vertical ? root.height - 64px
+            : (OverlayConfig.placement == OverlayPlacement.bottom ? root.height - OverlayTokens.strip-h : 0px);
+        width: root.vertical ? OverlayTokens.strip-w : 64px;
+        height: root.vertical ? 64px : OverlayTokens.strip-h;
+        background: OverlayTokens.accent;
+        accessible-role: button;
+        accessible-label: "Open settings";
+        accessible-action-default => { root.open-hub(); }
+        for i in 4 : Rectangle {
+            x: (parent.width - 28px) / 2 + Math.mod(i, 2) * 16px;
+            y: (parent.height - 28px) / 2 + floor(i / 2) * 16px;
+            width: 12px; height: 12px;
+            border-radius: 3px;
+            background: OverlayTokens.ink;
+        }
+        TouchArea { clicked => { root.open-hub(); } }
     }
 
     if root.scrim-visible : AlertCard {

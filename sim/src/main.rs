@@ -12,6 +12,7 @@
 //!            --plugins / --nav                    feed mock plugin widgets / an active navigation card
 //!            --night                              set Display.night and HostState.night
 //!            --stale                              set Vehicle.data-stale (shows the NO DATA badge)
+//!            --screen dash|settings               preview a host screen (settings needs --state park)
 //!
 //! The theme is loaded the way the device loads it: inside the host's `Host` root,
 //! with `HostOverlay` drawn above it (host/src/theme_root.rs, shared with the host).
@@ -439,23 +440,18 @@ impl Feeder {
             println!("action: open-android-auto (sim: no-op)");
             Value::Void
         });
-        let _ = inst.set_global_callback("Actions", "open-settings", |_| {
-            println!("action: open-settings (sim: no-op)");
-            Value::Void
-        });
         let _ = inst.set_global_callback("Actions", "open-trunk", |_| {
             println!("action: open-trunk (sim: no-op)");
             Value::Void
         });
-        for name in ["open-apps", "open-themes"] {
-            let _ = inst.set_global_callback("Actions", name, move |_| {
-                println!("action: {name} (sim: no-op)");
-                Value::Void
-            });
-        }
+        let _ = inst.set_global_callback("Actions", "open-apps", |_| {
+            println!("action: open-apps (not built yet)");
+            Value::Void
+        });
         self.set(inst, "Display", "night", Value::Bool(self.night));
         self.set(inst, "HostState", "night", Value::Bool(self.night));
         self.set(inst, "HostState", "date-text", Value::String(theme_root::date_text(20251031).into()));
+        self.set(inst, "HostState", "version-text", Value::String(env!("CARGO_PKG_VERSION").into()));
         let _ = inst.set_global_callback("Plugins", "widget-clicked", |args| {
             println!("plugins: widget-clicked {:?}", args.first());
             Value::Void
@@ -492,6 +488,7 @@ struct Args {
     pixel: Option<(usize, usize)>,
     night: bool,
     stale: bool,
+    screen: String,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -508,6 +505,7 @@ fn parse_args() -> Result<Args, String> {
     let mut pixel = None;
     let mut night = false;
     let mut stale = false;
+    let mut screen = "dash".to_string();
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -532,6 +530,10 @@ fn parse_args() -> Result<Args, String> {
             "--nav" => nav = true,
             "--night" => night = true,
             "--stale" => stale = true,
+            "--screen" => {
+                screen = it.next().filter(|s| matches!(s.as_str(), "dash" | "settings"))
+                    .ok_or("--screen needs dash or settings")?;
+            }
             "--pixel" => {
                 pixel = Some(it
                     .next()
@@ -551,6 +553,7 @@ fn parse_args() -> Result<Args, String> {
                 println!("       [--placement top|bottom|left|right] [--alert 1-6]");
                 println!("       [--state ride|park|charge|reverse|trunk|easy-park|locked|locked-error|cooldown] [--plugins] [--nav] [--night] [--stale]");
                 println!("       [--pixel X,Y]  (with --screenshot: also print the colour at that point)");
+                println!("       [--screen dash|settings]  (settings needs --state park)");
                 println!("       sim --check <theme-dir> [--contract DIR]");
                 std::process::exit(0);
             }
@@ -570,7 +573,7 @@ fn parse_args() -> Result<Args, String> {
             return Err(format!("--placement needs top, bottom, left or right, got {p}"));
         }
     }
-    Ok(Args { theme, contract, screenshot, at, check, placement, alert, scenario, plugins, nav, pixel, night, stale })
+    Ok(Args { theme, contract, screenshot, at, check, placement, alert, scenario, plugins, nav, pixel, night, stale, screen })
 }
 
 /// Path of `to` relative to `from` (both absolute, same drive), with '/' separators.
@@ -750,6 +753,8 @@ fn run_screenshot(args: &Args, out: &Path) -> Result<(), Box<dyn Error>> {
     bind_overlay(&inst, args)?;
     let feeder = Feeder::new(args);
     feeder.wire_callbacks(&inst);
+    feeder.push(&inst, 0.0);
+    inst.set_property("screen", Value::String(args.screen.clone().into()))?;
     inst.show()?;
     window.set_size(slint::PhysicalSize::new(WIDTH, HEIGHT));
 
@@ -793,6 +798,7 @@ fn run_live(args: &Args) -> Result<(), Box<dyn Error>> {
     feeder.wire_callbacks(&inst);
     let start = Instant::now();
     feeder.push(&inst, 0.0);
+    inst.set_property("screen", Value::String(args.screen.clone().into()))?;
     let f = feeder.clone();
     let weak = inst.as_weak();
     let timer = Timer::default();

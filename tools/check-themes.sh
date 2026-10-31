@@ -75,6 +75,29 @@ else
     echo "error: --stale does not show the NO DATA badge (pixel 1120,24 is $got, want #ff3b30)" >&2
     status=1
 fi
+# Settings rail: parked opens the frame; riding closes it before drawing.
+for state in park ride; do
+    got=$("$SIM" "$ROOT/themes/minimal" --contract "$ROOT/contract" --state "$state" --screen settings --at 13 --screenshot "$png" --pixel 136,132 | tail -n 1) || got=error
+    want="#ffc94a"
+    [ "$state" = ride ] && want="#000000"
+    if [ "$got" = "$want" ]; then
+        echo "ok: settings gate ($state, pixel 136,132 is $got)"
+    else
+        echo "error: settings gate ($state, pixel 136,132 is $got, want $want)" >&2
+        status=1
+    fi
+done
+# Hub end cells stay clear of all nine telltales in every strip placement.
+for probe in "top 1220,24" "bottom 1220,744" "left 8,736" "right 1216,736"; do
+    read -r placement xy <<<"$probe"
+    got=$("$SIM" "$ROOT/themes/minimal" --contract "$ROOT/contract" --state park --placement "$placement" --at 13 --screenshot "$png" --pixel "$xy" | tail -n 1) || got=error
+    if [ "$got" = "#ffc94a" ]; then
+        echo "ok: hub end cell ($placement, pixel $xy is $got)"
+    else
+        echo "error: hub end cell ($placement, pixel $xy is $got, want #ffc94a)" >&2
+        status=1
+    fi
+done
 rm -f "$png"
 
 if [ "$checked" -eq 0 ]; then

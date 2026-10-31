@@ -74,6 +74,9 @@ final class VehicleBridge {
     // Contract v6. Trunk latch, from IDisplayInfoCallbacks.isTrunkLock (true = open).
     static final int TRUNK_OPEN = 16;
 
+    // Host-only clock trust. Direct nativeSet, never stored in REAL or replayed.
+    static final int CLOCK_TRUSTED = 51;
+
     // ponytail: fixed threshold for the low-battery popup. Calibrate against stock derate points.
     private static final int LOW_BATTERY_PCT = 10;
     // ponytail: blinker lamp pulses on CAN; hold "off" this long so the host reports steady on
@@ -195,6 +198,10 @@ final class VehicleBridge {
 
     static void setClock(int hour, int minute) {
         nativeSet(CLOCK_HHMM, hour * 100 + minute);
+    }
+
+    static void setClockTrusted(boolean trusted) {
+        nativeSet(CLOCK_TRUSTED, trusted ? 1 : 0);
     }
 
     /** month is 1-12. Host-only like the clock: never replayed. */
@@ -420,7 +427,8 @@ final class VehicleBridge {
         mcuOff = false;
         nativeSet(MODE, 4);
         for (int id = 0; id < REAL.length; id++) {
-            // Vehicle data only: 30-39 are clock, test and unlock-UI slots.
+            // Vehicle data only: 30-39 are clock, test and unlock-UI slots. Host-only fields
+            // (date, clock trust) go through nativeSet directly and never land in REAL.
             boolean vehicleData = id < CLOCK_HHMM || id >= SOC_PCT;
             if (vehicleData && !Double.isNaN(REAL[id])) {
                 nativeSet(id, REAL[id]);

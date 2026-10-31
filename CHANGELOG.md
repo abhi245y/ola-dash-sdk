@@ -12,6 +12,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- Auto night (E3.S1 PR2): Display adds Off / On / Auto with editable 15-minute Night from / Night until times (defaults 19:00–06:30); Auto uses day until the clock is known, automatic time is enabled and the year is at least 2025. Sim adds `--clock HH:MM` and `--untrusted-clock`, with schedule/persistence tests and Settings pixel probes; no light sensor is used yet.
 - Theme customization (E3.S1 PR1): Settings > Theme > Customize offers live color swatches, Off / On choices, bounded integer steppers and choice controls, with validated values saved per theme through the shared atomic settings writer. Sim adds `--theme-view options`; run-only `--opt` overrides win over saved values, with persistence tests and control pixel probes.
 - Theme options (E1.S1 PR B, additive within contract 7): shared manifest validation for up to 16 color, bool, int or choice options, probed `Dash` bindings and host-applied defaults. Sim adds repeatable `--opt id=value` overrides and strict `--check` validation, with option fixtures, unit tests and pixel probes; existing themes remain unchanged.
 - Plugins pane (E1.S5): installed plugins expose declared slots and immediate Off / On choices behind the existing host-screen gate; atomic enablement writes preserve comments and slot restrictions. Sim adds `--pane plugins --plugins-file FILE` with in-memory toggles, a seeded fixture, unit tests and an On-pill pixel probe.

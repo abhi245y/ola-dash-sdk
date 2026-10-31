@@ -68,7 +68,9 @@ const REAR_BRAKE: usize = 47;
 const REGEN: usize = 48;
 const MOTOR_TEMP: usize = 49;
 const MCU_TEMP: usize = 50;
-const SLOTS: usize = 51;
+// Host-only clock trust; never part of vehicle replay.
+const CLOCK_TRUSTED: usize = 51;
+const SLOTS: usize = 52;
 
 const MODE_NAMES: [&str; 9] =
     ["eco", "normal", "sport", "hyper", "unknown", "park", "reverse", "custom", "easy-park"];
@@ -249,8 +251,17 @@ fn apply(ui: &ComponentInstance, id: usize, v: f64) {
         READY => ("Vehicle", "ready-to-ride", b),
         HYPER_AVAILABLE => ("Vehicle", "hyper-available", b),
         CLOCK_HHMM => {
-            LAST_HHMM.store(v as u32, Ordering::Relaxed);
+            let hhmm = if v.is_finite() && v >= 0.0 && v.fract() == 0.0
+                && v < 2400.0 && v as u32 % 100 < 60 { v as u32 } else { u32::MAX };
+            LAST_HHMM.store(hhmm, Ordering::Relaxed);
             refresh_clock(ui);
+            return;
+        }
+        CLOCK_TRUSTED => {
+            if let Err(e) = ui.set_global_property("HostState", "clock-trusted", b) {
+                log::warn!("set HostState.clock-trusted failed: {e:?}");
+            }
+            if let Err(e) = settings::refresh_night(ui) { log_warn(&e); }
             return;
         }
         DATE_YMD => ("HostState", "date-text", Value::String(theme_root::date_text(v as u32).into())),
@@ -299,17 +310,18 @@ fn apply(ui: &ComponentInstance, id: usize, v: f64) {
 
 fn refresh_clock(ui: &ComponentInstance) {
     let hhmm = LAST_HHMM.load(Ordering::Relaxed);
-    if hhmm == u32::MAX { return; }
     let clock24 = !matches!(ui.get_property("clock24"), Ok(Value::Bool(false)));
-    if let Err(e) = ui.set_global_property("HostState", "clock-hhmm", Value::Number(hhmm as f64)) {
+    let number = if hhmm == u32::MAX { -1.0 } else { hhmm as f64 };
+    if let Err(e) = ui.set_global_property("HostState", "clock-hhmm", Value::Number(number)) {
         log::warn!("set HostState.clock-hhmm failed: {e:?}");
     }
     for (global, format24) in [("HostState", clock24), ("Vehicle", true)] {
-        let text = settings::clock_text(hhmm, format24);
+        let text = if hhmm == u32::MAX { String::new() } else { settings::clock_text(hhmm, format24) };
         if let Err(e) = ui.set_global_property(global, "clock-text", Value::String(text.into())) {
             log::warn!("set {global}.clock-text failed: {e:?}");
         }
     }
+    if let Err(e) = settings::refresh_night(ui) { log_warn(&e); }
 }
 
 /// Reads `theme.json` in the theme folder (relative to `files/`) and returns its entry file.

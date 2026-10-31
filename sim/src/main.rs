@@ -11,6 +11,8 @@
 //!                                                 the last three show the lock screen (see docs/themes.md)
 //!            --plugins / --nav                    feed mock plugin widgets / an active navigation card
 //!            --night                              set Display.night and HostState.night
+//!            --clock HH:MM                        hold a trusted 24-hour clock for captures
+//!            --untrusted-clock                    mark the sim clock untrusted (Auto uses day)
 //!            --opt id=value                       override a theme option (repeatable)
 //!            --stale                              set Vehicle.data-stale (shows the NO DATA badge)
 //!            --screen dash|settings               preview a host screen (settings needs --state park)
@@ -323,6 +325,8 @@ struct Feeder {
     scenario: Scenario,
     /// `--stale`: Vehicle.data-stale = true.
     stale: bool,
+    clock_override: Option<u32>,
+    clock_trusted: bool,
 }
 
 impl Feeder {
@@ -337,6 +341,8 @@ impl Feeder {
             alert_override: args.alert,
             scenario: args.scenario,
             stale: args.stale,
+            clock_override: args.clock,
+            clock_trusted: !args.untrusted_clock,
         }
     }
 
@@ -395,9 +401,12 @@ impl Feeder {
         self.set(inst, "Vehicle", "locked", Value::Bool(s.locked));
         self.set(inst, "Vehicle", "ready-to-ride", Value::Bool(s.ready));
         let clock24 = !matches!(inst.get_property("clock24"), Ok(Value::Bool(false)));
-        self.set(inst, "Vehicle", "clock-text", Value::String(settings::clock_text(s.clock, true).into()));
-        self.set(inst, "HostState", "clock-text", Value::String(settings::clock_text(s.clock, clock24).into()));
-        self.set(inst, "HostState", "clock-hhmm", Value::Number(s.clock as f64));
+        let hhmm = self.clock_override.unwrap_or(s.clock);
+        self.set(inst, "Vehicle", "clock-text", Value::String(settings::clock_text(hhmm, true).into()));
+        self.set(inst, "HostState", "clock-text", Value::String(settings::clock_text(hhmm, clock24).into()));
+        self.set(inst, "HostState", "clock-hhmm", Value::Number(hhmm as f64));
+        self.set(inst, "HostState", "clock-trusted", Value::Bool(self.clock_trusted));
+        if let Err(e) = settings::refresh_night(inst) { sim_warn(&e); }
         self.set(inst, "Vehicle", "trunk-open", Value::Bool(s.trunk));
         self.set(inst, "Vehicle", "hyper-available", Value::Bool(s.hyper_available));
         self.set(inst, "Vehicle", "data-stale", Value::Bool(self.stale));
@@ -509,6 +518,8 @@ struct Args {
     nav: bool,
     pixel: Option<(usize, usize)>,
     night: bool,
+    clock: Option<u32>,
+    untrusted_clock: bool,
     stale: bool,
     screen: String,
     pane: i32,
@@ -519,6 +530,17 @@ struct Args {
     confirm_theme: bool,
     first_run: bool,
     options: Vec<(String, String)>,
+}
+
+fn parse_clock(text: &str) -> Option<u32> {
+    let bytes = text.as_bytes();
+    if bytes.len() != 5 || bytes[2] != b':'
+        || ![bytes[0], bytes[1], bytes[3], bytes[4]].iter().all(u8::is_ascii_digit) {
+        return None;
+    }
+    let hour: u32 = text[..2].parse().ok()?;
+    let minute: u32 = text[3..].parse().ok()?;
+    if hour < 24 && minute < 60 { Some(hour * 100 + minute) } else { None }
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -535,6 +557,8 @@ fn parse_args() -> Result<Args, String> {
     let mut nav = false;
     let mut pixel = None;
     let mut night = false;
+    let mut clock = None;
+    let mut untrusted_clock = false;
     let mut stale = false;
     let mut screen = "dash".to_string();
     let mut pane = 0;
@@ -569,6 +593,11 @@ fn parse_args() -> Result<Args, String> {
             "--plugins" => plugins = true,
             "--nav" => nav = true,
             "--night" => night = true,
+            "--clock" => {
+                clock = Some(it.next().and_then(|v| parse_clock(&v))
+                    .ok_or("--clock needs HH:MM (00:00-23:59)")?);
+            }
+            "--untrusted-clock" => untrusted_clock = true,
             "--opt" => {
                 let arg = it.next().ok_or("--opt needs id=value")?;
                 let (id, value) = arg.split_once('=').filter(|(id, _)| !id.is_empty())
@@ -624,6 +653,7 @@ fn parse_args() -> Result<Args, String> {
                 println!("       [--placement top|bottom|left|right] [--alert 1-6]");
                 println!("       [--state ride|park|charge|reverse|trunk|easy-park|locked|locked-error|cooldown|restart] [--plugins] [--nav] [--night] [--stale]");
                 println!("       [--pixel X,Y]  (with --screenshot: also print the colour at that point)");
+                println!("       [--clock HH:MM] [--untrusted-clock]  (Auto uses day when untrusted)");
                 println!("       [--opt id=value]  (repeatable; overrides theme option defaults)");
                 println!("       [--screen dash|settings]  (settings needs --state park)");
                 println!("       [--pane display|theme|plugins|about] [--theme-view options] [--settings FILE] [--plugins-file FILE]");
@@ -652,7 +682,7 @@ fn parse_args() -> Result<Args, String> {
             return Err(format!("--placement needs top, bottom, left or right, got {p}"));
         }
     }
-    Ok(Args { theme, contract, screenshot, at, check, placement, alert, scenario, plugins, nav, pixel, night, stale, screen, pane, theme_options_open, plugins_file, settings, switch, confirm_theme, first_run, options })
+    Ok(Args { theme, contract, screenshot, at, check, placement, alert, scenario, plugins, nav, pixel, night, clock, untrusted_clock, stale, screen, pane, theme_options_open, plugins_file, settings, switch, confirm_theme, first_run, options })
 }
 
 /// Path of `to` relative to `from` (both absolute, same drive), with '/' separators.
@@ -735,13 +765,25 @@ fn option_warn(msg: &str) {
 
 fn bind_settings(inst: &ComponentInstance, args: &Args) -> Result<settings::SharedSettings, Box<dyn Error>> {
     let settings = Rc::new(RefCell::new(settings::Settings::load(args.settings.as_deref(), sim_warn)));
-    settings::bind(inst, settings.clone(), sim_warn, |_| {})?;
+    settings::bind(inst, settings.clone(), sim_warn, refresh_clock)?;
     if args.night {
-        inst.set_global_property("Display", "night", Value::Bool(true))?;
-        inst.set_global_property("HostState", "night", Value::Bool(true))?;
+        inst.set_global_property("HostState", "night-mode", Value::Number(settings::NightMode::On as i32 as f64))?;
+        settings::refresh_night(inst)?;
     }
     inst.set_property("settings-pane", Value::Number(args.pane as f64))?;
     Ok(settings)
+}
+
+fn refresh_clock(inst: &ComponentInstance) {
+    if let Ok(Value::Number(hhmm)) = inst.get_global_property("HostState", "clock-hhmm") {
+        if hhmm >= 0.0 {
+            let clock24 = !matches!(inst.get_property("clock24"), Ok(Value::Bool(false)));
+            let text = settings::clock_text(hhmm as u32, clock24);
+            if let Err(e) = inst.set_global_property("HostState", "clock-text", Value::String(text.into())) {
+                sim_warn(&format!("HostState.clock-text: {e:?}"));
+            }
+        }
+    }
 }
 
 fn preview_screen(inst: &ComponentInstance, args: &Args) -> Result<(), Box<dyn Error>> {
@@ -1043,6 +1085,83 @@ mod tests {
     use super::*;
     use serde_json::json;
     use slint::Model;
+
+    #[test]
+    fn capture_clock_accepts_only_valid_hhmm() {
+        for (text, hhmm) in [("00:00", 0), ("06:30", 630), ("12:00", 1200), ("21:00", 2100), ("23:59", 2359)] {
+            assert_eq!(parse_clock(text), Some(hhmm));
+        }
+        for text in ["", "9:00", "24:00", "23:60", "-1:00", "12:0x", "１２:00", "12:00 PM", " 12:00"] {
+            assert_eq!(parse_clock(text), None, "{text}");
+        }
+    }
+
+    #[test]
+    fn auto_night_settings_update_effective_style_and_choice_independently() {
+        std::thread::spawn(|| {
+            slint::platform::set_platform(Box::new(Headless {
+                window: MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer),
+                clock: Rc::new(Cell::new(Duration::ZERO)),
+            })).unwrap();
+            let repo = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+            let mut compiler = Compiler::default();
+            compiler.set_include_paths(vec![repo.join("contract")]);
+            let source = theme_root::root_source("../../tools/fixtures/loads/options/main.slint", &[], &[]);
+            let compiled = pollster::block_on(compiler.build_from_source(source, repo.join("host/ui/night-test.slint")));
+            assert!(!compiled.has_errors(), "{:?}", compiled.diagnostics().collect::<Vec<_>>());
+            let ui = compiled.component("Host").unwrap().create().unwrap();
+            theme_root::bind(&ui, sim_warn).unwrap();
+            let settings = Rc::new(RefCell::new(settings::Settings::default()));
+            settings.borrow_mut().set("night", "auto").unwrap();
+            settings::bind(&ui, settings.clone(), sim_warn, refresh_clock).unwrap();
+            let get = |prop| ui.get_global_property("HostState", prop).unwrap();
+            let check_night = |night| {
+                assert_eq!(get("night"), Value::Bool(night));
+                assert_eq!(ui.get_global_property("Display", "night").unwrap(), Value::Bool(night));
+                assert_eq!(get("night-mode"), Value::Number(2.0), "Auto stays selected in day and night");
+                slint::platform::update_timers_and_animations();
+                let Value::Struct(style) = ui.get_global_property("LockConfig", "style").unwrap() else { panic!("missing lock style") };
+                let expected = if night { slint::Color::from_rgb_u8(0x0b, 0x1c, 0x1c) }
+                    else { slint::Color::from_rgb_u8(0xf6, 0xf3, 0xec) };
+                assert_eq!(style.get_field("background"), Some(&Value::Brush(slint::Brush::SolidColor(expected))));
+            };
+            check_night(false); // Unknown clock and untrusted by default.
+            ui.set_global_property("HostState", "clock-hhmm", Value::Number(2100.0)).unwrap();
+            settings::refresh_night(&ui).unwrap();
+            check_night(false);
+            ui.set_global_property("HostState", "clock-trusted", Value::Bool(true)).unwrap();
+            settings::refresh_night(&ui).unwrap();
+            check_night(true);
+            let setting = |key: &str, value: &str| {
+                ui.invoke("set-setting", &[Value::String(key.into()), Value::String(value.into())]).unwrap();
+            };
+            setting("night-start", "1320"); // 22:00, after the current clock.
+            check_night(false);
+            setting("night-start", "1140");
+            check_night(true);
+            setting("night-end", "1200"); // 20:00, before the current clock.
+            check_night(false);
+            setting("night-end", "390");
+            check_night(true);
+            setting("clock24", "false");
+            assert_eq!(get("night-start-text"), Value::String("7:00 PM".into()));
+            assert_eq!(get("night-end-text"), Value::String("6:30 AM".into()));
+            assert_eq!(get("clock-text"), Value::String("9:00 PM".into()));
+            ui.set_global_property("HostState", "clock-hhmm", Value::Number(1200.0)).unwrap();
+            settings::refresh_night(&ui).unwrap();
+            check_night(false);
+            ui.set_global_property("HostState", "clock-hhmm", Value::Number(2100.0)).unwrap();
+            settings::refresh_night(&ui).unwrap();
+            check_night(true);
+            ui.set_global_property("HostState", "clock-trusted", Value::Bool(false)).unwrap();
+            settings::refresh_night(&ui).unwrap();
+            check_night(false);
+            setting("night", "on");
+            assert_eq!(get("night"), Value::Bool(true));
+            setting("night", "off");
+            assert_eq!(get("night"), Value::Bool(false));
+        }).join().unwrap();
+    }
 
     #[test]
     fn live_options_validate_share_settings_and_obey_host_gate() {

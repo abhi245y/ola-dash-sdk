@@ -10,6 +10,31 @@ use std::rc::Rc;
 
 pub type SharedSettings = Rc<RefCell<Settings>>;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NightMode { Off = 0, On = 1, Auto = 2 }
+
+const NIGHT_START: u32 = 19 * 60;
+const NIGHT_END: u32 = 6 * 60 + 30;
+
+fn valid_minutes(minutes: u32) -> bool {
+    minutes < 1440 && minutes % 15 == 0
+}
+
+/// Effective style only; unknown or untrusted time keeps Auto in day mode.
+pub fn night_now(mode: NightMode, start: u32, end: u32, hhmm: Option<u32>, trusted: bool) -> bool {
+    match mode {
+        NightMode::Off => false,
+        NightMode::On => true,
+        NightMode::Auto => {
+            let Some(hhmm) = hhmm.filter(|t| t / 100 < 24 && t % 100 < 60) else { return false };
+            if !trusted || start == end { return false; }
+            let minutes = hhmm / 100 * 60 + hhmm % 100;
+            if start > end { minutes >= start || minutes < end }
+            else { minutes >= start && minutes < end }
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct Settings {
     path: Option<PathBuf>,
@@ -48,8 +73,26 @@ impl Settings {
         settings
     }
 
-    pub fn night(&self) -> bool {
-        self.values.get("night").and_then(Json::as_str) == Some("on")
+    pub fn night(&self) -> NightMode {
+        match self.values.get("night").and_then(Json::as_str) {
+            Some("on") => NightMode::On,
+            Some("auto") => NightMode::Auto,
+            _ => NightMode::Off,
+        }
+    }
+
+    fn night_minutes(&self, key: &str, default: u32) -> u32 {
+        self.values.get(key).and_then(Json::as_u64)
+            .filter(|&n| n < 1440 && valid_minutes(n as u32))
+            .map(|n| n as u32).unwrap_or(default)
+    }
+
+    pub fn night_start(&self) -> u32 {
+        self.night_minutes("night-start", NIGHT_START)
+    }
+
+    pub fn night_end(&self) -> u32 {
+        self.night_minutes("night-end", NIGHT_END)
     }
 
     pub fn clock24(&self) -> bool {
@@ -76,7 +119,12 @@ impl Settings {
 
     pub fn set(&mut self, key: &str, value: &str) -> Result<(), String> {
         let value = match (key, value) {
-            ("night", "off" | "on") => Json::String(value.into()),
+            ("night", "off" | "on" | "auto") => Json::String(value.into()),
+            ("night-start" | "night-end", _) => {
+                let minutes = value.parse::<u32>().ok().filter(|&n| valid_minutes(n))
+                    .ok_or_else(|| format!("settings: invalid {key}={value}"))?;
+                Json::from(minutes)
+            }
             ("clock24", "true" | "false") => Json::Bool(value == "true"),
             ("setup", "done") => Json::String(value.into()),
             _ => return Err(format!("settings: invalid {key}={value}")),
@@ -95,40 +143,65 @@ impl Settings {
     }
 }
 
-fn apply(ui: &ComponentInstance, key: &str, enabled: bool, refresh_clock: fn(&ComponentInstance)) -> Result<(), String> {
-    if key == "setup" {
-        return Ok(());
-    } else if key == "clock24" {
-        ui.set_property("clock24", Value::Bool(enabled))
-            .map_err(|e| format!("clock24: {e:?}"))?;
-        ui.set_global_property("HostState", "clock24", Value::Bool(enabled))
-            .map_err(|e| format!("HostState.clock24: {e:?}"))?;
-        refresh_clock(ui);
-    } else {
-        for global in ["Display", "HostState"] {
-            ui.set_global_property(global, "night", Value::Bool(enabled))
-                .map_err(|e| format!("{global}.night: {e:?}"))?;
+fn apply_night(ui: &ComponentInstance, enabled: bool) -> Result<(), String> {
+    for global in ["Display", "HostState"] {
+        if matches!(ui.get_global_property(global, "night"), Ok(Value::Bool(current)) if current == enabled) {
+            continue;
         }
+        ui.set_global_property(global, "night", Value::Bool(enabled))
+            .map_err(|e| format!("{global}.night: {e:?}"))?;
     }
     Ok(())
 }
 
-pub fn bind(ui: &ComponentInstance, settings: SharedSettings, log: fn(&str), refresh_clock: fn(&ComponentInstance)) -> Result<(), String> {
-    let preferences = { let s = settings.borrow(); [("night", s.night()), ("clock24", s.clock24())] };
-    for (key, enabled) in preferences {
-        apply(ui, key, enabled, refresh_clock)?;
+pub fn refresh_night(ui: &ComponentInstance) -> Result<(), String> {
+    let get = |prop: &str| ui.get_global_property("HostState", prop)
+        .map_err(|e| format!("HostState.{prop}: {e:?}"));
+    let mode = match get("night-mode")? {
+        Value::Number(1.0) => NightMode::On,
+        Value::Number(2.0) => NightMode::Auto,
+        _ => NightMode::Off,
+    };
+    let start = match get("night-start")? { Value::Number(n) => n as u32, _ => NIGHT_START };
+    let end = match get("night-end")? { Value::Number(n) => n as u32, _ => NIGHT_END };
+    let hhmm = match get("clock-hhmm")? { Value::Number(n) if n >= 0.0 => Some(n as u32), _ => None };
+    let trusted = matches!(get("clock-trusted")?, Value::Bool(true));
+    apply_night(ui, night_now(mode, start, end, hhmm, trusted))
+}
+
+fn apply_preferences(ui: &ComponentInstance, settings: &SharedSettings, refresh_clock: fn(&ComponentInstance)) -> Result<(), String> {
+    // Release the shared borrow before updating any UI property or callback.
+    let (mode, start, end, clock24) = {
+        let s = settings.borrow();
+        (s.night(), s.night_start(), s.night_end(), s.clock24())
+    };
+    for (prop, value) in [("night-mode", mode as i32 as f64), ("night-start", start as f64), ("night-end", end as f64)] {
+        ui.set_global_property("HostState", prop, Value::Number(value))
+            .map_err(|e| format!("HostState.{prop}: {e:?}"))?;
     }
+    for (prop, minutes) in [("night-start-text", start), ("night-end-text", end)] {
+        let text = clock_text(minutes / 60 * 100 + minutes % 60, clock24);
+        ui.set_global_property("HostState", prop, Value::String(text.into()))
+            .map_err(|e| format!("HostState.{prop}: {e:?}"))?;
+    }
+    ui.set_property("clock24", Value::Bool(clock24))
+        .map_err(|e| format!("clock24: {e:?}"))?;
+    ui.set_global_property("HostState", "clock24", Value::Bool(clock24))
+        .map_err(|e| format!("HostState.clock24: {e:?}"))?;
+    refresh_clock(ui);
+    refresh_night(ui)
+}
+
+pub fn bind(ui: &ComponentInstance, settings: SharedSettings, log: fn(&str), refresh_clock: fn(&ComponentInstance)) -> Result<(), String> {
+    apply_preferences(ui, &settings, refresh_clock)?;
     let weak = ui.as_weak();
     ui.set_callback("set-setting", move |args| {
         if let [Value::String(key), Value::String(value)] = args {
-            let saved = {
-                let mut settings = settings.borrow_mut();
-                settings.set(key.as_str(), value.as_str()).map(|_| {
-                    if key == "clock24" { settings.clock24() } else { settings.night() }
-                })
-            };
-            let result = saved.and_then(|enabled| {
-                if let Some(ui) = weak.upgrade() { apply(&ui, key.as_str(), enabled, refresh_clock)?; }
+            let saved = settings.borrow_mut().set(key.as_str(), value.as_str());
+            let result = saved.and_then(|_| {
+                if key != "setup" {
+                    if let Some(ui) = weak.upgrade() { apply_preferences(&ui, &settings, refresh_clock)?; }
+                }
                 Ok(())
             });
             if let Err(e) = result { log(&e); }
@@ -169,7 +242,9 @@ mod tests {
     fn missing_file_uses_defaults_without_writing() {
         let dir = Dir::new();
         let settings = Settings::load(Some(&dir.file()), |_| panic!("missing file must be quiet"));
-        assert!(!settings.night());
+        assert_eq!(settings.night(), NightMode::Off);
+        assert_eq!(settings.night_start(), NIGHT_START);
+        assert_eq!(settings.night_end(), NIGHT_END);
         assert!(settings.clock24());
         assert!(!dir.file().exists());
     }
@@ -180,7 +255,7 @@ mod tests {
         for bytes in ["{broken", "[]", "null"] {
             fs::write(dir.file(), bytes).unwrap();
             let settings = Settings::load(Some(&dir.file()), |_| {});
-            assert!(!settings.night());
+            assert_eq!(settings.night(), NightMode::Off);
             assert!(settings.clock24());
             assert!(!dir.file().exists());
             assert_eq!(fs::read_to_string(sibling(&dir.file(), ".bad")).unwrap(), bytes);
@@ -192,7 +267,7 @@ mod tests {
         let dir = Dir::new();
         fs::write(dir.file(), r#"{"night":"auto","future":{"values":[1,true,"x"]}}"#).unwrap();
         let mut settings = Settings::load(Some(&dir.file()), |_| panic!("valid JSON"));
-        assert!(!settings.night());
+        assert_eq!(settings.night(), NightMode::Auto);
         settings.set("clock24", "false").unwrap();
         let saved = Settings::load(Some(&dir.file()), |_| panic!("valid JSON"));
         assert_eq!(saved.values["future"], settings.values["future"]);
@@ -206,22 +281,90 @@ mod tests {
         fs::write(dir.file(), r#"{"night":"off"}"#).unwrap();
         let mut settings = Settings::load(Some(&dir.file()), |_| {});
         settings.set("night", "on").unwrap();
-        assert!(Settings::load(Some(&dir.file()), |_| {}).night());
+        assert_eq!(Settings::load(Some(&dir.file()), |_| {}).night(), NightMode::On);
         let tmp = sibling(&dir.file(), ".tmp");
         assert!(!tmp.exists());
         fs::create_dir(tmp).unwrap();
         assert!(settings.set("night", "off").is_err());
-        assert!(settings.night());
-        assert!(Settings::load(Some(&dir.file()), |_| {}).night());
+        assert_eq!(settings.night(), NightMode::On);
+        assert_eq!(Settings::load(Some(&dir.file()), |_| {}).night(), NightMode::On);
     }
 
     #[test]
     fn invalid_changes_are_rejected() {
         let mut settings = Settings::default();
-        for (key, value) in [("night", "auto"), ("night", "true"), ("clock24", "on"), ("future", "x")] {
+        for (key, value) in [("night", "true"), ("clock24", "on"), ("future", "x")] {
             assert!(settings.set(key, value).is_err());
         }
         assert!(settings.values.is_empty());
+    }
+
+    #[test]
+    fn night_schedule_wraps_and_uses_half_open_boundaries() {
+        for (hhmm, expected) in [(0, true), (629, true), (630, false), (1859, false), (1900, true), (2359, true)] {
+            assert_eq!(night_now(NightMode::Auto, NIGHT_START, NIGHT_END, Some(hhmm), true), expected, "{hhmm}");
+        }
+        for (hhmm, expected) in [(859, false), (900, true), (1200, true), (1659, true), (1700, false), (2359, false)] {
+            assert_eq!(night_now(NightMode::Auto, 540, 1020, Some(hhmm), true), expected, "{hhmm}");
+        }
+    }
+
+    #[test]
+    fn equal_schedule_untrusted_and_unknown_clock_use_day() {
+        for hhmm in [None, Some(0), Some(630), Some(1900), Some(2359), Some(2400), Some(1960)] {
+            assert!(!night_now(NightMode::Auto, NIGHT_START, NIGHT_END, hhmm, false));
+            assert!(!night_now(NightMode::Auto, 390, 390, hhmm, true));
+            assert!(!night_now(NightMode::Off, NIGHT_START, NIGHT_END, hhmm, true));
+            assert!(night_now(NightMode::On, NIGHT_START, NIGHT_END, hhmm, false));
+        }
+        for hhmm in [None, Some(2400), Some(1960), Some(u32::MAX)] {
+            assert!(!night_now(NightMode::Auto, NIGHT_START, NIGHT_END, hhmm, true));
+        }
+    }
+
+    #[test]
+    fn night_modes_have_distinct_ui_choice_indices() {
+        let mut settings = Settings::default();
+        for (mode, index) in [("off", 0), ("on", 1), ("auto", 2)] {
+            settings.set("night", mode).unwrap();
+            assert_eq!(settings.night() as i32, index);
+        }
+        for bad in [serde_json::json!("AUTO"), Json::Null, Json::Bool(true), Json::from(2)] {
+            settings.values.insert("night".into(), bad);
+            assert_eq!(settings.night(), NightMode::Off);
+        }
+    }
+
+    #[test]
+    fn schedule_keys_require_json_integers_in_quarter_hours() {
+        let dir = Dir::new();
+        let mut settings = Settings::load(Some(&dir.file()), |_| {});
+        settings.set("night", "auto").unwrap();
+        for minutes in [0, 15, 390, 1140, 1425] {
+            for key in ["night-start", "night-end"] {
+                settings.set(key, &minutes.to_string()).unwrap();
+            }
+            let saved = Settings::load(Some(&dir.file()), |_| panic!("valid JSON"));
+            assert_eq!(saved.night_start(), minutes);
+            assert_eq!(saved.night_end(), minutes);
+            assert_eq!(saved.values["night-start"], Json::from(minutes));
+            assert_eq!(saved.values["night-end"], Json::from(minutes));
+            assert_eq!(saved.night(), NightMode::Auto);
+        }
+        for invalid in ["", "-15", "1", "1439", "1440", "1140.0", "19:00", " 390", "99999999999999999999"] {
+            for key in ["night-start", "night-end"] {
+                assert!(settings.set(key, invalid).is_err());
+            }
+            assert_eq!(settings.night_start(), 1425);
+            assert_eq!(settings.night_end(), 1425);
+        }
+        for invalid in [Json::Null, Json::Bool(true), Json::from("1140"), Json::from(-15),
+            Json::from(1), Json::from(1439), Json::from(1440), Json::from(1140.0), serde_json::json!([])] {
+            fs::write(dir.file(), serde_json::to_vec(&serde_json::json!({"night-start": invalid, "night-end": invalid})).unwrap()).unwrap();
+            let saved = Settings::load(Some(&dir.file()), |_| panic!("valid JSON"));
+            assert_eq!(saved.night_start(), NIGHT_START);
+            assert_eq!(saved.night_end(), NIGHT_END);
+        }
     }
 
     #[test]

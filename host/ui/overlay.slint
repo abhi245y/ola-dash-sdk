@@ -84,6 +84,7 @@ export global HostState {
     in property <bool> charging: false;
     in property <string> clock-text;
     in property <int> battery-pct: -1;
+    in property <bool> data-stale: false;
     // 0 none, 1 fall/accident, 2 tow/theft, 3 side stand, 4 steering lock,
     // 5 vehicle fault, 6 low battery.
     in property <int> alert-code: 0;
@@ -414,6 +415,31 @@ export component HostOverlay inherits Rectangle {
             height: parent.height;
             text: "TEST DATA";
             color: #000000;
+            font-size: root.vertical ? 13px : 18px;
+            font-weight: 700;
+            wrap: word-wrap;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    // NO DATA badge: TEST DATA's slot, moved one badge further in when both show.
+    if HostState.data-stale : Rectangle {
+        width: root.vertical ? OverlayTokens.strip-w - 8px : 150px;
+        height: root.vertical ? 40px : 34px;
+        x: root.vertical
+            ? (OverlayConfig.placement == OverlayPlacement.right ? root.width - OverlayTokens.strip-w + 4px : 4px)
+            : root.width - (HostState.test-mode ? 324px : 166px);
+        y: root.vertical
+            ? root.height - (HostState.test-mode ? 88px : 44px)
+            : (OverlayConfig.placement == OverlayPlacement.bottom ? root.height - OverlayTokens.strip-h + 7px : 7px);
+        border-radius: 6px;
+        background: OverlayTokens.red;
+        HostText {
+            width: parent.width;
+            height: parent.height;
+            text: "NO DATA";
+            color: #ffffff;
             font-size: root.vertical ? 13px : 18px;
             font-weight: 700;
             wrap: word-wrap;

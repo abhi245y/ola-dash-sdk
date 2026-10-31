@@ -8,6 +8,7 @@ use std::mem::ManuallyDrop;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::time::Instant;
 
 use android_activity::AndroidApp;
 use jni::objects::{JClass, JObject, JString, JValue};
@@ -43,6 +44,7 @@ const AUTH_ATTEMPTS: usize = 34;
 const AUTH_ERROR: usize = 35;
 const AUTH_COOLDOWN: usize = 36;
 const AUTH_AVAILABLE: usize = 37;
+const DATA_STALE: usize = 38;
 const PARKED: usize = 39;
 // Contract v6. Trunk latch (true = open). Java side: VehicleBridge.TRUNK_OPEN.
 const TRUNK_OPEN: usize = 16;
@@ -253,6 +255,7 @@ fn apply(ui: &ComponentInstance, id: usize, v: f64) {
         AUTH_ERROR => ("HostState", "auth-error", n),
         AUTH_COOLDOWN => ("HostState", "auth-cooldown", n),
         AUTH_AVAILABLE => ("HostState", "auth-available", b),
+        DATA_STALE => ("Vehicle", "data-stale", b), // HOST_COPY mirrors it into HostState
         PARKED => ("HostState", "parked", b),
         VEHICLE_STATE => {
             let name = STATE_NAMES.get(v as usize).copied().unwrap_or("unknown");
@@ -316,6 +319,11 @@ fn theme_entry(files: &Path, rel: &str) -> Result<String, String> {
     Ok(entry.to_string())
 }
 
+/// `timing <stage> <N> ms` lines, parsed by ola-dash tools/measure.sh.
+fn timing(stage: &str, since: Instant) {
+    log::info!("timing {stage} {} ms", since.elapsed().as_millis());
+}
+
 fn build_root(files: &Path, theme: &str) -> Result<ComponentInstance, String> {
     // Folder relative to files/, and the entry file inside it.
     let (rel, entry) = match theme {
@@ -327,6 +335,7 @@ fn build_root(files: &Path, theme: &str) -> Result<ComponentInstance, String> {
     };
     let include = vec![files.join("contract")];
     // Probe compile of the theme alone: which optional Dash properties it defines.
+    let t = Instant::now();
     let mut probe = Compiler::new();
     probe.set_include_paths(include.clone());
     let entry_path = files.join(&rel).join(&entry);
@@ -334,6 +343,8 @@ fn build_root(files: &Path, theme: &str) -> Result<ComponentInstance, String> {
     theme_root::guard(&mut probe, &[&contract], &theme_dir, &entry_path, true)?;
     let probed = spin_on::spin_on(probe.build_from_path(&entry_path));
     let declared = theme_root::declared(&probed)?;
+    timing("probe", t);
+    let t = Instant::now();
     let src = theme_root::root_source(&format!("../{rel}/{entry}"), &declared);
     let mut compiler = Compiler::new();
     compiler.set_include_paths(include);
@@ -343,8 +354,11 @@ fn build_root(files: &Path, theme: &str) -> Result<ComponentInstance, String> {
         let msgs: Vec<String> = result.diagnostics().map(|d| d.to_string()).collect();
         return Err(msgs.join("\n"));
     }
+    timing("root", t);
     let def = result.component("Host").ok_or("no Host component")?;
+    let t = Instant::now();
     let ui = def.create().map_err(|e| e.to_string())?;
+    timing("create", t);
     theme_root::bind(&ui, log_warn)?;
     Ok(ui)
 }
@@ -488,10 +502,20 @@ fn wire(ui: &ComponentInstance, app: &AndroidApp) -> Result<(), String> {
     Ok(())
 }
 
-fn run(app: &AndroidApp) -> Result<(), String> {
+fn run(app: &AndroidApp, start: Instant) -> Result<(), String> {
     let files = app.internal_data_path().ok_or("no internal data path")?;
     let ui = load_ui(&files)?;
     wire(&ui, app)?;
+    // First frame is measured from android_main entry (the load start), not process start.
+    let mut first = Some(start);
+    if let Err(e) = ui.window().set_rendering_notifier(move |state, _| {
+        if let (slint::RenderingState::AfterRendering, Some(t)) = (state, first) {
+            first = None;
+            timing("first-frame", t);
+        }
+    }) {
+        log::warn!("first-frame timing unavailable: {e:?}");
+    }
     // Theme coordinates are panel pixels (1280x768). The Android backend applies the
     // 236 dpi density (~1.47x); force 1.0 once the window exists and after resumes.
     let weak = ui.as_weak();
@@ -515,6 +539,7 @@ fn run(app: &AndroidApp) -> Result<(), String> {
 
 #[unsafe(no_mangle)]
 fn android_main(app: android_activity::AndroidApp) {
+    let start = Instant::now();
     android_logger::init_once(
         android_logger::Config::default()
             .with_max_level(log::LevelFilter::Info)
@@ -529,7 +554,7 @@ fn android_main(app: android_activity::AndroidApp) {
         log::error!("slint android init failed: {e}");
         return;
     }
-    if let Err(e) = run(&app) {
+    if let Err(e) = run(&app, start) {
         log::error!("fatal: {e}");
     }
 }

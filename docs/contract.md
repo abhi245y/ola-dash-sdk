@@ -70,7 +70,7 @@ History (from the file's comment):
 | `ready-to-ride` | `in bool` | false | Equals `state == VehicleState.drive`. Kept for v1 themes. |
 | `trunk-open` | `in bool` | false | v6. True while the seat/trunk latch is open. It closes when the seat is pressed down. Themes may ignore it. Derived from `isTrunkLock` as `!locked`; that polarity is inferred from logs and not yet verified on a scooter. |
 | `clock-text` | `in string` | "" | Preformatted clock, for example `10:24` |
-| `data-stale` | `in bool` | false | v7. For when vehicle data stops arriving; the other values then show the last known state. Not set by the host yet (E0.S3). Themes may show a hint or ignore it. |
+| `data-stale` | `in bool` | false | v7. True when the vehicle parser is gone, or no vehicle callback arrived for 5 s while `state` is `drive`; the other values then show the last known state. Clears when data resumes. The host draws its own NO DATA badge; themes may add a hint or ignore it. |
 
 ## `Display` global (v7)
 

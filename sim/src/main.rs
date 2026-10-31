@@ -11,6 +11,7 @@
 //!                                                 the last three show the lock screen (see docs/themes.md)
 //!            --plugins / --nav                    feed mock plugin widgets / an active navigation card
 //!            --night                              set Display.night
+//!            --stale                              set Vehicle.data-stale (shows the NO DATA badge)
 //!
 //! The theme is loaded the way the device loads it: inside the host's `Host` root,
 //! with `HostOverlay` drawn above it (host/src/theme_root.rs, shared with the host).
@@ -299,6 +300,8 @@ struct Feeder {
     scenario: Scenario,
     /// `--night`: Display.night = true.
     night: bool,
+    /// `--stale`: Vehicle.data-stale = true.
+    stale: bool,
 }
 
 impl Feeder {
@@ -313,6 +316,7 @@ impl Feeder {
             alert_override: args.alert,
             scenario: args.scenario,
             night: args.night,
+            stale: args.stale,
         }
     }
 
@@ -373,6 +377,7 @@ impl Feeder {
         self.set(inst, "Vehicle", "clock-text", Value::String(s.clock.into()));
         self.set(inst, "Vehicle", "trunk-open", Value::Bool(s.trunk));
         self.set(inst, "Vehicle", "hyper-available", Value::Bool(s.hyper_available));
+        self.set(inst, "Vehicle", "data-stale", Value::Bool(self.stale));
         self.set(inst, "Battery", "soc-pct", Value::Number(s.soc));
         self.set(inst, "Battery", "current-a", Value::Number(s.current_a));
         self.set(inst, "Battery", "voltage-v", Value::Number(s.voltage_v));
@@ -484,6 +489,7 @@ struct Args {
     nav: bool,
     pixel: Option<(usize, usize)>,
     night: bool,
+    stale: bool,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -499,6 +505,7 @@ fn parse_args() -> Result<Args, String> {
     let mut nav = false;
     let mut pixel = None;
     let mut night = false;
+    let mut stale = false;
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -522,6 +529,7 @@ fn parse_args() -> Result<Args, String> {
             "--plugins" => plugins = true,
             "--nav" => nav = true,
             "--night" => night = true,
+            "--stale" => stale = true,
             "--pixel" => {
                 pixel = Some(it
                     .next()
@@ -539,7 +547,7 @@ fn parse_args() -> Result<Args, String> {
             "-h" | "--help" => {
                 println!("usage: sim <theme-dir> [--screenshot out.png --at SECS] [--contract DIR]");
                 println!("       [--placement top|bottom|left|right] [--alert 1-6]");
-                println!("       [--state ride|park|charge|reverse|trunk|easy-park|locked|locked-error|cooldown] [--plugins] [--nav] [--night]");
+                println!("       [--state ride|park|charge|reverse|trunk|easy-park|locked|locked-error|cooldown] [--plugins] [--nav] [--night] [--stale]");
                 println!("       [--pixel X,Y]  (with --screenshot: also print the colour at that point)");
                 println!("       sim --check <theme-dir> [--contract DIR]");
                 std::process::exit(0);
@@ -560,7 +568,7 @@ fn parse_args() -> Result<Args, String> {
             return Err(format!("--placement needs top, bottom, left or right, got {p}"));
         }
     }
-    Ok(Args { theme, contract, screenshot, at, check, placement, alert, scenario, plugins, nav, pixel, night })
+    Ok(Args { theme, contract, screenshot, at, check, placement, alert, scenario, plugins, nav, pixel, night, stale })
 }
 
 /// Path of `to` relative to `from` (both absolute, same drive), with '/' separators.

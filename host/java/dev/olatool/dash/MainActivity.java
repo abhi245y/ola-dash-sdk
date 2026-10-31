@@ -10,6 +10,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import android.view.WindowManager;
 
 import dev.olatool.dash.plugin.PluginHost;
 
@@ -66,6 +67,7 @@ public final class MainActivity extends NativeActivity {
             Log.e(TAG, "asset copy failed", e);
         }
         super.onCreate(state);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         VehicleBridge.start(this);
         PluginHost.start(this);
         clock.run();

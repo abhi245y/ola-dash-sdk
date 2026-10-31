@@ -305,6 +305,7 @@ Options:
 | `--plugins` | Feeds three mock plugin widgets (`Plugins.widgets`). |
 | `--nav` | Feeds an active navigation card (`Navigation.active`), which replaces the media card. |
 | `--night` | Sets `Display.night` (contract v7). |
+| `--stale` | Sets `Vehicle.data-stale` (contract v7) and shows the host NO DATA badge. |
 | `--placement top\|bottom\|left\|right` | Previews another overlay placement. |
 | `--contract <dir>` | Uses another contract folder. The default is `<theme>/../../contract`. |
 

@@ -38,12 +38,23 @@ public final class BadThemeGuardTest {
         File files = Files.createTempDirectory("guard").toFile();
         File themes = new File(files, "themes");
         themes.mkdirs();
-        Files.write(new File(themes, "active").toPath(), "neon".getBytes(StandardCharsets.UTF_8));
-        BadThemeGuard.onStart(files);
-        check("neon 1".equals(read(new File(themes, "strikes"))), "onStart writes strike 1");
-        check(BadThemeGuard.onStart(files) == null, "Second onStart in the same process is ignored");
+        File active = new File(themes, "active"), strikes = new File(themes, "strikes"), bad = new File(themes, "bad");
+        Files.write(active.toPath(), "neon".getBytes(StandardCharsets.UTF_8));
+        BadThemeGuard.strike(files);
+        check("neon 1".equals(read(strikes)), "strike writes strike 1");
+        check(BadThemeGuard.strike(files) == null, "Second strike in the same process is ignored");
         BadThemeGuard.cleanExit();
-        check(read(new File(themes, "strikes")) == null, "cleanExit deletes strikes");
+        check(read(strikes) == null, "cleanExit deletes strikes");
+
+        for (int i = 0; i < 2; i++) { // second round: bad already lists neon, no duplicate
+            BadThemeGuard.reset();
+            Files.write(active.toPath(), "neon".getBytes(StandardCharsets.UTF_8));
+            Files.write(strikes.toPath(), "neon 2".getBytes(StandardCharsets.UTF_8));
+            BadThemeGuard.strike(files);
+            check("default".equals(read(active)), "Struck out: active is default");
+            check("neon\n".equals(read(bad)), "Struck out: neon listed once in bad");
+            check(read(strikes) == null, "Struck out: strikes deleted");
+        }
         System.out.println("BadThemeGuardTest: " + checks + " checks passed");
     }
 }

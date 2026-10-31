@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
+import java.util.Arrays;
 
 /**
  * Crash-loop guard for themes (E0.S6 T4). Called from MainActivity.onCreate before Slint starts:
@@ -56,10 +57,10 @@ final class BadThemeGuard {
     }
 
     /**
-     * Strike the active theme; returns what happened for logging, or null if files/ is unusable.
-     * Runs once per process (a recreate() must not count as a start).
+     * Strike the active theme; returns what happened for logging, or null if it already ran in this
+     * process (a recreate() must not count as a start).
      */
-    static synchronized String onStart(File files) {
+    static synchronized String strike(File files) {
         if (themes != null) return null;
         themes = new File(files, "themes");
         themes.mkdirs();
@@ -67,7 +68,10 @@ final class BadThemeGuard {
         try {
             if (r.bad != null) {
                 write("active", DEFAULT, false);
-                write("bad", r.bad + "\n", true);
+                String bad = read("bad");
+                if (bad == null || !Arrays.asList(bad.split("\\s+")).contains(r.bad)) {
+                    write("bad", r.bad + "\n", true);
+                }
                 new File(themes, "strikes").delete();
                 return "theme " + r.bad + " struck out, active reset to default";
             }
@@ -78,7 +82,12 @@ final class BadThemeGuard {
         return "strike " + r.strikes;
     }
 
-    /** The theme survived its first seconds, or the app is exiting on purpose (E0.S6 T1 calls this before exit(0)). */
+    /** Test hook: forget that strike() ran, so one JVM can run it twice. */
+    static synchronized void reset() {
+        themes = null;
+    }
+
+    /** The theme survived its first seconds, or the app paused or is exiting on purpose (E0.S6 T1 calls this before exit(0)). */
     static synchronized void cleanExit() {
         if (themes != null) new File(themes, "strikes").delete();
     }

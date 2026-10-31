@@ -56,7 +56,7 @@ Themes are loaded in three tiers. A failed compile or create logs its diagnostic
 2. The bundled fallback, a copy of `themes/default`.
 3. The bundled last-resort placeholder, `host/ui/last-resort/main.slint`.
 
-A theme that compiles but crashes the host at start (panic, out of memory) is caught by the bad-theme guard: `MainActivity.onCreate` counts a strike for the active theme in `files/themes/strikes` (`<name> <n>`) before Slint starts, and clears it 10 s later or on a clean exit (`BadThemeGuard.cleanExit()`, which the theme switch must call before `exit(0)`). A theme with two strikes is replaced by `default` in `files/themes/active` and added to `files/themes/bad`, one name per line.
+A theme that compiles but crashes the host at start (panic, out of memory) is caught by the bad-theme guard: `MainActivity.onCreate` counts a strike for the active theme in `files/themes/strikes` (`<name> <n>`) before Slint starts, and clears it 10 s later, on pause or on a clean exit (`BadThemeGuard.cleanExit()`, which the theme switch must call before `exit(0)`). A theme with two strikes is replaced by `default` in `files/themes/active` and added to `files/themes/bad`, one name per line.
 
 ## Safety overlay
 

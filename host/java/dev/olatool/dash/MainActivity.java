@@ -67,7 +67,7 @@ public final class MainActivity extends NativeActivity {
             Log.e(TAG, "asset copy failed", e);
         }
         // Bad-theme guard: strike the active theme before Slint can crash on it (cleared below).
-        Log.i(TAG, "theme guard: " + BadThemeGuard.onStart(getFilesDir()));
+        Log.i(TAG, "theme guard: " + BadThemeGuard.strike(getFilesDir()));
         super.onCreate(state);
         handler.postDelayed(BadThemeGuard::cleanExit, 10_000L); // survived 10 s
         // Unverified until M-sleep (session A): does the locked panel still sleep with this flag?
@@ -104,6 +104,7 @@ public final class MainActivity extends NativeActivity {
     @Override
     protected void onPause() {
         paused = true;
+        BadThemeGuard.cleanExit(); // Android pauses before any background kill, and Slint is up by now
         super.onPause();
     }
 
@@ -115,9 +116,6 @@ public final class MainActivity extends NativeActivity {
 
     @Override
     protected void onDestroy() {
-        if (isFinishing()) {
-            BadThemeGuard.cleanExit();
-        }
         handler.removeCallbacks(clock);
         handler.removeCallbacks(testOff);
         if (testReceiver != null) {

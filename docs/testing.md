@@ -55,7 +55,7 @@ javac -d host/build-tests host/java/dev/olatool/dash/BadThemeGuard.java host/tes
     && java -cp host/build-tests dev.olatool.dash.BadThemeGuardTest
 ```
 
-The bad-theme guard (`files/themes/strikes`, `bad`) has no cheap crash trigger: a Slint theme cannot panic the host on demand. Its start-up wiring is a manual device test in session A (a theme that crashes the host at start must be replaced by `default` on the third start). Pushing `files/themes/strikes` as `<theme> 2` and restarting the app tests the swap without a crash.
+The bad-theme guard (`files/themes/strikes`, `bad`): the file handling is covered by the test above. The start-up wiring needs a manual device test in session A: a theme that crashes the host at start must be replaced by `default` on the third start. A debug-only panic trigger (`debug.oladash.panic`, read in `load_ui` in `lib.rs`) is a follow-up. Until then, pushing `files/themes/strikes` as `<theme> 2` and restarting the app tests the swap without a crash.
 
 These run from a plain checkout. Check `host/README.md` if the paths move.
 

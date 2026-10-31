@@ -34,6 +34,7 @@ export component SettingsScreen inherits Rectangle {
     callback set-option(string, string);
     callback apply-theme(string);
     callback load-plugins();
+    callback load-themes();
     callback set-plugin(string, bool);
     in property <[ThemeInfo]> themes;
     in property <[PluginInfo]> plugins;
@@ -49,11 +50,12 @@ export component SettingsScreen inherits Rectangle {
     init => {
         root.cursor = root.selected;
         root.theme-selection = root.active-theme;
+        if root.pane == "Theme" { root.load-themes(); }
         if root.pane == "Plugins" { root.load-plugins(); }
     }
     changed selected => {
         root.options-open = false;
-        if root.pane == "Theme" { root.theme-selection = root.active-theme; }
+        if root.pane == "Theme" { root.theme-selection = root.active-theme; root.load-themes(); }
         if root.pane == "Plugins" { root.load-plugins(); }
     }
     public function move(delta: int) {
@@ -172,24 +174,38 @@ export component SettingsScreen inherits Rectangle {
         if !root.options-open : Flickable {
             x: 0px; y: 0px; width: parent.width; height: parent.body-height - 88px;
             content-width: self.width;
-            content-height: max(self.height, root.themes.length * 96px - 16px);
+            content-height: max(self.height, root.themes.length * 112px - 16px);
             for theme[i] in root.themes : Rectangle {
-                x: 0px; y: i * 96px; width: parent.width; height: 80px;
+                x: 0px; y: i * 112px; width: parent.width; height: 96px;
                 border-radius: 24px;
                 border-width: 1px;
                 border-color: LockConfig.style.key-border;
                 property <bool> selected: root.theme-selection == theme.id;
                 property <color> ink: self.selected ? LockConfig.on-accent : LockConfig.style.foreground;
                 property <color> secondary: self.selected ? LockConfig.on-accent : LockConfig.style.muted;
-                property <length> text-width: self.width - (theme.id == root.active-theme ? 152px : 48px);
+                property <bool> has-tag: theme.id == root.active-theme || theme.source == "sideloaded";
+                property <length> text-width: self.width - 168px - (self.has-tag ? 168px : 24px);
                 background: self.selected ? LockConfig.style.accent : LockConfig.style.key-background;
                 accessible-role: button;
                 accessible-label: theme.name;
                 accessible-checkable: true;
                 accessible-checked: self.selected;
                 accessible-action-default => { root.theme-selection = theme.id; }
+                Rectangle {
+                    x: 24px; y: (parent.height - self.height) / 2; width: 128px; height: 77px;
+                    border-radius: 12px;
+                    border-width: 1px;
+                    border-color: LockConfig.style.key-border;
+                    background: LockConfig.style.key-border.with-alpha(0.5);
+                    clip: true;
+                    if theme.preview.width > 0 : Image {
+                        x: 1px; y: 1px; width: parent.width - 2px; height: parent.height - 2px;
+                        source: theme.preview;
+                        image-fit: cover;
+                    }
+                }
                 HostText {
-                    x: 24px; y: 8px; width: parent.text-width; height: 32px;
+                    x: 168px; y: 16px; width: parent.text-width; height: 32px;
                     text: theme.name;
                     color: parent.ink;
                     font-size: 26px;
@@ -197,15 +213,15 @@ export component SettingsScreen inherits Rectangle {
                     overflow: elide;
                 }
                 HostText {
-                    x: 24px; y: 44px; width: parent.text-width; height: 24px;
+                    x: 168px; y: 52px; width: parent.text-width; height: 24px;
                     text: theme.description;
                     color: parent.secondary;
                     font-size: 18px;
                     overflow: elide;
                 }
-                if theme.id == root.active-theme : HostText {
-                    x: parent.width - 120px; y: 0px; width: 96px; height: parent.height;
-                    text: "In use";
+                if theme.id == root.active-theme || theme.source == "sideloaded" : HostText {
+                    x: parent.width - 152px; y: 0px; width: 128px; height: parent.height;
+                    text: theme.id == root.active-theme ? "In use" : "Sideloaded";
                     color: parent.secondary;
                     font-size: 18px;
                     font-weight: 700;

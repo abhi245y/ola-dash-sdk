@@ -57,6 +57,7 @@ cp "$ROOT/contract/vehicle.slint" "$B/assets/contract/"
 cp "$HERE/ui/"*.slint "$B/assets/host/"
 cp -r "$HERE/ui/fonts" "$B/assets/host/"
 cp -r "$ROOT/themes/default/." "$B/assets/fallback/"       # bundled default theme (fallback tier)
+: > "$B/assets/fallback/.bundled"
 # Optional EXTRA_THEMES=<dir>: each subfolder with a theme.json is bundled as themes/<id>/.
 for d in ${EXTRA_THEMES:+"$EXTRA_THEMES"/*/}; do
     [ -f "$d/theme.json" ] || continue
@@ -64,6 +65,7 @@ for d in ${EXTRA_THEMES:+"$EXTRA_THEMES"/*/}; do
     case $id in active|previous|bad|strikes|restart|*[!A-Za-z0-9_-]*) echo "bad theme id: $id" >&2; exit 1;; esac
     mkdir -p "$B/assets/themes"
     cp -r "$d" "$B/assets/themes/$id"
+    : > "$B/assets/themes/$id/.bundled"
 done
 cp "$HERE/ui/last-resort/main.slint" "$B/assets/last-resort/"  # placeholder (last-resort tier)
 
@@ -99,14 +101,19 @@ aapt2 compile --dir "$HERE/res" -o "$B/resources.zip"
 aapt2 link -I "$PLATFORM" --manifest "$HERE/AndroidManifest.xml" -A "$B/assets" \
     --min-sdk-version "$API" --target-sdk-version 34 --version-code "$VCODE" --version-name "$VNAME" --replace-version $DEBUGMODE \
     -o "$B/base.apk" "$B/resources.zip"
-python3 - "$B/base.apk" "$B/dex/classes.dex" "$B/liboladash.so" "$B/unsigned.apk" <<'PY'
-import sys, zipfile
-base, dex, so, out = sys.argv[1:5]
+python3 - "$B/base.apk" "$B/dex/classes.dex" "$B/liboladash.so" "$B/unsigned.apk" "$B/assets" <<'PY'
+import pathlib, sys, zipfile
+base, dex, so, out, assets = sys.argv[1:6]
 with zipfile.ZipFile(base) as src, zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as dst:
     for item in src.infolist():
         dst.writestr(item, src.read(item.filename), compress_type=item.compress_type)
     dst.write(dex, "classes.dex")
     dst.write(so, "lib/arm64-v8a/liboladash.so")
+    # aapt2 drops dotfiles from assets; the .bundled markers are added here.
+    for marker in sorted(pathlib.Path(assets).rglob(".bundled")):
+        dst.writestr("assets/" + marker.relative_to(assets).as_posix(), b"")
+    if "assets/fallback/.bundled" not in dst.namelist():
+        sys.exit("assets/fallback/.bundled missing from the APK")
 PY
 
 # 5. Align and sign: the debug key (created once), or the release key from the environment.

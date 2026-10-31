@@ -2,7 +2,7 @@ import { LockConfig } from "unlock.slint";
 import { HostText } from "hosttext.slint";
 import { Choice, PillButton } from "kit.slint";
 
-export struct ThemeInfo { id: string, name: string, description: string }
+export struct ThemeInfo { id: string, name: string, description: string, preview: image, source: string }
 
 export component FirstRunScreen inherits Rectangle {
     in property <[ThemeInfo]> themes;

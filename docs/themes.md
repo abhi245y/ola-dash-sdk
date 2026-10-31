@@ -95,6 +95,22 @@ Plain text on the default font, with top telltales. It is the smallest theme tha
 
 `tools/check-themes.sh` checks all of these. A theme that asks for a contract newer than the SDK ships fails the check.
 
+## Preview: `preview.png`
+
+Place `preview.png` at the root of the theme folder: a 640 x 384 RGB or RGBA PNG showing the riding theme with the host overlay. Generate it from the deterministic 1280 x 768 capture at sim time 13 s, downscaled 2:1 with a 2x2 box filter:
+
+```sh
+sim themes/default --write-preview
+SIM=sim/target/release/sim tools/previews.sh
+EXTRA_THEMES=/path/to/product/themes tools/previews.sh
+```
+
+`--write-preview` writes `<theme-dir>/preview.png` through the same render path as `--screenshot`; it accepts only the theme directory and optional `--contract DIR`, uses default options and day mode, and ignores `SIM_PLUGINS`. `tools/previews.sh` runs it for every theme folder in `themes/` and, when set, `EXTRA_THEMES`; without `SIM`, the script first builds the release sim.
+
+Previews are optional for local themes and required in store packages. `sim --check` warns when one is missing and fails if an existing preview cannot be decoded as a 640 x 384 RGB(A) PNG. The host loads previews only up to 1 MiB (1,048,576 bytes); missing, oversized or unreadable images show an empty rounded placeholder without blocking the pane. Keep previews within the theme size budget below.
+
+Settings > Theme rescans installed folders whenever opened. The fallback/default copy and folders with a `.bundled` file have source `bundled`; otherwise a `.store` file means `store`, and all others are `sideloaded`. The build writes `.bundled` into the fallback and every `EXTRA_THEMES` copy; the future store client writes `.store`. Inactive sideloaded rows show “Sideloaded”; the active row shows only “In use”.
+
 ## Entry file
 
 ```slint
@@ -344,6 +360,7 @@ Options:
 | `--stale` | Sets `Vehicle.data-stale` (contract v7) and shows the host NO DATA badge. |
 | `--placement top\|bottom\|left\|right` | Previews another overlay placement. |
 | `--contract <dir>` | Uses another contract folder. The default is `<theme>/../../contract`. |
+| `--write-preview` | Writes the standard 640 x 384 riding preview to the theme folder; accepts no capture overrides. |
 
 `SIM_PLUGINS=1` is the older spelling of `--plugins --nav`, and it still works.
 

@@ -56,7 +56,8 @@ done
 probes=("ride 13 1200,24 -" "ride 13 36,24 #5cff9d" "locked 5 600,280 -")
 png="$(mktemp)"
 clock_settings="$(mktemp)"
-trap 'rm -f "$png" "$clock_settings"' EXIT
+preview_dir="$(mktemp -d)"
+trap 'rm -f "$png" "$clock_settings"; rm -rf "$preview_dir"' EXIT
 for dir in "$ROOT"/tools/fixtures/loads/*/; do
     dir="${dir%/}"
     if ! "$SIM" --check "$dir" --contract "$ROOT/contract" >&2; then
@@ -170,13 +171,30 @@ else
     echo "error: Display Auto option not selected during day (pixel 968,192 is $got, want #ffc94a)" >&2
     status=1
 fi
-# Theme rows begin at (432,176), 96 px apart: Minimal is third after Default and
-# Data Fields. (448,408) is in its left padding, clear of text and the 24 px corners.
-got=$("$SIM" "$ROOT/themes/minimal" --contract "$ROOT/contract" --state park --screen settings --pane theme --at 13 --screenshot "$png" --pixel 448,408 | tail -n 1) || got=error
+# Theme rows now have height 96 and pitch 112 (was 80 / 96). Minimal is third
+# after Default and Data Fields. (448,440) stays in left padding, outside the thumbnail.
+got=$("$SIM" "$ROOT/themes/minimal" --contract "$ROOT/contract" --state park --screen settings --pane theme --at 13 --screenshot "$png" --pixel 448,440 | tail -n 1) || got=error
 if [ "$got" = "#ffc94a" ]; then
-    echo "ok: active theme row selected (pixel 448,408 is $got)"
+    echo "ok: active theme row selected (pixel 448,440 is $got)"
 else
-    echo "error: active theme row not selected (pixel 448,408 is $got, want #ffc94a)" >&2
+    echo "error: active theme row not selected (pixel 448,440 is $got, want #ffc94a)" >&2
+    status=1
+fi
+# Generate the fixture preview with the real capture path, only in a temporary copy.
+# Its only row starts at (432,176); (520,224) is inside the thumbnail, away from its
+# border and the captured overlay. A placeholder cannot produce the fixture's blue.
+cp -R "$ROOT/tools/fixtures/loads/preview" "$preview_dir/preview"
+if "$SIM" "$preview_dir/preview" --contract "$ROOT/contract" --write-preview \
+    && "$SIM" --check "$preview_dir/preview" --contract "$ROOT/contract"; then
+    got=$("$SIM" "$preview_dir/preview" --contract "$ROOT/contract" --state park --screen settings --pane theme --at 13 --screenshot "$png" --pixel 520,224 | tail -n 1) || got=error
+    if [ "$got" = "#123456" ]; then
+        echo "ok: theme preview thumbnail (pixel 520,224 is $got)"
+    else
+        echo "error: theme preview thumbnail (pixel 520,224 is $got, want #123456)" >&2
+        status=1
+    fi
+else
+    echo "error: could not generate or validate fixture preview" >&2
     status=1
 fi
 # Plugins rows start at (432,176), width 640 and height 80. Choice starts at

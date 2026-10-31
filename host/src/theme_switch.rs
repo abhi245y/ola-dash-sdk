@@ -2,15 +2,42 @@
 
 use std::fs;
 use std::io::{self, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub const DEFAULT_THEME: &str = "default";
+pub const MAX_PREVIEW: u64 = 1024 * 1024;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ThemeInfo {
     pub id: String,
     pub name: String,
     pub description: String,
+    pub preview: Option<PathBuf>,
+    pub source: String,
+}
+
+fn source(dir: &Path, id: &str) -> &'static str {
+    if id == DEFAULT_THEME || dir.join(".bundled").is_file() { "bundled" }
+    else if dir.join(".store").is_file() { "store" }
+    else { "sideloaded" }
+}
+
+/// Preview files are untrusted. The image loader decodes eagerly and sniffs the format, so
+/// only a regular file of at most 1 MiB whose PNG header says exactly 640 x 384 reaches it;
+/// that bounds the decoded size (a small PNG can claim a huge canvas).
+fn preview_ok(path: &Path) -> bool {
+    use std::io::Read;
+    let Ok(meta) = fs::symlink_metadata(path) else { return false };
+    let mut head = [0u8; 24];
+    meta.is_file() && meta.len() <= MAX_PREVIEW
+        && fs::File::open(path).and_then(|mut f| f.read_exact(&mut head)).is_ok()
+        && head[..8] == *b"\x89PNG\r\n\x1a\n" && head[12..16] == *b"IHDR"
+        && head[16..20] == 640u32.to_be_bytes() && head[20..24] == 384u32.to_be_bytes()
+}
+
+fn preview_path(dir: &Path) -> Option<PathBuf> {
+    let path = dir.join("preview.png");
+    preview_ok(&path).then_some(path)
 }
 
 fn info(dir: &Path, id: &str, host_contract: i64) -> Option<ThemeInfo> {
@@ -22,10 +49,12 @@ fn info(dir: &Path, id: &str, host_contract: i64) -> Option<ThemeInfo> {
         id: id.into(),
         name: manifest["name"].as_str().filter(|name| !name.is_empty()).unwrap_or(id).into(),
         description: manifest["description"].as_str().unwrap_or("").into(),
+        preview: preview_path(dir),
+        source: source(dir, id).into(),
     })
 }
 
-/// Scanned once at startup: `default` (the bundled fallback copy) first, then the rest.
+/// Scanned at startup and when opening the Theme pane: bundled `default` first, then the rest.
 /// Missing, unreadable or incompatible entries are quietly skipped.
 pub fn installed(files: &Path, host_contract: i64) -> Vec<ThemeInfo> {
     let bad = fs::read_to_string(files.join("themes/bad")).unwrap_or_default();
@@ -58,10 +87,17 @@ pub fn scan(dir: &Path, host_contract: i64) -> Vec<ThemeInfo> {
 pub fn model(themes: Vec<ThemeInfo>) -> slint_interpreter::Value {
     use slint_interpreter::Value;
     let rows: Vec<Value> = themes.into_iter().map(|theme| {
+        // Recheck here too: a file may have changed since discovery.
+        let preview = theme.preview.as_deref()
+            .filter(|path| preview_ok(path))
+            .and_then(|path| slint::Image::load_from_path(path).ok())
+            .unwrap_or_default();
         Value::Struct([
             ("id".into(), Value::String(theme.id.into())),
             ("name".into(), Value::String(theme.name.into())),
             ("description".into(), Value::String(theme.description.into())),
+            ("preview".into(), Value::Image(preview)),
+            ("source".into(), Value::String(theme.source.into())),
         ].into_iter().collect())
     }).collect();
     Value::Model(slint::ModelRc::new(slint::VecModel::from(rows)))
@@ -233,6 +269,52 @@ mod tests {
         assert_eq!(installed(&t.0, 7)[0].id, DEFAULT_THEME);
         fs::remove_file(t.0.join("fallback/theme.json")).unwrap();
         assert!(installed(&t.0, 7).is_empty());
+    }
+
+    #[test]
+    fn installed_classifies_sources_and_fallback_is_always_bundled() {
+        let t = Temp::new();
+        for name in ["fallback", "themes/bundled", "themes/store", "themes/local"] {
+            let dir = t.0.join(name);
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(dir.join("theme.json"), r#"{"entry":"main.slint","contract":7}"#).unwrap();
+            fs::write(dir.join("main.slint"), "").unwrap();
+        }
+        fs::write(t.0.join("themes/bundled/.bundled"), "").unwrap();
+        fs::write(t.0.join("themes/bundled/.store"), "").unwrap();
+        fs::write(t.0.join("themes/store/.store"), "").unwrap();
+        // Even a stale store marker cannot relabel the host's fallback copy.
+        fs::write(t.0.join("fallback/.store"), "").unwrap();
+        let themes = installed(&t.0, 7);
+        let pairs: Vec<_> = themes.iter().map(|t| (t.id.as_str(), t.source.as_str())).collect();
+        assert_eq!(pairs, [("default", "bundled"), ("bundled", "bundled"),
+            ("local", "sideloaded"), ("store", "store")]);
+    }
+
+    #[test]
+    fn preview_path_checks_size_and_png_header() {
+        let t = Temp::new();
+        let dir = t.0.join("fallback");
+        let path = dir.join("preview.png");
+        assert_eq!(preview_path(&dir), None);
+        fs::create_dir(&path).unwrap();
+        assert_eq!(preview_path(&dir), None);
+        fs::remove_dir(&path).unwrap();
+        let header = |w: u32, h: u32| {
+            let mut b = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR".to_vec();
+            b.extend(w.to_be_bytes());
+            b.extend(h.to_be_bytes());
+            b
+        };
+        fs::write(&path, header(640, 384)).unwrap();
+        assert_eq!(preview_path(&dir), Some(path.clone()));
+        fs::write(&path, header(10000, 10000)).unwrap(); // tiny file, huge canvas
+        assert_eq!(preview_path(&dir), None);
+        fs::write(&path, b"GIF89a not a png at all").unwrap();
+        assert_eq!(preview_path(&dir), None);
+        fs::write(&path, header(640, 384)).unwrap();
+        fs::File::options().write(true).open(&path).unwrap().set_len(MAX_PREVIEW + 1).unwrap();
+        assert_eq!(preview_path(&dir), None);
     }
 
     #[test]

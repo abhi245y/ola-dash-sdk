@@ -97,6 +97,7 @@ export component Host inherits Window {
     callback set-setting(string, string);
     callback set-option(string, string);
     callback load-plugins();
+    callback load-themes();
     callback set-plugin(string, bool);
     out property <bool> host-screens-allowed: HostState.parked && HostState.alert-code == 0
         && HostState.auth-phase >= 4 && !HostState.test-mode;
@@ -168,6 +169,7 @@ export component Host inherits Window {
         options-open <=> root.theme-options-open;
         plugins: root.plugins;
         load-plugins => { root.load-plugins(); }
+        load-themes => { root.load-themes(); }
         set-plugin(package, on) => { root.set-plugin(package, on); }
         set-setting(key, value) => { root.set-setting(key, value); }
         set-option(id, value) => { root.set-option(id, value); }

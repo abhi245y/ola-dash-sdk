@@ -67,6 +67,14 @@ for dir in "$ROOT"/tools/fixtures/loads/*/; do
         fi
     done
 done
+# NO DATA badge: --stale must paint it red (OverlayTokens.red) at the left edge of its slot, off the text.
+got=$("$SIM" "$ROOT/themes/minimal" --contract "$ROOT/contract" --stale --at 13 --screenshot "$png" --pixel 1120,24 | tail -n 1) || got=error
+if [ "$got" = "#ff3b30" ]; then
+    echo "ok: NO DATA badge shown with --stale (pixel 1120,24 is $got)"
+else
+    echo "error: --stale does not show the NO DATA badge (pixel 1120,24 is $got, want #ff3b30)" >&2
+    status=1
+fi
 rm -f "$png"
 
 if [ "$checked" -eq 0 ]; then

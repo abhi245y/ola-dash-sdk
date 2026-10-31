@@ -32,7 +32,7 @@ This project changes what a rider sees on a vehicle. The rules below apply to th
 - What the overlay shows. It reads host-owned copies (`HostState.left-indicator`, `locked`, `clock-text`, `battery-pct` and the rest of the telltale values), not `Vehicle.*`. A theme can write `Vehicle.*`, and that changes only the theme's own view.
 - The font of host text. The overlay, alert cards and lock screen use the host's font family `OlaDash Host`. `sim --check` refuses a theme that ships a font file carrying that name, so a theme cannot swap in blank or look-alike glyphs.
 - Dismissal. Fall or accident, tow or theft, side stand and steering lock cannot be dismissed. Fault and low battery can be tapped away, as before.
-- The TEST DATA badge, which is shown in every placement in debug builds.
+- The TEST DATA badge, which is shown in every placement in debug builds, and the NO DATA badge (red, same slot, hidden while TEST DATA shows) shown when vehicle data is stale: the parser is gone, or no vehicle data callback arrived for 5 s while in drive.
 - The alert scrim dims the whole screen, but the telltale strip is drawn above it, so telltales stay at full brightness during an alert.
 - Placement is clamped: no overlay element goes off screen.
 - The overlay shows the TEST DATA banner in debug builds while injected values are active. A release build never shows injected data.

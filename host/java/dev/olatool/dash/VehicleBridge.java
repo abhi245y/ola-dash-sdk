@@ -9,6 +9,7 @@ import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.os.RemoteException;
+import android.os.SystemClock;
 import android.util.Log;
 
 import java.lang.reflect.Method;
@@ -64,7 +65,7 @@ final class VehicleBridge {
             ODO_KM = 6, TRIP_KM = 7, LEFT_IND = 8, RIGHT_IND = 9, HIGH_BEAM = 10, HEADLIGHT = 11,
             LOCKED = 12, READY = 13, HYPER_AVAILABLE = 14, ALERT_CODE = 20, SIDE_STAND = 21, FAULT = 22, CLOCK_HHMM = 30,
             TEST_MODE = 31, AUTH_PHASE = 32, PIN_LENGTH = 33, AUTH_ATTEMPTS = 34,
-            AUTH_ERROR = 35, AUTH_COOLDOWN = 36, AUTH_AVAILABLE = 37, PARKED = 39;
+            AUTH_ERROR = 35, AUTH_COOLDOWN = 36, AUTH_AVAILABLE = 37, DATA_STALE = 38, PARKED = 39;
     // Contract v5. Ids match host/src/lib.rs. Unreported values are -1.
     static final int VEHICLE_STATE = 15, SOC_PCT = 40, BAT_CURRENT = 41, BUS_VOLTAGE = 42,
             TEMP_MIN = 43, TEMP_MAX = 44, HEALTH = 45, FRONT_BRAKE = 46, REAR_BRAKE = 47,
@@ -145,6 +146,7 @@ final class VehicleBridge {
                     Trace.event("keep-alive failed " + e);
                 }
             }
+            pushStale();
             Trace.flush();
             work.postDelayed(this, KEEPALIVE_MS);
         }
@@ -167,6 +169,7 @@ final class VehicleBridge {
         power = (PowerManager) app.getSystemService(Context.POWER_SERVICE);
         setBool(HYPER_AVAILABLE, app.getSharedPreferences("dash", 0).getBoolean("hyper", true));
         Trace.start(app);
+        nativeSet(DATA_STALE, lastStale ? 1 : 0); // static state survives activity recreation, the UI is fresh
         unlockController = new UnlockController(app, VehicleBridge::nativeSet);
         unlockController.start();
         work.post(VehicleBridge::connect);
@@ -244,6 +247,25 @@ final class VehicleBridge {
         nativeSet(PARKED, p ? 1 : 0);
     }
 
+    // ponytail: 5 s until M-rate (session A) calibrates it. Ride log 2026-10-30: <= 96 ms gaps between
+    // setNum-fed callbacks in DRIVE; if M-rate at road speed shows longer gaps, touch lastCallbackMs
+    // in Trace.call (every callback) instead.
+    private static final long STALE_MS = 5000L;
+    private static volatile long lastCallbackMs = SystemClock.elapsedRealtime();
+    private static volatile boolean disconnected;
+    private static boolean lastStale;
+
+    /** HostState.data-stale: parser gone, or no real callback for STALE_MS while driving. Direct nativeSet: id 38 is not replayed from REAL. */
+    private static synchronized void pushStale() {
+        boolean s = disconnected || (stateIndex(lastState) == 4
+                && SystemClock.elapsedRealtime() - lastCallbackMs > STALE_MS);
+        if (s != lastStale) {
+            lastStale = s;
+            Trace.event("data-stale " + s);
+            nativeSet(DATA_STALE, s ? 1 : 0);
+        }
+    }
+
     static void unlockKey(int key) {
         if (unlockController != null && !Trace.testMode) unlockController.key(key);
     }
@@ -270,6 +292,9 @@ final class VehicleBridge {
 
     private static void subscribe(IBinder vehicleBinder) {
         vehicle = vehicleBinder;
+        disconnected = false;
+        lastCallbackMs = SystemClock.elapsedRealtime();
+        pushStale();
         try {
             IVehicleService vs = IVehicleService.Stub.asInterface(vehicleBinder);
             IParserService parser = vs.getParserServiceBinder();
@@ -422,7 +447,9 @@ final class VehicleBridge {
             vehicle = null;
             commander = null;
             unlocked = false;
+            disconnected = true;
             forgetGateState();
+            pushStale();
             unlockController.parserDisconnected();
             rebind(RETRY_MS);
         }
@@ -433,7 +460,9 @@ final class VehicleBridge {
             vehicle = null;
             commander = null;
             unlocked = false;
+            disconnected = true;
             forgetGateState();
+            pushStale();
             unlockController.parserDisconnected();
             rebind(RETRY_MS);
         }
@@ -449,6 +478,7 @@ final class VehicleBridge {
     private static void setNum(int id, double v) {
         if (realVehicleEvent()) {
             REAL[id] = v;
+            lastCallbackMs = SystemClock.elapsedRealtime();
         }
         nativeSet(id, v);
     }

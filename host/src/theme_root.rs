@@ -116,11 +116,11 @@ const MAX_FONT: u64 = 16 << 20;
 
 /// `Vehicle` properties the host draws, with their `HostState` copy. The host and the sim set
 /// both; a theme can write `Vehicle.*` (they are `in`), so the overlay reads only the copy.
-pub const HOST_COPY: [(&str, &str); 9] = [
+pub const HOST_COPY: [(&str, &str); 10] = [
     ("left-indicator", "left-indicator"), ("right-indicator", "right-indicator"),
     ("high-beam", "high-beam"), ("headlight", "headlight"), ("ready-to-ride", "ready"),
     ("locked", "locked"), ("charging", "charging"), ("clock-text", "clock-text"),
-    ("battery-pct", "battery-pct"),
+    ("battery-pct", "battery-pct"), ("data-stale", "data-stale"),
 ];
 
 /// Source a theme may not contain: each draws after the host overlay and takes touches over it

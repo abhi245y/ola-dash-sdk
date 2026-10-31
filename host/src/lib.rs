@@ -18,6 +18,8 @@ use slint_interpreter::{Compiler, ComponentHandle, ComponentInstance, Value};
 
 mod settings;
 mod theme_root;
+mod theme_switch;
+use theme_switch::DEFAULT_THEME;
 
 // Field ids. Must match VehicleBridge.java.
 const SPEED_KMH: usize = 1;
@@ -69,7 +71,6 @@ const MODE_NAMES: [&str; 9] =
     ["eco", "normal", "sport", "hyper", "unknown", "park", "reverse", "custom", "easy-park"];
 const STATE_NAMES: [&str; 6] = ["unknown", "sleep", "idle", "park", "drive", "charging"];
 const REGEN_NAMES: [&str; 3] = ["none", "coast", "brake"];
-const DEFAULT_THEME: &str = "default";
 const FALLBACK: &str = "fallback"; // bundled copy of themes/default
 const LAST_RESORT: &str = "last-resort"; // bundled placeholder, cannot fail to compile
 const HEADUNIT_PKG: &str = "com.andrerinas.headunitrevived";
@@ -308,17 +309,6 @@ fn refresh_clock(ui: &ComponentInstance) {
     }
 }
 
-/// `files/themes/active` holds the theme folder name. Anything odd falls back to "default".
-fn theme_name(files: &Path) -> String {
-    let name = std::fs::read_to_string(files.join("themes/active"))
-        .map(|s| s.trim().to_string())
-        .unwrap_or_default();
-    let ok = !name.is_empty()
-        && name.len() <= 64
-        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
-    if ok { name } else { DEFAULT_THEME.to_string() }
-}
-
 /// Reads `theme.json` in the theme folder (relative to `files/`) and returns its entry file.
 /// Rejects a theme that needs a newer contract than this host, or a missing or escaping entry.
 fn theme_entry(files: &Path, rel: &str) -> Result<String, String> {
@@ -389,7 +379,7 @@ fn log_warn(msg: &str) {
 
 /// Theme first; any compile or create failure falls back to the bundled placeholder.
 fn load_ui(files: &Path) -> Result<ComponentInstance, String> {
-    let theme = theme_name(files);
+    let theme = theme_switch::active(files);
     build_root(files, &theme)
         .or_else(|e| {
             log::error!("theme '{theme}' rejected, using fallback:\n{e}");
@@ -496,6 +486,101 @@ fn wire(ui: &ComponentInstance, app: &AndroidApp) -> Result<(), String> {
     Ok(())
 }
 
+/// Leaves the restart marker, clears the bad-theme strike and exits; Android relaunches
+/// the home app. A failed bridge call still exits: the selection files are already written.
+fn clean_restart(app: &AndroidApp, files: &Path, name: &str) -> ! {
+    if let Err(e) = theme_switch::mark_restart(files, name) {
+        log::warn!("theme restart marker: {e}");
+    }
+    let vm = unsafe { JavaVM::from_raw(app.vm_as_ptr() as *mut _) };
+    if let Err(e) = vm.attach_current_thread(|env| -> jni::errors::Result<()> {
+        let activity = ManuallyDrop::new(unsafe {
+            JObject::from_raw(&*env, app.activity_as_ptr() as jni::sys::jobject)
+        });
+        env.call_method(&*activity, jni_str!("onThemeExit"), jni_sig!("()V"), &[])?;
+        Ok(())
+    }) {
+        log::warn!("theme clean-exit bridge: {e}");
+    }
+    std::process::exit(0)
+}
+
+/// Theme folder relative to `files/`; "default" is the bundled fallback copy.
+fn theme_dir(id: &str) -> String {
+    if id == DEFAULT_THEME { FALLBACK.into() } else { format!("themes/{id}") }
+}
+
+/// Display name from theme.json, or the id.
+fn theme_label(files: &Path, id: &str) -> String {
+    std::fs::read_to_string(files.join(theme_dir(id)).join("theme.json")).ok()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        .and_then(|m| m["name"].as_str().filter(|s| !s.is_empty()).map(String::from))
+        .unwrap_or_else(|| id.to_string())
+}
+
+fn wire_theme(ui: &ComponentInstance, app: &AndroidApp, files: &Path) -> Result<(), String> {
+    let weak = ui.as_weak();
+    let a = app.clone();
+    let dir = files.to_path_buf();
+    ui.set_callback("apply-theme", move |args| {
+        let Some(ui) = weak.upgrade() else { return Value::Void };
+        let Some(Value::String(id)) = args.first() else { return Value::Void };
+        if !matches!(ui.get_property("host-screens-allowed"), Ok(Value::Bool(true))) {
+            return Value::Void;
+        }
+        let checked = theme_switch::validate(&dir, id).map_err(|e| e.to_string())
+            .and_then(|_| theme_entry(&dir, &theme_dir(id)));
+        if let Err(e) = checked {
+            log::warn!("theme switch '{id}' refused: {e}");
+            let _ = ui.set_property("screen", Value::String("settings".into()));
+            return Value::Void;
+        }
+        let name = theme_label(&dir, id);
+        let _ = ui.set_property("switching-name", Value::String(name.clone().into()));
+        // One event-loop turn so the switching card is drawn before the exit.
+        let (weak, a, dir, id) = (ui.as_weak(), a.clone(), dir.clone(), id.to_string());
+        slint::Timer::single_shot(std::time::Duration::from_millis(50), move || {
+            let Some(ui) = weak.upgrade() else { return };
+            if !matches!(ui.get_property("host-screens-allowed"), Ok(Value::Bool(true)))
+                || !matches!(ui.get_property("screen"), Ok(Value::String(s)) if s == "switching") {
+                log::info!("theme switch cancelled (host screen closed)");
+                return;
+            }
+            match theme_switch::begin(&dir, &id) {
+                Ok(()) => clean_restart(&a, &dir, &name),
+                Err(e) => {
+                    log::warn!("theme switch '{id}' failed: {e}");
+                    let _ = ui.set_property("screen", Value::String("settings".into()));
+                }
+            }
+        });
+        Value::Void
+    }).map_err(|e| format!("apply-theme: {e:?}"))?;
+    for revert in [false, true] {
+        let weak = ui.as_weak();
+        let a = app.clone();
+        let dir = files.to_path_buf();
+        let name = if revert { "revert-theme" } else { "keep-theme" };
+        ui.set_callback(name, move |_| {
+            let Some(ui) = weak.upgrade() else { return Value::Void };
+            if !matches!(ui.get_property("host-screens-allowed"), Ok(Value::Bool(true)))
+                || !matches!(ui.get_property("confirm-theme"), Ok(Value::Bool(true))) {
+                return Value::Void;
+            }
+            let result = if revert {
+                theme_switch::revert(&dir).map(|id| { clean_restart(&a, &dir, &theme_label(&dir, &id)); })
+            } else {
+                theme_switch::keep(&dir)
+            };
+            if let Err(e) = result { log::warn!("{name} failed: {e}"); }
+            let pending = dir.join("themes/previous").exists();
+            let _ = ui.set_property("confirm-theme", Value::Bool(pending));
+            Value::Void
+        }).map_err(|e| format!("{name}: {e:?}"))?;
+    }
+    Ok(())
+}
+
 fn run(app: &AndroidApp, start: Instant) -> Result<(), String> {
     let files = app.internal_data_path().ok_or("no internal data path")?;
     let settings = settings::Settings::load(Some(&files.join("settings.json")), log_warn);
@@ -504,6 +589,12 @@ fn run(app: &AndroidApp, start: Instant) -> Result<(), String> {
     ui.set_global_property("HostState", "version-text", Value::String(env!("CARGO_PKG_VERSION").into()))
         .map_err(|e| format!("HostState.version-text: {e:?}"))?;
     wire(&ui, app)?;
+    wire_theme(&ui, app, &files)?;
+    ui.set_property("confirm-theme", Value::Bool(files.join("themes/previous").exists()))
+        .map_err(|e| format!("confirm-theme: {e:?}"))?;
+    let restart = theme_switch::take_restart(&files);
+    ui.set_global_property("HostState", "restart-name", Value::String(restart.into()))
+        .map_err(|e| format!("HostState.restart-name: {e:?}"))?;
     // First frame is measured from android_main entry (the load start), not process start.
     let mut first = Some(start);
     if let Err(e) = ui.window().set_rendering_notifier(move |state, _| {
@@ -554,5 +645,9 @@ fn android_main(app: android_activity::AndroidApp) {
     }
     if let Err(e) = run(&app, start) {
         log::error!("fatal: {e}");
+        // files/ may be damaged: recopy the bundled assets on the next start.
+        if let Some(files) = app.internal_data_path() {
+            let _ = std::fs::remove_file(files.join(".assets-stamp"));
+        }
     }
 }

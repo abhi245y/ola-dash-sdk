@@ -74,25 +74,60 @@ const ROOT: &str = r#"import { Dash } from "{THEME}";
 import { HostOverlay, HostState, OverlayConfig } from "overlay.slint";
 import { LockConfig } from "unlock.slint";
 import { SettingsScreen } from "settings.slint";
+import { SwitchingScreen, ConfirmThemeScreen } from "theme-switch.slint";
 import { Vehicle, Display, Media, Actions, Battery, Ride, Navigation, Plugins, OverlayPlacement, OverlayStyle, Telltale, AlertPosition, LockStyle } from "vehicle.slint";
 export { Dash, Vehicle, Display, Media, Actions, Battery, Ride, Navigation, Plugins, HostState, OverlayConfig, LockConfig }
 export component Host inherits Window {
     in-out property <string> screen: "dash";
     in-out property <int> settings-pane: 0;
     in-out property <bool> clock24: true;
+    in-out property <bool> confirm-theme: false;
+    in-out property <int> confirm-seconds: 10;
+    in-out property <string> switching-name;
+    callback apply-theme(string);
+    callback keep-theme();
+    callback revert-theme();
     callback set-setting(string, string);
     out property <bool> host-screens-allowed: HostState.parked && HostState.alert-code == 0
         && HostState.auth-phase >= 4 && !HostState.test-mode;
     changed host-screens-allowed => {
         if !root.host-screens-allowed { root.screen = "dash"; }
+        else if root.confirm-theme { root.screen = "confirm-theme"; }
+    }
+    changed confirm-theme => {
+        if root.confirm-theme && root.host-screens-allowed { root.screen = "confirm-theme"; }
+        else if !root.confirm-theme && root.screen == "confirm-theme" { root.screen = "dash"; }
     }
     changed screen => {
-        if !root.host-screens-allowed || (root.screen != "dash" && root.screen != "settings") {
+        if !root.host-screens-allowed || (root.screen != "dash" && root.screen != "settings"
+            && root.screen != "switching" && root.screen != "confirm-theme") {
             root.screen = "dash";
+        } else if root.confirm-theme { root.screen = "confirm-theme"; }
+        else if root.screen == "confirm-theme" { root.screen = "dash"; }
+    }
+    public function switch-theme(id: string) {
+        if root.host-screens-allowed && !root.confirm-theme && root.screen != "switching" {
+            root.switching-name = id;
+            root.screen = "switching";
+            root.apply-theme(id);
+        }
+    }
+    public function keep-current-theme() {
+        if root.host-screens-allowed && root.confirm-theme { root.keep-theme(); }
+    }
+    public function revert-current-theme() {
+        if root.host-screens-allowed && root.confirm-theme { root.revert-theme(); }
+    }
+    Timer {
+        interval: 1s;
+        running: root.confirm-theme && root.host-screens-allowed && root.screen == "confirm-theme";
+        triggered => {
+            if root.confirm-seconds <= 1 { root.revert-current-theme(); }
+            else { root.confirm-seconds -= 1; }
         }
     }
     public function open-settings() -> bool {
-        if root.host-screens-allowed {
+        if root.host-screens-allowed && !root.confirm-theme && root.screen != "switching" {
             root.screen = "settings";
             return true;
         }
@@ -120,6 +155,16 @@ export component Host inherits Window {
         clock24: root.clock24;
         set-setting(key, value) => { root.set-setting(key, value); }
         closed => { root.screen = "dash"; }
+    }
+    if root.screen == "switching" && root.host-screens-allowed : SwitchingScreen {
+        width: parent.width; height: parent.height;
+        name: root.switching-name;
+    }
+    if root.screen == "confirm-theme" && root.host-screens-allowed : ConfirmThemeScreen {
+        width: parent.width; height: parent.height;
+        seconds: root.confirm-seconds;
+        keep => { root.keep-current-theme(); }
+        revert => { root.revert-current-theme(); }
     }
     HostOverlay {
         width: parent.width; height: parent.height;

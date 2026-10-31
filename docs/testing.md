@@ -57,6 +57,18 @@ CARGO_NET_OFFLINE=true cargo test --release --manifest-path sim/Cargo.toml
 
 These cover missing and corrupt files, `.bad` recovery, preserving unknown keys and `night: "auto"`, atomic replacement and write failure, invalid changes, and midnight/noon/12-hour formatting. Offline runs require all dependencies in the local Cargo cache.
 
+Theme-switch previews (no restart, no file writes):
+
+```sh
+sim/target/release/sim themes/minimal --switch default --screenshot switching.png --at 5
+sim/target/release/sim themes/minimal --confirm-theme --screenshot confirm.png --at 3
+sim/target/release/sim themes/minimal --state restart --screenshot restart.png --at 2
+```
+
+`--switch` and `--confirm-theme` default to `--state park`; add `--night`, `--alert 1` or `--state locked` to check colours and that the cards stay under alerts and the lock screen. `--state restart` is the first start after a switch (lock state unknown). `tools/check-themes.sh` probes the switching and restart cards; the sim tests cover `host/src/theme_switch.rs`.
+
+On the device: switch while parked, check `files/themes/{active,previous}`, the relaunch with no lock-screen flash, Keep, Revert and timeout, the countdown pausing behind alerts and the lock screen, `files/.assets-stamp` across an unchanged start and an APK update, and tap-to-first-frame against the 2 s target.
+
 ## 3. Host checks
 
 Unit tests for the unlock state machine run on a desktop JDK without a scooter:

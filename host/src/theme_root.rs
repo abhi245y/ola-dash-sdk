@@ -307,7 +307,7 @@ pub fn date_text(ymd: u32) -> String {
         return String::new();
     }
     // Sakamoto's weekday, 0 = Sunday.
-    let y = if m < 3 { y - 1 } else { y };
+    let y = if m < 3 { y.wrapping_sub(1) } else { y };
     let dow = (y + y / 4 - y / 100 + y / 400 + [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4][m as usize - 1] + d) % 7;
     let day = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dow as usize];
     let month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][m as usize - 1];

@@ -221,7 +221,7 @@ A theme may declare one more optional `out` property on `Dash`: `lock-style`. It
 | `background` | color | Opaque. Foreground must reach 4.5:1 on it. |
 | `foreground` | color | Keypad digits, title, status. 4.5:1 on background. |
 | `muted` | color | Secondary copy, including attempt and cooldown lines. 4.5:1 on background. |
-| `accent` | color | Delete key fill and battery fill. Opaque; text on it (the host ink, `background` or `foreground`, whichever reads best) must reach 4.5:1. |
+| `accent` | color | Delete key fill. Opaque; text on it (the host ink, `background` or `foreground`, whichever reads best) must reach 4.5:1. |
 | `key-background` | color | Opaque, 4.5:1 with `foreground`. `#00000000` means the screen background. |
 | `key-border` | color | Hairlines and key outlines. Decorative, not checked. |
 | `key-shape` | `LockKeyShape` | `rounded`, `square` or `grid`. |

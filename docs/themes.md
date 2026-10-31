@@ -219,7 +219,7 @@ What the host keeps: the layout (clock, date and battery on the left; caption, s
 | `background` | The screen. Must be opaque. |
 | `foreground` | Digits, caption, clock, date and battery figures, passcode dots. |
 | `muted` | Secondary copy, attempts, cooldown, Clear and status labels. |
-| `accent` | The Delete key's fill and the battery fill. Text on it is the host ink, or the better of `background` and `foreground`. |
+| `accent` | The Delete key's fill. Text on it is the host ink, or the better of `background` and `foreground`. |
 | `key-background`, `key-border` | Key faces and outlines. `#00000000` for `key-background` means the screen background. |
 | `key-shape` | `rounded` (18 px corners), `square` (4 px corners) or `grid` (hairline cells, no keys). Square passcode cells go with `square` keys. Other shapes use round cells. |
 | `digits` | `sans` uses the host font. `segment` draws the digits and the clock in the host's seven-segment shapes. |

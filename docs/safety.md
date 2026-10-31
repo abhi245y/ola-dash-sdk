@@ -75,10 +75,10 @@ Every request is logged as `trunk request: sent` or `trunk request: refused <rea
 
 ## Test channel
 
-- The test channel injects fake vehicle state and is compiled in only for debug builds (`FLAG_DEBUGGABLE`).
+- The test channel injects fake vehicle state and is registered only in debug builds: the code is in every APK, but `MainActivity` checks `FLAG_DEBUGGABLE` at runtime.
 - It shows the TEST DATA banner while active and turns off after a timeout.
 - It cannot submit an unlock PIN, and real vehicle state is replayed when it ends.
-- **The current APK is debug-signed and sets `android:debuggable="true"` in `host/AndroidManifest.xml`.** That means the test channel is present in the only APK that exists. A release build with `debuggable` off is required before "debug builds only" is true for the installed software. Until then, treat any installed build as a test build.
+- **The default `host/build.sh` APK is debug-signed and debuggable (`aapt2 link --debug-mode`), so it has the test channel. `host/build.sh --release` builds are not debuggable and never register it; the build fails if the APK is debuggable.** Treat any build you did not make with `--release` as a test build.
 
 ## Unlock module (optional)
 

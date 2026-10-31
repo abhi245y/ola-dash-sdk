@@ -4,7 +4,7 @@ Nothing here is promised. Items are ordered roughly by how much they unblock.
 
 ## Next
 
-- **Release flavor.** A build with `android:debuggable` off and the test channel compiled out, so "debug builds only" is true for the installed software.
+- **Release pipeline.** `host/build.sh --release` exists (non-debuggable, test channel not registered). Next: the tag-triggered CI release.
 
 ## Later
 

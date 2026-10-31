@@ -2,59 +2,70 @@
 // A theme supplies only style data (`lock-style`, contract v6): colours, key shape and
 // digit drawing. The host writes that into LockConfig after checking it (host/src/theme_root.rs).
 // Layout, key order, labels, copy and phase logic are fixed here. PIN digits stay in Java;
-// Slint receives only their count.
+// Slint receives only their count. Sizes and defaults: docs/design/host-ui-tokens.md.
 import { LockKeyShape, LockDigits, LockStyle } from "vehicle.slint";
 import { LockSegDigit } from "segdigit.slint";
 import { HostText } from "hosttext.slint";
 
-// Written by the host from the theme's optional lock-style, or the host defaults (the values
-// below). `error` is the error copy colour; the host picks it so it reads on the background.
+// Written by the host from the theme's optional lock-style, or the host defaults for the
+// current mode (theme_root.rs HOST_LOCK_DAY, HOST_LOCK_NIGHT; the values below are the day
+// defaults). `error` is the error copy colour and `on-accent` the text colour on an accent
+// fill; the host picks both so they read on the colour behind them.
 export global LockConfig {
     in property <LockStyle> style: {
-        background: #070b10,
-        foreground: #f4f6fa,
-        muted: #aebbd0,
-        accent: #3fb8ff,
-        key-background: #17212e,
-        key-border: #2c3a4e,
+        background: #f6f3ec,
+        foreground: #0f2a2a,
+        muted: #4a5c5c,
+        accent: #ffc94a,
+        key-background: #ffffff,
+        key-border: #d9d2c3,
         key-shape: LockKeyShape.rounded,
         digits: LockDigits.sans,
     };
-    in property <color> error: #ffb020;
+    in property <color> error: #a33a00;
+    in property <color> on-accent: #0f2a2a;
 }
 
 // One keypad key. `digit` 0-9 draws the digit in segment style when the theme asks for it.
+// `strong` fills the key with the accent (Delete); `quiet` has no fill (Clear).
 component Key inherits Rectangle {
     in property <string> label;
     in property <int> digit: -1;
     in property <bool> enabled: true;
+    in property <bool> strong;
+    in property <bool> quiet;
     callback pressed();
-    border-radius: LockConfig.style.key-shape == LockKeyShape.rounded ? 12px
+    property <bool> grid: LockConfig.style.key-shape == LockKeyShape.grid;
+    property <color> ink: root.strong ? LockConfig.on-accent : root.quiet && !root.grid ? LockConfig.style.muted : LockConfig.style.foreground;
+    property <color> fill: root.strong ? LockConfig.style.accent
+        : root.quiet && !root.grid ? transparent
+        : LockConfig.style.key-background;
+    border-radius: LockConfig.style.key-shape == LockKeyShape.rounded ? 18px
         : LockConfig.style.key-shape == LockKeyShape.square ? 4px : 0px;
-    border-width: LockConfig.style.key-shape == LockKeyShape.grid ? 0px : 1px;
+    border-width: root.grid || root.quiet || root.strong ? 0px : 1px;
     border-color: LockConfig.style.key-border;
     // Disabled keys fade toward the screen; pressed keys lean toward the text colour.
-    background: !root.enabled ? LockConfig.style.key-background.mix(LockConfig.style.background, 0.5)
-        : touch.pressed ? LockConfig.style.key-background.mix(LockConfig.style.foreground, 0.15)
-        : LockConfig.style.key-background;
+    background: !root.enabled ? root.fill.mix(LockConfig.style.background, 0.5)
+        : touch.pressed ? root.fill.mix(root.ink, 0.15)
+        : root.fill;
     accessible-role: button;
     accessible-label: label;
     accessible-enabled: enabled;
     accessible-action-default => { if root.enabled { root.pressed(); } }
 
     if LockConfig.style.digits == LockDigits.segment && root.digit >= 0 : LockSegDigit {
-        width: 46px;
-        height: 84px;
+        width: 36px;
+        height: 64px;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         digit: root.digit;
-        ink: root.enabled ? LockConfig.style.foreground : LockConfig.style.foreground.with-alpha(0.4);
+        ink: root.enabled ? root.ink : root.ink.with-alpha(0.4);
     }
     if !(LockConfig.style.digits == LockDigits.segment && root.digit >= 0) : HostText {
         text: root.label;
-        color: root.enabled ? LockConfig.style.foreground : LockConfig.style.foreground.with-alpha(0.4);
-        font-size: root.label == "Delete" || root.label == "Clear" ? 22px : 34px;
-        font-weight: 600;
+        color: root.enabled ? root.ink : root.ink.with-alpha(0.4);
+        font-size: root.digit >= 0 ? 44px : 26px;
+        font-weight: 700;
         horizontal-alignment: center;
         vertical-alignment: center;
     }
@@ -64,12 +75,24 @@ component Key inherits Rectangle {
     }
 }
 
-// Padlock glyph in a 28 x 28 viewbox, tinted by the theme's accent.
-component Padlock inherits Path {
-    viewbox-width: 28;
-    viewbox-height: 28;
-    fill: LockConfig.style.accent;
-    commands: "M 7 13 L 21 13 L 21 25 L 7 25 Z M 9.5 13 L 9.5 9.5 A 4.5 4.5 0 0 1 18.5 9.5 L 18.5 13 L 16 13 L 16 9.5 A 2 2 0 0 0 12 9.5 L 12 13 Z";
+// Battery glyph, 40 x 20: outline, nub and a fill for the charge.
+component BatteryGlyph inherits Rectangle {
+    in property <int> pct;
+    width: 40px;
+    height: 20px;
+    Rectangle {
+        width: 36px;
+        border-width: 2px;
+        border-color: LockConfig.style.foreground;
+        border-radius: 4px;
+        Rectangle {
+            x: 4px; y: 4px;
+            width: max(0px, (parent.width - 8px) * root.pct / 100);
+            height: parent.height - 8px;
+            background: LockConfig.style.accent;
+        }
+    }
+    Rectangle { x: 37px; y: 6px; width: 3px; height: 8px; background: LockConfig.style.foreground; }
 }
 
 export component UnlockScreen inherits Rectangle {
@@ -80,8 +103,9 @@ export component UnlockScreen inherits Rectangle {
     in property <int> cooldown;
     in property <bool> available;
     in property <bool> test-mode;
-    // Status line, from the host's own vehicle values.
+    // Left column, from the host's own vehicle values.
     in property <string> clock-text;
+    in property <string> date-text;
     in property <int> battery-pct: -1;
     callback key(int);
 
@@ -92,72 +116,78 @@ export component UnlockScreen inherits Rectangle {
     // Clock as hhmm (10:24 is 1024) for the segment digits; -1 = ghost only.
     property <int> clock-val: root.clock-text == "" ? -1 : round(root.clock-text.replace-all(":", "").to-float());
     property <int> pct: root.battery-pct > 100 ? 100 : root.battery-pct;
+    // Right column: 596 px wide, 104 px from the edge (clear of a 72 px side strip); the left
+    // column is the 444 px before it. HostOverlay draws the alert footer in the left column.
+    property <length> kx: root.width - 104px - 596px;
+    property <length> gap: root.grid ? 1px : 16px;
+    property <string> hint: root.phase == 0 ? (root.error == 2 ? "Cannot reach the passcode service. Retry the connection." : "Waiting for vehicle status.")
+        : root.phase == 3 ? "Waiting for the scooter to confirm unlock."
+        : root.phase == 2 ? (root.error == 2 ? "Verification is taking longer than expected. Please wait." : "Please wait.")
+        : root.test-mode ? "Exit test mode before unlocking."
+        : root.attempts == 0 ? (root.cooldown > 0 ? "Try again in " + root.cooldown + " seconds." : "Waiting for passcode access to reset.")
+        : "Use your existing scooter passcode.";
+    property <string> status: root.error == 1 ? "Incorrect passcode. " + root.attempts + " attempts remaining."
+        : root.error == 2 ? "Passcode service unavailable. Retry the connection."
+        : root.error == 3 ? "Unlock was not confirmed. Check the scooter, then retry."
+        : root.attempts > 0 ? root.attempts + " attempts remaining" : "";
 
     background: LockConfig.style.background;
 
     // Block theme interaction whenever authentication or PARK is in front.
     TouchArea { }
 
-    // ---- status line: clock, battery, padlock and LOCKED, in the theme's tokens ----
-    Rectangle {
-        x: 0px; y: 112px; width: root.width; height: 1px;
-        background: LockConfig.style.key-border;
-    }
+    // ---- left column: clock, date, battery (the strip carries lock and charging) ----
     if !root.segment : HostText {
-        x: 80px; y: 60px; width: 120px; height: 40px;
+        x: 104px; y: 60px; width: 444px; height: 144px;
         text: root.clock-text == "" ? "--:--" : root.clock-text;
         color: LockConfig.style.foreground;
-        font-size: 30px;
-        font-weight: 600;
+        font-size: 120px;
+        font-weight: 800;
         vertical-alignment: center;
     }
     if root.segment : Rectangle {
-        x: 80px; y: 62px; width: 118px; height: 40px;
+        x: 104px; y: 76px; width: 268px; height: 112px;
         background: transparent;
         LockSegDigit {
-            x: 0px; width: 22px; height: 40px; ink: LockConfig.style.foreground;
+            x: 0px; width: 56px; height: 112px; ink: LockConfig.style.foreground;
             digit: root.clock-val < 0 ? -1 : Math.mod(floor(root.clock-val / 1000), 10);
         }
         LockSegDigit {
-            x: 26px; width: 22px; height: 40px; ink: LockConfig.style.foreground;
+            x: 64px; width: 56px; height: 112px; ink: LockConfig.style.foreground;
             digit: root.clock-val < 0 ? -1 : Math.mod(floor(root.clock-val / 100), 10);
         }
-        Rectangle { x: 55px; y: 12px; width: 5px; height: 5px; background: LockConfig.style.foreground; }
-        Rectangle { x: 55px; y: 25px; width: 5px; height: 5px; background: LockConfig.style.foreground; }
+        Rectangle { x: 130px; y: 36px; width: 10px; height: 10px; background: LockConfig.style.foreground; }
+        Rectangle { x: 130px; y: 66px; width: 10px; height: 10px; background: LockConfig.style.foreground; }
         LockSegDigit {
-            x: 66px; width: 22px; height: 40px; ink: LockConfig.style.foreground;
+            x: 148px; width: 56px; height: 112px; ink: LockConfig.style.foreground;
             digit: root.clock-val < 0 ? -1 : Math.mod(floor(root.clock-val / 10), 10);
         }
         LockSegDigit {
-            x: 92px; width: 22px; height: 40px; ink: LockConfig.style.foreground;
+            x: 212px; width: 56px; height: 112px; ink: LockConfig.style.foreground;
             digit: root.clock-val < 0 ? -1 : Math.mod(root.clock-val, 10);
         }
     }
-
-    // Battery: outline bar with a fill for the charge, then the percentage.
-    Rectangle {
-        x: 236px; y: 70px; width: 44px; height: 20px;
-        border-width: 2px;
-        border-color: LockConfig.style.foreground;
-        border-radius: 3px;
-        Rectangle {
-            x: 4px; y: 4px;
-            width: max(0px, (parent.width - 8px) * root.pct / 100);
-            height: parent.height - 8px;
-            background: LockConfig.style.accent;
-        }
+    HostText {
+        x: 104px; y: 208px; width: 444px; height: 32px;
+        text: root.date-text;
+        color: LockConfig.style.muted;
+        font-size: 22px;
+        vertical-alignment: center;
     }
-    Rectangle { x: 280px; y: 76px; width: 3px; height: 8px; background: LockConfig.style.foreground; }
+    BatteryGlyph {
+        x: 104px; y: 274px;
+        pct: root.pct;
+    }
     if !root.segment : HostText {
-        x: 292px; y: 60px; width: 120px; height: 40px;
-        text: root.battery-pct < 0 ? "-- %" : root.battery-pct + " %";
+        x: 156px; y: 256px; width: 240px; height: 56px;
+        text: root.battery-pct < 0 ? "--" : root.battery-pct + "%";
         color: LockConfig.style.foreground;
-        font-size: 26px;
-        font-weight: 600;
+        font-size: 44px;
+        font-weight: 700;
         vertical-alignment: center;
     }
     if root.segment : Rectangle {
-        x: 292px; y: 62px; width: 120px; height: 40px;
+        x: 156px; y: 264px; width: 240px; height: 40px;
         background: transparent;
         LockSegDigit {
             x: 0px; width: 22px; height: 40px; ink: LockConfig.style.foreground;
@@ -172,93 +202,70 @@ export component UnlockScreen inherits Rectangle {
             digit: root.pct < 0 ? -1 : Math.mod(root.pct, 10);
         }
         HostText {
-            x: 80px; y: 0px; width: 30px; height: 40px;
-            text: "%";
+            x: 80px; y: 0px; width: 40px; height: 40px;
+            text: root.pct < 0 ? "--" : "%";
             color: LockConfig.style.foreground;
             font-size: 26px;
-            font-weight: 600;
+            font-weight: 700;
             vertical-alignment: center;
         }
     }
 
-    if root.entering : HorizontalLayout {
-        x: 1000px; y: 62px; width: 200px; height: 36px;
-        spacing: 8px;
-        alignment: end;
-        Padlock {
-            width: 22px;
-            height: 22px;
-            y: 7px;
-        }
-        HostText {
-            width: 120px;
-            text: "LOCKED";
-            color: LockConfig.style.accent;
-            font-size: 24px;
-            font-weight: 600;
-            letter-spacing: 1.5px;
-            vertical-alignment: center;
-        }
-    }
-
+    // ---- right column: caption, hint or status, passcode cells, keypad ----
     HostText {
-        x: 80px; y: 158px; width: 520px; height: 84px;
+        x: root.kx; y: 60px; width: 596px; height: 48px;
         text: root.phase == 0 ? (root.error == 2 ? "Connection unavailable" : "Connecting")
             : root.phase == 3 ? "Unlocking"
             : root.phase == 2 ? "Checking passcode"
             : root.attempts == 0 ? "Try again shortly"
             : "Enter passcode";
         color: LockConfig.style.foreground;
-        font-size: 46px;
-        font-weight: 700;
+        font-size: 40px;
+        font-weight: 800;
+        overflow: elide;
         vertical-alignment: center;
     }
 
+    // One line of copy: the error (with the cooldown while attempts are out), else the hint
+    // and the attempts left.
     HostText {
-        x: 80px; y: 262px; width: 480px; height: 94px;
-        text: root.phase == 0 ? (root.error == 2 ? "Cannot reach the passcode service. Retry the connection." : "Waiting for vehicle status.")
-            : root.phase == 3 ? "Waiting for the scooter to confirm unlock."
-            : root.phase == 2 ? (root.error == 2 ? "Verification is taking longer than expected. Please wait." : "Please wait.")
-            : root.test-mode ? "Exit test mode before unlocking."
-            : root.attempts == 0 ? (root.cooldown > 0 ? "Try again in " + root.cooldown + " seconds." : "Waiting for passcode access to reset.")
-            : "Use your existing scooter passcode.";
-        color: LockConfig.style.muted;
-        font-size: 28px;
+        x: root.kx; y: 112px; width: 596px; height: 56px;
+        text: root.phase == 1 && root.error != 0 ? (root.attempts == 0 ? root.status + "\n" + root.hint : root.status)
+            : root.phase == 1 && root.status != "" ? root.hint + "\n" + root.status
+            : root.hint;
+        color: root.phase == 1 && root.error != 0 ? LockConfig.error : LockConfig.style.muted;
+        font-size: 22px;
         wrap: word-wrap;
+        overflow: elide;
     }
 
-    // Passcode cells: filled with the accent as digits are entered. Square when the keys are.
+    // Passcode cells: a dot per digit entered. Square when the keys are.
     if root.entering : HorizontalLayout {
-        x: 80px; y: 386px; width: 296px; height: 30px;
-        spacing: 22px;
+        x: root.kx; y: 176px; width: 596px; height: 64px;
+        spacing: 16px;
         for i in 6 : Rectangle {
-            width: 30px; height: 30px;
-            border-radius: root.square-cells ? 4px : 15px;
-            border-width: 2px;
-            border-color: i < root.pin-length ? LockConfig.style.accent : LockConfig.style.muted;
-            background: i < root.pin-length ? LockConfig.style.accent : transparent;
+            border-radius: root.square-cells ? 4px : 18px;
+            border-width: 1px;
+            border-color: LockConfig.style.key-border;
+            background: LockConfig.style.key-background;
+            if i < root.pin-length : Rectangle {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                width: 24px; height: 24px;
+                border-radius: 12px;
+                background: LockConfig.style.foreground;
+            }
         }
     }
 
-    if root.phase == 1 : HostText {
-        x: 80px; y: 456px; width: 500px; height: 80px;
-        text: root.error == 1 ? "Incorrect passcode. " + root.attempts + " attempts remaining."
-            : root.error == 2 ? "Passcode service unavailable. Retry the connection."
-            : root.error == 3 ? "Unlock was not confirmed. Check the scooter, then retry."
-            : root.attempts > 0 ? root.attempts + " attempts remaining" : "";
-        color: root.error != 0 ? LockConfig.error : LockConfig.style.muted;
-        font-size: 24px;
-        wrap: word-wrap;
-    }
-
-    // Keypad: 3 x 4 keys in a fixed 488 x 424 block. Grid keys share 1 px hairlines.
+    // Keypad: 3 x 4 keys in a fixed 596 x 432 block. Grid keys share 1 px hairlines.
     if root.entering : Rectangle {
-        x: 700px; y: 164px; width: 488px; height: 424px;
+        x: root.kx; y: 256px; width: 596px; height: 432px;
         background: root.grid ? LockConfig.style.key-border : transparent;
         VerticalLayout {
-            spacing: root.grid ? 1px : 12px;
+            spacing: root.gap;
             for row in 3 : HorizontalLayout {
-                spacing: root.grid ? 1px : 12px;
+                spacing: root.gap;
                 for col in 3 : Key {
                     label: "" + (row * 3 + col + 1);
                     digit: row * 3 + col + 1;
@@ -267,18 +274,17 @@ export component UnlockScreen inherits Rectangle {
                 }
             }
             HorizontalLayout {
-                spacing: root.grid ? 1px : 12px;
-                Key { label: "Clear"; enabled: root.available; pressed => { root.key(11); } }
+                spacing: root.gap;
+                Key { label: "Clear"; quiet: true; enabled: root.available; pressed => { root.key(11); } }
                 Key { label: "0"; digit: 0; enabled: root.available; pressed => { root.key(0); } }
-                Key { label: "Delete"; enabled: root.available; pressed => { root.key(10); } }
+                Key { label: "Delete"; strong: true; enabled: root.available; pressed => { root.key(10); } }
             }
         }
     }
 
     if (root.phase == 0 || root.phase == 1) && root.error == 2 : Key {
-        x: 80px; y: 558px; width: 300px; height: 72px;
+        x: 104px; y: 360px; width: 300px; height: 96px;
         label: "Retry connection";
         pressed => { root.key(12); }
     }
-
 }

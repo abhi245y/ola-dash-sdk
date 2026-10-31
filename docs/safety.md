@@ -25,7 +25,7 @@ This project changes what a rider sees on a vehicle. The rules below apply to th
 ### What a theme cannot change
 
 - Whether the overlay is shown. It is always drawn, above the theme.
-- Telltale and alert colours. Semantic colours (green indicators and ready, blue high beam, amber side stand, red fault and alert frames) are fixed by the host.
+- Telltale and alert colours. Semantic colours (green indicators and ready, blue high beam, amber side stand, red fault and alert frames) are fixed by the host. Lit telltales are solid glyphs in those colours; unlit ones are 40 % outlines of the strip foreground, so every telltale is always visible. The strip is dark in day and night (48 px top or bottom, 72 px left or right) and carries warning lights only: the clock and battery show on the lock screen, not in the strip.
 - Minimum sizes: telltale icons at least 28 px, alert text at least 32 px.
 - Contrast. A background and foreground pair below 4.5:1 is replaced by the host default.
 - Icons. Themes cannot supply their own telltale icons.
@@ -33,6 +33,7 @@ This project changes what a rider sees on a vehicle. The rules below apply to th
 - The font of host text. The overlay, alert cards and lock screen use the host's font family `OlaDash Host`. `sim --check` refuses a theme that ships a font file carrying that name, so a theme cannot swap in blank or look-alike glyphs.
 - Dismissal. Fall or accident, tow or theft, side stand and steering lock cannot be dismissed. Fault and low battery can be tapped away, as before.
 - The TEST DATA badge, which is shown in every placement in debug builds, and the NO DATA badge (red, same slot, hidden while TEST DATA shows) shown when vehicle data is stale: the parser is gone, or no vehicle data callback arrived for 5 s while in drive.
+- Alert cards are the same in day and night: a white card on a 60 % scrim, a red frame (fall, tow, steering lock, fault) or an amber frame (side stand, low battery), an icon, a 32 px title and a one-line hint.
 - The alert scrim dims the whole screen, but the telltale strip is drawn above it, so telltales stay at full brightness during an alert.
 - Placement is clamped: no overlay element goes off screen.
 - The overlay shows the TEST DATA banner in debug builds while injected values are active. A release build never shows injected data.
@@ -42,6 +43,7 @@ If a theme or plugin ever hides the overlay, that is a critical bug. Report it u
 ## The lock screen is styled, never handled
 
 - The passcode keypad and the PIN are host-owned. The host draws every key, the passcode cells, the attempt and cooldown copy, and the keypad layout. Its key presses go to the host's unlock controller, not to the theme.
+- The lock screen shows the clock, date and battery on the left and the caption, six passcode cells and the keypad on the right; it has no lock icon or "Locked" text, because the strip shows lock and charging. While a warning is active, its card stays in the left column, so it never hides behind the keypad.
 - A theme supplies only `lock-style` (see [contract.md](contract.md#lock-screen-style-v6)): colours, key shape and digit drawing. It has no callback, text or layout for the keypad, and it cannot read the digits entered. The contract exposes only the count of digits, and only to the host.
 - The host checks the style's contrast before use. A theme cannot make the attempt count, cooldown or error copy unreadable (these are in the `muted` and error colours, which are checked) or make the keys too small to press.
 - `host/test/unlock-preview.rs` renders the host overlay with the default theme and checks that a tap on a key dispatches the key through the host overlay, with the expected digit, Delete and Clear codes.

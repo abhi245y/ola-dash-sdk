@@ -48,7 +48,7 @@ done
 # Hostile themes the host must load but keep below the overlay. Probes: state, sim time, pixel,
 # expected colour ("-" = anything but the theme's black). At t=13 of the ride the left
 # indicator is lit (slot 0 icon, OverlayTokens.ind-color); a theme writing Vehicle.* must not blank it.
-probes=("ride 13 1200,24 -" "ride 13 36,24 #5cff9d" "locked 5 710,200 -")
+probes=("ride 13 1200,24 -" "ride 13 36,24 #5cff9d" "locked 5 600,280 -")
 png="$(mktemp)"
 for dir in "$ROOT"/tools/fixtures/loads/*/; do
     dir="${dir%/}"

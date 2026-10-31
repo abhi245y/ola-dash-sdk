@@ -109,13 +109,13 @@ export component Dash inherits Window {
 ```
 
 - The root component is exported as `Dash`, sized 1280 x 768 logical px (landscape).
-- **Re-export the globals (for `sim`).** `sim` loads the theme file as the root component and sets `Vehicle.*` and `Media.*` on that instance. slint-interpreter only exposes globals the main file exports, so `sim` needs the `export { ... }` line; without it the values never arrive. The host wraps the theme and re-exports the globals itself, so the export line is not what the device depends on. Keep it in every theme, and export every global the theme reads (`Battery`, `Ride`, `Navigation`, `Plugins`, `Display`).
+- **Re-exporting the globals is optional.** The host and `sim` wrap the theme in the same generated root, which imports the contract and re-exports its globals, so a theme need only export `Dash`. Re-exporting the globals is harmless (see [contract.md](contract.md#re-exporting-globals)).
 - Import the contract as `"vehicle.slint"`. The host and `sim` put `contract/` on the include path, so no copy is needed.
 - **What a theme may import.** Files in its own folder and in `contract/`, and fonts and images. A theme cannot import `host/ui/*.slint`, follow a symlink, or use `PopupWindow`, `ContextMenuArea`, `MenuBar`, `Tooltip`, `DragArea` or `std-widgets.slint` (the word anywhere in a theme file, comments included, is enough to refuse it). The host draws the safety overlay and the passcode keypad above the theme, and a popup would be drawn above them. A theme's own `z` on `Dash` only orders it inside the host's wrapper, so it stays below the overlay. A font file in the theme folder (`.ttf`, `.otf`, `.ttc`, any subfolder, at most 16 MiB) whose bytes contain the host font name `OlaDash Host` is refused too, and so is a font import with a `..` segment or an absolute path. A refused theme does not load: `sim --check` prints `import guard: ...` and the device falls back to the bundled theme.
-- **Themes cannot change host text.** The overlay, the alert cards and the lock screen are set in the host's own font, family `OlaDash Host` (Inter, subset, weights 400, 600 and 700; `host/ui/fonts/`). A theme's `default-font-family` applies only to the theme's own text. Do not name a family `OlaDash Host`, and do not ship a font with that name.
+- **Themes cannot change host text.** The overlay, the alert cards and the lock screen are set in the host's own font, family `OlaDash Host` (Figtree, subset, weights 500, 700 and 800, tabular digits; `host/ui/fonts/`). A theme's `default-font-family` applies only to the theme's own text. Do not name a family `OlaDash Host`, and do not ship a font with that name.
 - **Host values are copies.** `Vehicle.*` properties are `in` properties, so a theme can write them (and its own writes show in the theme). The overlay and the lock screen read `HostState` copies that only the host sets, so a theme cannot blank a telltale, the clock or the battery figure on them.
 
-- **`Dash` must inherit `Window`:** `export component Dash inherits Window { ... }`. The host wraps it in its own root window and reads `default-font-family` from it; `sim` loads it directly.
+- **`Dash` must inherit `Window`:** `export component Dash inherits Window { ... }`. The host and `sim` wrap it in the same root window and read `default-font-family` from it.
 
 ## Overlay placement and the reserved strip
 
@@ -212,16 +212,16 @@ export component Dash inherits Window {
 }
 ```
 
-What the host keeps: the keypad layout and key order (1 to 9, Clear, 0, Delete, and Retry connection when the service fails), the labels and all copy, the passcode cells and their count, attempts, cooldown and error text, the status line's content (clock, battery percentage, padlock and LOCKED), and the phase logic. The theme cannot change any of them.
+What the host keeps: the layout (clock, date and battery on the left; caption, six passcode cells and the keypad on the right), the keypad key order (1 to 9, Clear, 0, Delete, and Retry connection when the service fails), the labels and all copy, the passcode cells and their count, attempts, cooldown and error text, and the phase logic. Keys are at least 180 x 96 px with 16 px gaps. Delete is the strong key (filled with `accent`), Clear is quiet (no fill). The lock and charging state show only in the telltale strip, never in the body. The host default look has a day and a night variant (`HostState.night`, `--night` in `sim`); a theme's `lock-style` replaces both. The tokens are in `docs/design/host-ui-tokens.md` of the ola-dash product repo.
 
 | Field | Styles |
 |---|---|
 | `background` | The screen. Must be opaque. |
-| `foreground` | Digits, title, clock and battery figures. |
+| `foreground` | Digits, caption, clock, date and battery figures, passcode dots. |
 | `muted` | Secondary copy, attempts, cooldown, Clear and status labels. |
-| `accent` | Filled passcode cells, battery fill, the padlock and LOCKED. |
+| `accent` | The Delete key's fill and the battery fill. Text on it is the host ink, or the better of `background` and `foreground`. |
 | `key-background`, `key-border` | Key faces and outlines. `#00000000` for `key-background` means the screen background. |
-| `key-shape` | `rounded` (12 px corners), `square` (4 px corners) or `grid` (hairline cells, no keys). Square passcode cells go with `square` keys. Other shapes use round cells. |
+| `key-shape` | `rounded` (18 px corners), `square` (4 px corners) or `grid` (hairline cells, no keys). Square passcode cells go with `square` keys. Other shapes use round cells. |
 | `digits` | `sans` uses the host font. `segment` draws the digits and the clock in the host's seven-segment shapes. |
 
 Contrast is checked on load (see [contract.md](contract.md#host-checks)). A failing value falls back to a host colour and is logged. Minimal leaves `lock-style` out, so it shows the host default look. That is the look to start from when you want a plain screen.

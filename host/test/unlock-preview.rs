@@ -101,7 +101,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         encoder.set_depth(png::BitDepth::Eight);
         encoder.write_header()?.write_image_data(&pixels)?;
         // Actual pointer dispatch through the shipped host overlay, never an IPC call.
-        for (x, y) in [(775.0, 210.0), (1090.0, 540.0), (775.0, 540.0)] {
+        for (x, y) in [(674.0, 304.0), (1082.0, 640.0), (674.0, 640.0)] {
             let position = slint::LogicalPosition::new(x, y);
             ui.window().dispatch_event(WindowEvent::PointerPressed { position, button: PointerEventButton::Left });
             ui.window().dispatch_event(WindowEvent::PointerReleased { position, button: PointerEventButton::Left });

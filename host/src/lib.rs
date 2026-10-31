@@ -359,6 +359,7 @@ fn build_root(files: &Path, theme: &str) -> Result<ComponentInstance, String> {
     let t = Instant::now();
     let ui = def.create().map_err(|e| e.to_string())?;
     timing("create", t);
+    // HostState.night stays day until E3.S1 sets it together with Display.night.
     theme_root::bind(&ui, log_warn)?;
     Ok(ui)
 }

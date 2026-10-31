@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+
+- Host design language "Ride Buddy, day and night" (E1.S2; tokens in `ola-dash/docs/design/host-ui-tokens.md`). `HostState.night` (default day; `sim --night` sets it with `Display.night`, E3.S1 sets both on the device) switches the host defaults for the strip and the lock screen between day and night. The strip is always dark (`#0F2A2A` day, `#071414` night), 48 px top or bottom and 72 px left or right, and shows solid glyphs: lit in the status colour, unlit as 40 % outlines (the old lamp windows are gone). NO DATA and TEST DATA stay in its end region. Alert cards are white on a 60 % scrim with a red or amber frame, a 32 px title and a one-line hint, the same in both modes; the lock-screen warning footer uses the same card.
+- Lock screen: clock (120 px), date and battery with a glyph on the left; caption, six passcode cells and the keypad (keys 188 x 96 px, 16 px gaps) on the right. Delete is the accent-filled strong key and Clear is quiet. The padlock and LOCKED are gone from the body (the strip shows lock and charging). The battery reads `82%` or `--`. `lock-style` themes still work; `accent` now fills Delete and the battery, so its rule is "text on it reaches 4.5:1" (was 3:1 on the background), and the host picks that text colour. New `HostState.date-text` (the sim sets it; the device feed is not written yet, so the date line is empty there).
+- Host font: Figtree (SIL OFL 1.1) Medium, Bold and ExtraBold, subset and renamed `OlaDash Host`, replaces the Inter subset. Digits are tabular. `tools/subset-host-font.py` now takes the directory with the Figtree files.
+
 ### Added
 
 - Release build: `host/build.sh --release` signs with the key named by `OLADASH_KEYSTORE`, `OLADASH_KEY_ALIAS`, `OLADASH_KS_PASS` and `OLADASH_KEY_PASS`, takes the version from the latest `v*` git tag, fails if the APK is debuggable, and prints the signer certificate SHA-256. Output `host/out/ola-dash-release.apk`. The manifest no longer sets `android:debuggable`; the default build passes `aapt2 link --debug-mode` and stays debuggable.

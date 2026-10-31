@@ -201,7 +201,7 @@ The host normalises the theme's list: unknown and duplicate entries are ignored,
 |---|---|---|
 | `background` | color | Strip background. Must contrast with `foreground` at 4.5:1 or more. |
 | `foreground` | color | Label colour |
-| `corner-radius` | length | Telltale disc corner radius |
+| `corner-radius` | length | Parsed and kept for v6 themes. The host draws solid glyphs with no rounded window, so it has no visible effect |
 | `show-labels` | bool | Labels under or beside each telltale |
 
 If `background` and `foreground` fail the 4.5:1 contrast rule (WCAG 2.x), the host uses its own colours and logs the reason under `OlaDash` (`sim` prints it to stderr). Telltale icon colours are host-fixed and do not come from the theme.
@@ -221,7 +221,7 @@ A theme may declare one more optional `out` property on `Dash`: `lock-style`. It
 | `background` | color | Opaque. Foreground must reach 4.5:1 on it. |
 | `foreground` | color | Keypad digits, title, status. 4.5:1 on background. |
 | `muted` | color | Secondary copy, including attempt and cooldown lines. 4.5:1 on background. |
-| `accent` | color | Filled passcode cells, battery fill, LOCKED. 3:1 on background. |
+| `accent` | color | Delete key fill and battery fill. Opaque; text on it (the host ink, `background` or `foreground`, whichever reads best) must reach 4.5:1. |
 | `key-background` | color | Opaque, 4.5:1 with `foreground`. `#00000000` means the screen background. |
 | `key-border` | color | Hairlines and key outlines. Decorative, not checked. |
 | `key-shape` | `LockKeyShape` | `rounded`, `square` or `grid`. |
@@ -229,7 +229,7 @@ A theme may declare one more optional `out` property on `Dash`: `lock-style`. It
 
 ### `LockKeyShape` (v6)
 
-`rounded` (12 px corners, 1 px outline), `square` (4 px corners, 1 px outline), `grid` (no corners, no outline, 1 px hairlines between keys).
+`rounded` (18 px corners, 1 px outline), `square` (4 px corners, 1 px outline), `grid` (no corners, no outline, 1 px hairlines between keys).
 
 ### `LockDigits` (v6)
 
@@ -240,12 +240,12 @@ A theme may declare one more optional `out` property on `Dash`: `lock-style`. It
 When a theme's `lock-style` is read, the host checks it and logs each rejection under `OlaDash` (`sim` prints it to stderr). A rejected value falls back to a host colour that passes the same rule, or to the foreground:
 
 - Background and foreground fail together. If the pair is below 4.5:1, or either is transparent, both become host colours.
-- Muted and accent each fall back on their own rule.
+- Muted and accent each fall back on their own rule. The host defaults are the day and night styles of `docs/design/host-ui-tokens.md`, chosen by `HostState.night`; a theme's `lock-style` replaces both.
 - A transparent `key-background` uses the screen background.
 - An unknown `key-shape` becomes `rounded`. An unknown `digits` value becomes `sans`.
-- The error copy uses amber when it reads on the background, otherwise the foreground.
+- The error copy uses the host error colour (dark orange by day, amber by night) when it reads on the background, otherwise the foreground.
 
-The keypad's size and position are fixed by the host (about 155 x 97 px per key, above the 96 x 80 px minimum), so a theme cannot make keys smaller. There are no per-key colours, labels or callbacks.
+The keypad's size and position are fixed by the host (188 x 96 px per key with 16 px gaps; grid keys share 1 px lines at about 198 x 108 px), so a theme cannot make keys smaller. There are no per-key colours, labels or callbacks.
 
 ## Re-exporting globals
 
@@ -257,4 +257,4 @@ Themes import the contract as:
 import { Vehicle, Media, Actions, DriveMode } from "vehicle.slint";
 ```
 
-The `Battery`, `Ride`, `Navigation` and `Plugins` globals are optional for a theme. Export them from the entry file when the theme uses them.
+The `Battery`, `Ride`, `Navigation` and `Plugins` globals are optional for a theme. A theme that uses them imports them from `vehicle.slint`; it does not need to export them.

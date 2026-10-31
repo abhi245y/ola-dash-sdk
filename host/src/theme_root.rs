@@ -30,25 +30,36 @@ const TELLTALES: [&str; 9] = [
 ];
 const PLACEMENTS: [&str; 4] = ["top", "bottom", "left", "right"];
 const ALERT_POSITIONS: [&str; 3] = ["center", "upper", "lower"];
-/// Host default strip colours (also the fallback when a theme fails the contrast rule).
-const DEFAULT_BG: Color = Color::from_rgb_u8(0x0a, 0x0a, 0x0a);
-const DEFAULT_FG: Color = Color::from_rgb_u8(0xf4, 0xf6, 0xfa);
+/// Host strip colours (`strip-bg` day and night, `strip-fg`; docs/design/host-ui-tokens.md). The
+/// strip is dark in both modes. Also the fallback when a theme fails the contrast rule.
+const STRIP_BG: [Color; 2] = [Color::from_rgb_u8(0x0f, 0x2a, 0x2a), Color::from_rgb_u8(0x07, 0x14, 0x14)];
+const STRIP_FG: Color = Color::from_rgb_u8(0xef, 0xe6, 0xd6);
 /// WCAG 2.x minimum contrast for text.
 const MIN_CONTRAST: f64 = 4.5;
-/// WCAG 2.x minimum for large or non-text contrast: the passcode accent (dots, LOCKED).
-const MIN_ACCENT: f64 = 3.0;
-/// Host lock-screen style (the look the host draws with no theme style). Also the fallback
-/// for any lock token a theme leaves out or fails.
-const HOST_LOCK: Lock = Lock {
-    bg: Color::from_rgb_u8(0x07, 0x0b, 0x10),
-    fg: Color::from_rgb_u8(0xf4, 0xf6, 0xfa),
-    muted: Color::from_rgb_u8(0xae, 0xbb, 0xd0),
-    accent: Color::from_rgb_u8(0x3f, 0xb8, 0xff),
-    key_bg: Color::from_rgb_u8(0x17, 0x21, 0x2e),
-    key_border: Color::from_rgb_u8(0x2c, 0x3a, 0x4e),
-    error: Color::from_rgb_u8(0xff, 0xb0, 0x20),
+/// The tokens' `ink`: text on the accent fill.
+const INK: Color = Color::from_rgb_u8(0x0f, 0x2a, 0x2a);
+/// Host lock-screen style for each mode (the look the host draws with no theme style). Also the
+/// fallback for any lock token a theme leaves out or fails.
+const HOST_LOCK_DAY: Lock = Lock {
+    bg: Color::from_rgb_u8(0xf6, 0xf3, 0xec),
+    fg: Color::from_rgb_u8(0x0f, 0x2a, 0x2a),
+    muted: Color::from_rgb_u8(0x4a, 0x5c, 0x5c),
+    accent: Color::from_rgb_u8(0xff, 0xc9, 0x4a),
+    on_accent: INK,
+    key_bg: Color::from_rgb_u8(0xff, 0xff, 0xff),
+    key_border: Color::from_rgb_u8(0xd9, 0xd2, 0xc3),
+    error: Color::from_rgb_u8(0xa3, 0x3a, 0x00),
     shape: "rounded",
     digits: "sans",
+};
+const HOST_LOCK_NIGHT: Lock = Lock {
+    bg: Color::from_rgb_u8(0x0b, 0x1c, 0x1c),
+    fg: Color::from_rgb_u8(0xef, 0xe6, 0xd6),
+    muted: Color::from_rgb_u8(0xa9, 0xb5, 0xae),
+    key_bg: Color::from_rgb_u8(0x16, 0x36, 0x36),
+    key_border: Color::from_rgb_u8(0x24, 0x50, 0x4e),
+    error: Color::from_rgb_u8(0xff, 0xb0, 0x20),
+    ..HOST_LOCK_DAY
 };
 
 const ROOT: &str = r#"import { Dash } from "{THEME}";
@@ -60,6 +71,8 @@ export component Host inherits Window {
     callback unlock-key(int);
     // Fired when a mirrored theme setting changes; the host re-applies OverlayConfig.
     callback theme-overlay-changed();
+    out property <bool> host-night: HostState.night;
+    changed host-night => { root.theme-overlay-changed(); }
 {MIRRORS}    width: 1280px;
     height: 768px;
     background: #000000;
@@ -229,9 +242,10 @@ pub fn bind(ui: &ComponentInstance, log: fn(&str)) -> Result<(), String> {
 }
 
 /// Reads the mirrored theme settings (absent ones use the defaults), checks them,
-/// and writes `OverlayConfig`.
+/// and writes `OverlayConfig`. The host defaults follow `HostState.night`.
 pub fn apply(ui: &ComponentInstance, log: fn(&str)) {
     let get = |name: &str| ui.get_property(name).ok();
+    let night = matches!(ui.get_global_property("HostState", "night"), Ok(Value::Bool(true)));
     let mut warn = |m: String| log(&m);
 
     let placement = get("theme-overlay-placement")
@@ -243,7 +257,7 @@ pub fn apply(ui: &ComponentInstance, log: fn(&str)) {
         .filter(|n| ALERT_POSITIONS.contains(&n.as_str()))
         .unwrap_or_else(|| "center".into());
     let order = telltale_order(get("theme-telltale-order"), &mut warn);
-    let (mut bg, mut fg, mut radius, mut labels) = (DEFAULT_BG, DEFAULT_FG, 8.0_f32, false);
+    let (mut bg, mut fg, mut radius, mut labels) = (STRIP_BG[night as usize], STRIP_FG, 8.0_f32, false);
     if let Some(Value::Struct(s)) = get("theme-overlay-style") {
         let brush = |f: &str| match s.get_field(f) {
             Some(Value::Brush(Brush::SolidColor(c))) => Some(*c),
@@ -284,14 +298,15 @@ pub fn apply(ui: &ComponentInstance, log: fn(&str)) {
         .map(|n| Value::EnumerationValue("Telltale".into(), n.into()))
         .collect();
     set("telltale-order", Value::Model(ModelRc::new(VecModel::from(model))));
-    apply_lock(ui, get("theme-lock-style").as_ref(), log);
+    apply_lock(ui, get("theme-lock-style").as_ref(), night, log);
 }
 
 /// Lock-screen style: colours and two shape choices from the theme's `lock-style`, checked
 /// and written to `LockConfig`. The host alone draws and handles the keypad.
-fn apply_lock(ui: &ComponentInstance, v: Option<&Value>, log: fn(&str)) {
+fn apply_lock(ui: &ComponentInstance, v: Option<&Value>, night: bool, log: fn(&str)) {
     let raw = v.and_then(raw_lock);
-    let lock = resolve_lock(raw.as_ref(), &mut |m| log(&m));
+    let host = if night { &HOST_LOCK_NIGHT } else { &HOST_LOCK_DAY };
+    let lock = resolve_lock(raw.as_ref(), host, &mut |m| log(&m));
     let brush = |c: Color| Value::Brush(Brush::SolidColor(c));
     let style: Struct = [
         ("background", brush(lock.bg)),
@@ -309,8 +324,10 @@ fn apply_lock(ui: &ComponentInstance, v: Option<&Value>, log: fn(&str)) {
     if let Err(e) = ui.set_global_property("LockConfig", "style", Value::Struct(style)) {
         log(&format!("set LockConfig.style failed: {e:?}"));
     }
-    if let Err(e) = ui.set_global_property("LockConfig", "error", brush(lock.error)) {
-        log(&format!("set LockConfig.error failed: {e:?}"));
+    for (prop, c) in [("error", lock.error), ("on-accent", lock.on_accent)] {
+        if let Err(e) = ui.set_global_property("LockConfig", prop, brush(c)) {
+            log(&format!("set LockConfig.{prop} failed: {e:?}"));
+        }
     }
 }
 
@@ -354,6 +371,7 @@ pub struct Lock {
     pub fg: Color,
     pub muted: Color,
     pub accent: Color,
+    pub on_accent: Color,
     pub key_bg: Color,
     pub key_border: Color,
     pub error: Color,
@@ -361,31 +379,42 @@ pub struct Lock {
     pub digits: &'static str,
 }
 
-/// Checks a theme's lock style and fills gaps with host values. Rules (each failure is
+/// Checks a theme's lock style and fills gaps with the `host` style of the current mode. Rules (each failure is
 /// logged and falls back to the host colour, or to the foreground when the host colour
 /// does not read on the theme's background either):
 /// - background and foreground are opaque and reach 4.5:1 together, or both are host colours;
 /// - muted text (it carries attempt and cooldown copy) reaches 4.5:1 on the background;
-/// - the accent (dots, LOCKED) reaches 3:1 on the background;
+/// - the accent (Delete's fill) is opaque and carries text: the best of the host ink, the
+///   background and the foreground reaches 4.5:1 on it;
 /// - key background (transparent means the screen background) reaches 4.5:1 with the foreground;
 /// - key border is decorative and not checked;
 /// - unknown shape or digit names become rounded and sans.
-pub fn resolve_lock(raw: Option<&RawLock>, warn: &mut dyn FnMut(String)) -> Lock {
-    let Some(r) = raw else { return HOST_LOCK };
+pub fn resolve_lock(raw: Option<&RawLock>, host: &Lock, warn: &mut dyn FnMut(String)) -> Lock {
+    let Some(r) = raw else { return *host };
     let (bg, fg) = if opaque(r.bg) && opaque(r.fg) && contrast(r.bg, r.fg) >= MIN_CONTRAST {
         (r.bg, r.fg)
     } else {
         warn(format!(
             "lock-style rejected: background/foreground must be opaque with contrast >= {MIN_CONTRAST}; using host colours"
         ));
-        (HOST_LOCK.bg, HOST_LOCK.fg)
+        (host.bg, host.fg)
     };
-    let muted = pick("muted", r.muted, bg, MIN_CONTRAST, HOST_LOCK.muted, fg, warn);
-    let accent = pick("accent", r.accent, bg, MIN_ACCENT, HOST_LOCK.accent, fg, warn);
+    let muted = pick("muted", r.muted, bg, MIN_CONTRAST, host.muted, fg, warn);
+    // The host ink when it reads on the accent, else the better of the two screen colours.
+    let on_accent = |a: Color| {
+        let best = if contrast(bg, a) > contrast(fg, a) { bg } else { fg };
+        if contrast(INK, a) >= MIN_CONTRAST || contrast(INK, a) >= contrast(best, a) { INK } else { best }
+    };
+    let accent = if opaque(r.accent) && contrast(on_accent(r.accent), r.accent) >= MIN_CONTRAST {
+        r.accent
+    } else {
+        warn(format!("lock-style accent rejected (needs text at {MIN_CONTRAST}:1 on it); using host colour"));
+        host.accent
+    };
     let key_bg = if r.key_bg.alpha() == 0 {
         bg
     } else {
-        pick("key-background", r.key_bg, fg, MIN_CONTRAST, HOST_LOCK.key_bg, bg, warn)
+        pick("key-background", r.key_bg, fg, MIN_CONTRAST, host.key_bg, bg, warn)
     };
     let shape = match r.shape.as_str() {
         "rounded" | "square" | "grid" => static_name(&r.shape),
@@ -401,9 +430,9 @@ pub fn resolve_lock(raw: Option<&RawLock>, warn: &mut dyn FnMut(String)) -> Lock
             "sans"
         }
     };
-    // Error copy stays readable on any background: amber when it passes, else the foreground.
-    let error = if contrast(HOST_LOCK.error, bg) >= MIN_CONTRAST { HOST_LOCK.error } else { fg };
-    Lock { bg, fg, muted, accent, key_bg, key_border: r.key_border, error, shape, digits }
+    // Error copy stays readable on any background: the host's when it passes, else the foreground.
+    let error = if contrast(host.error, bg) >= MIN_CONTRAST { host.error } else { fg };
+    Lock { bg, fg, muted, accent, on_accent: on_accent(accent), key_bg, key_border: r.key_border, error, shape, digits }
 }
 
 fn opaque(c: Color) -> bool {
@@ -506,35 +535,56 @@ mod tests {
             bg: Color::from_rgb_u8(0x20, 0x20, 0x20),
             fg: Color::from_rgb_u8(0x30, 0x30, 0x30),
             muted: Color::from_rgb_u8(0x30, 0x30, 0x30),
-            accent: Color::from_rgb_u8(0x30, 0x30, 0x30),
+            accent: Color::from_rgb_u8(0x77, 0x77, 0x77),
             key_bg: Color::from_argb_u8(0, 0, 0, 0),
             key_border: Color::from_rgb_u8(0x30, 0x30, 0x30),
             shape: "grid".into(),
             digits: "segment".into(),
         };
-        let lock = resolve_lock(Some(&bad), &mut |m| logs.push(m));
-        // Background and foreground fail as a pair: both host colours, shape and digits kept.
-        assert_eq!((lock.bg, lock.fg), (HOST_LOCK.bg, HOST_LOCK.fg));
-        assert_eq!((lock.shape, lock.digits), ("grid", "segment"));
-        assert!(lock.key_bg == HOST_LOCK.bg || lock.key_bg == lock.bg);
+        for host in [&HOST_LOCK_DAY, &HOST_LOCK_NIGHT] {
+            let lock = resolve_lock(Some(&bad), host, &mut |m| logs.push(m));
+            // Background and foreground fail as a pair: both host colours, shape and digits kept.
+            assert_eq!((lock.bg, lock.fg), (host.bg, host.fg));
+            assert_eq!((lock.shape, lock.digits), ("grid", "segment"));
+            assert!(lock.key_bg == host.bg || lock.key_bg == lock.bg);
+            assert_eq!((lock.accent, lock.on_accent), (host.accent, host.on_accent));
+        }
         assert!(logs.iter().any(|m| m.contains("background/foreground")));
+        assert!(logs.iter().any(|m| m.contains("accent rejected")));
     }
 
     #[test]
     fn lock_host_defaults_pass_their_own_rules() {
-        assert!(contrast(HOST_LOCK.fg, HOST_LOCK.bg) >= MIN_CONTRAST);
-        assert!(contrast(HOST_LOCK.muted, HOST_LOCK.bg) >= MIN_CONTRAST);
-        assert!(contrast(HOST_LOCK.accent, HOST_LOCK.bg) >= MIN_ACCENT);
-        assert!(contrast(HOST_LOCK.fg, HOST_LOCK.key_bg) >= MIN_CONTRAST);
-        let mut logs = Vec::new();
-        assert_eq!(resolve_lock(None, &mut |m| logs.push(m)), HOST_LOCK);
-        assert!(logs.is_empty());
+        for host in [HOST_LOCK_DAY, HOST_LOCK_NIGHT] {
+            assert!(contrast(host.fg, host.bg) >= MIN_CONTRAST);
+            assert!(contrast(host.muted, host.bg) >= MIN_CONTRAST);
+            assert!(contrast(host.error, host.bg) >= MIN_CONTRAST);
+            assert!(contrast(host.fg, host.key_bg) >= MIN_CONTRAST);
+            assert!(contrast(host.muted, host.key_bg) >= MIN_CONTRAST);
+            assert!(contrast(host.on_accent, host.accent) >= MIN_CONTRAST);
+            let mut logs = Vec::new();
+            assert_eq!(resolve_lock(None, &host, &mut |m| logs.push(m)), host);
+            assert!(logs.is_empty());
+            // The same values as a theme's lock-style pass unchanged.
+            let same = RawLock {
+                bg: host.bg, fg: host.fg, muted: host.muted, accent: host.accent,
+                key_bg: host.key_bg, key_border: host.key_border, shape: "rounded".into(), digits: "sans".into(),
+            };
+            assert_eq!(resolve_lock(Some(&same), &host, &mut |m| logs.push(m)), host);
+            assert!(logs.is_empty(), "{logs:?}");
+        }
+    }
+
+    #[test]
+    fn strip_defaults_are_dark_and_readable_in_both_modes() {
+        for bg in STRIP_BG {
+            assert!(contrast(bg, STRIP_FG) >= MIN_CONTRAST);
+        }
     }
 
     #[test]
     fn contrast_black_white_is_21() {
         assert!((contrast(Color::from_rgb_u8(0, 0, 0), Color::from_rgb_u8(255, 255, 255)) - 21.0).abs() < 0.01);
-        assert!(contrast(DEFAULT_BG, DEFAULT_FG) >= MIN_CONTRAST);
     }
 
     /// `<tmp>/<name>/{contract/c.slint, theme/ok.slint, outside.slint}`; returns canonical (root, contract, theme).
@@ -608,7 +658,7 @@ mod tests {
         // sim includes this file with `#[path]`, so CARGO_MANIFEST_DIR is sim/ there and host/ here:
         // `../host` is the host crate from both.
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../host/ui/fonts");
-        for f in ["Regular", "SemiBold", "Bold"] {
+        for f in ["Medium", "Bold", "ExtraBold"] {
             let bytes = std::fs::read(dir.join(format!("OlaDashHost-{f}.ttf"))).unwrap();
             assert!(bytes.windows(utf16.len()).any(|w| w == utf16), "{f}");
         }

@@ -97,6 +97,24 @@ else
     echo "error: Display Off option not selected (pixel 736,192 is $got, want #ffc94a)" >&2
     status=1
 fi
+# Theme rows begin at (432,176), 96 px apart: Minimal is third after Default and
+# Data Fields. (448,408) is in its left padding, clear of text and the 24 px corners.
+got=$("$SIM" "$ROOT/themes/minimal" --contract "$ROOT/contract" --state park --screen settings --pane theme --at 13 --screenshot "$png" --pixel 448,408 | tail -n 1) || got=error
+if [ "$got" = "#ffc94a" ]; then
+    echo "ok: active theme row selected (pixel 448,408 is $got)"
+else
+    echo "error: active theme row not selected (pixel 448,408 is $got, want #ffc94a)" >&2
+    status=1
+fi
+# First-run column: (200,208), 880 px wide; Done at (840,496), size 240 x 64.
+# (864,528) is in the pill's left padding, clear of its text and rounded edge.
+got=$("$SIM" "$ROOT/themes/minimal" --contract "$ROOT/contract" --first-run --at 5 --screenshot "$png" --pixel 864,528 | tail -n 1) || got=error
+if [ "$got" = "#ffc94a" ]; then
+    echo "ok: first-run Done pill visible (pixel 864,528 is $got)"
+else
+    echo "error: first-run Done pill missing (pixel 864,528 is $got, want #ffc94a)" >&2
+    status=1
+fi
 # Switching uses the host day background, above the theme and below the overlay.
 got=$("$SIM" "$ROOT/themes/minimal" --contract "$ROOT/contract" --switch default --at 5 --screenshot "$png" --pixel 104,104 | tail -n 1) || got=error
 if [ "$got" = "#f6f3ec" ]; then

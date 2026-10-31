@@ -39,12 +39,12 @@ Useful times are 5 s (start), 20 s (eco, indicators on), 50 s (hyper) and 75 s (
 
 The live window (no `--screenshot`) runs the same mock data in real time and needs a display.
 
-Settings opens on Display by default; `--pane display|about` chooses the pane:
+Settings opens on Display by default; `--pane display|theme|about` chooses the pane. `--first-run` previews setup; Apply and Done log without restarting:
 
 ```sh
-sim/target/release/sim themes/minimal --state park --screen settings --pane display --screenshot display.png
-sim/target/release/sim themes/minimal --state park --screen settings --pane about --screenshot about.png
-sim/target/release/sim themes/minimal --state park --screen settings --settings tmp/settings.json
+sim/target/release/sim themes/minimal --state park --screen settings --pane theme --screenshot theme.png
+sim/target/release/sim themes/minimal --first-run --screenshot setup.png
+sim/target/release/sim themes/minimal --first-run --night --settings tmp/settings.json
 ```
 
 `--settings FILE` loads and saves preferences through the same Rust code as the host. Create the parent directory first. Without the flag, preferences start at defaults and changes stay in memory. For a repeatable night / 12-hour capture, use a file containing `{"night":"on","clock24":false}`. `--night` overrides the loaded night value for the preview without writing it. Clock changes appear on the next sim update. Invalid JSON is renamed to `FILE.bad`; updates use `FILE.tmp` followed by rename. `tools/check-themes.sh` also probes the selected Off option in Display for the accent colour, that the segment theme keeps its 24-hour clock with `clock24` false, and that the lock clock shows its AM/PM label.
@@ -65,7 +65,7 @@ sim/target/release/sim themes/minimal --confirm-theme --screenshot confirm.png -
 sim/target/release/sim themes/minimal --state restart --screenshot restart.png --at 2
 ```
 
-`--switch` and `--confirm-theme` default to `--state park`; add `--night`, `--alert 1` or `--state locked` to check colours and that the cards stay under alerts and the lock screen. `--state restart` is the first start after a switch (lock state unknown). `tools/check-themes.sh` probes the switching and restart cards; the sim tests cover `host/src/theme_switch.rs`.
+`--switch`, `--confirm-theme` and `--first-run` are mutually exclusive and default to `--state park`; add `--night`, `--alert 1` or `--state locked` to check colours and that the cards stay under alerts and the lock screen. `--state restart` is the first start after a switch (lock state unknown). `tools/check-themes.sh` probes the switching, restart, selected theme row and first-run Done pill; the sim tests cover installed-theme filtering and setup persistence too.
 
 On the device: switch while parked, check `files/themes/{active,previous}`, the relaunch with no lock-screen flash, Keep, Revert and timeout, the countdown pausing behind alerts and the lock screen, `files/.assets-stamp` across an unchanged start and an APK update, and tap-to-first-frame against the 2 s target.
 

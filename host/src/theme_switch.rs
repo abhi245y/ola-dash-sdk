@@ -6,9 +6,75 @@ use std::path::Path;
 
 pub const DEFAULT_THEME: &str = "default";
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct ThemeInfo {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+}
+
+fn info(dir: &Path, id: &str, host_contract: i64) -> Option<ThemeInfo> {
+    let text = fs::read_to_string(dir.join("theme.json")).ok()?;
+    let manifest: serde_json::Value = serde_json::from_str(&text).ok()?;
+    if manifest["contract"].as_i64()? > host_contract { return None; }
+    if !dir.join(manifest["entry"].as_str()?).is_file() { return None; }
+    Some(ThemeInfo {
+        id: id.into(),
+        name: manifest["name"].as_str().filter(|name| !name.is_empty()).unwrap_or(id).into(),
+        description: manifest["description"].as_str().unwrap_or("").into(),
+    })
+}
+
+/// Scanned once at startup: `default` (the bundled fallback copy) first, then the rest.
+/// Missing, unreadable or incompatible entries are quietly skipped.
+pub fn installed(files: &Path, host_contract: i64) -> Vec<ThemeInfo> {
+    let bad = fs::read_to_string(files.join("themes/bad")).unwrap_or_default();
+    let mut themes = scan(&files.join("themes"), host_contract);
+    themes.retain(|theme| theme.id != DEFAULT_THEME
+        && !bad.split_whitespace().any(|id| id == theme.id));
+    if let Some(default) = info(&files.join("fallback"), DEFAULT_THEME, host_contract) {
+        themes.insert(0, default);
+    }
+    themes
+}
+
+/// Theme folders in `dir`, sorted by name.
+pub fn scan(dir: &Path, host_contract: i64) -> Vec<ThemeInfo> {
+    let mut themes = Vec::new();
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let Ok(kind) = entry.file_type() else { continue };
+            if !kind.is_dir() { continue; }
+            let Ok(id) = entry.file_name().into_string() else { continue };
+            if !valid_id(&id) { continue; }
+            if let Some(theme) = info(&entry.path(), &id, host_contract) { themes.push(theme); }
+        }
+    }
+    themes.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.id.cmp(&b.id)));
+    themes
+}
+
+/// The interpreted model is identical for the host and simulator.
+pub fn model(themes: Vec<ThemeInfo>) -> slint_interpreter::Value {
+    use slint_interpreter::Value;
+    let rows: Vec<Value> = themes.into_iter().map(|theme| {
+        Value::Struct([
+            ("id".into(), Value::String(theme.id.into())),
+            ("name".into(), Value::String(theme.name.into())),
+            ("description".into(), Value::String(theme.description.into())),
+        ].into_iter().collect())
+    }).collect();
+    Value::Model(slint::ModelRc::new(slint::VecModel::from(rows)))
+}
+
+/// Selection files that live beside the theme folders in `files/themes/`.
+const RESERVED_IDS: [&str; 5] = ["active", "previous", "bad", "strikes", "restart"];
+
+/// A theme folder name: 1-64 ASCII letters, digits, `_` or `-`, not a selection file name.
 pub fn valid_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 64
         && id.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
+        && !RESERVED_IDS.contains(&id)
 }
 
 pub fn active(files: &Path) -> String {
@@ -119,9 +185,54 @@ mod tests {
         for id in ["default", "Twin_Dial-2", &"x".repeat(64)] {
             assert!(valid_id(id), "{id}");
         }
-        for id in ["", ".", "..", "../new", "/new", "a/b", "a\\b", "new\n", " new", "é", &"x".repeat(65)] {
+        for id in ["", ".", "..", "../new", "/new", "a/b", "a\\b", "new\n", " new", "é", &"x".repeat(65), "active", "previous", "bad", "strikes", "restart"] {
             assert!(!valid_id(id), "{id}");
         }
+    }
+
+    #[test]
+    fn installed_defaults_first_sorts_and_filters() {
+        let t = Temp::new();
+        fs::write(t.0.join("fallback/theme.json"), r#"{"entry":"main.slint","contract":7,"name":"Z Default"}"#).unwrap();
+        fs::write(t.0.join("fallback/main.slint"), "").unwrap();
+        for (id, manifest) in [
+            ("z-id", Some(r#"{"entry":"main.slint","contract":7,"name":"Alpha","description":"First"}"#)),
+            ("a-id", Some(r#"{"entry":"main.slint","contract":6,"name":"Beta"}"#)),
+            ("unnamed", Some(r#"{"entry":"main.slint","contract":7}"#)),
+            ("blank", Some(r#"{"entry":"main.slint","contract":7,"name":""}"#)),
+            ("crashy", Some(r#"{"entry":"main.slint","contract":7,"name":"Crashy"}"#)),
+            ("invalid.id", Some(r#"{"entry":"main.slint","contract":7}"#)),
+            ("future", Some(r#"{"entry":"main.slint","contract":8}"#)),
+            ("missing", None),
+            ("broken", Some("{")),
+            ("no-contract", Some("{}")),
+            ("no-entry", Some(r#"{"contract":7,"name":"No entry"}"#)),
+            ("default", Some(r#"{"entry":"main.slint","contract":7,"name":"Duplicate"}"#)),
+        ] {
+            let dir = t.0.join("themes").join(id);
+            fs::create_dir(&dir).unwrap();
+            if let Some(manifest) = manifest { fs::write(dir.join("theme.json"), manifest).unwrap(); }
+            fs::write(dir.join("main.slint"), "").unwrap();
+        }
+        fs::write(t.0.join("themes/bad"), "crashy\nother\n").unwrap();
+        let themes = installed(&t.0, 7);
+        assert_eq!(themes.iter().map(|theme| theme.id.as_str()).collect::<Vec<_>>(),
+            ["default", "z-id", "a-id", "blank", "unnamed"]);
+        assert_eq!(themes[0].name, "Z Default");
+        assert_eq!(themes[1].description, "First");
+        assert_eq!(themes[3].name, "blank");
+        assert_eq!(themes[3].description, "");
+    }
+
+    #[test]
+    fn installed_tolerates_missing_directories_and_manifests() {
+        let t = Temp::new();
+        fs::remove_dir_all(t.0.join("themes")).unwrap();
+        fs::write(t.0.join("fallback/theme.json"), r#"{"entry":"main.slint","contract":7}"#).unwrap();
+        fs::write(t.0.join("fallback/main.slint"), "").unwrap();
+        assert_eq!(installed(&t.0, 7)[0].id, DEFAULT_THEME);
+        fs::remove_file(t.0.join("fallback/theme.json")).unwrap();
+        assert!(installed(&t.0, 7).is_empty());
     }
 
     #[test]

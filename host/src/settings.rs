@@ -53,10 +53,15 @@ impl Settings {
         self.values.get("clock24").and_then(Json::as_bool).unwrap_or(true)
     }
 
+    pub fn setup_done(&self) -> bool {
+        self.values.get("setup").and_then(Json::as_str) == Some("done")
+    }
+
     pub fn set(&mut self, key: &str, value: &str) -> Result<(), String> {
         let value = match (key, value) {
             ("night", "off" | "on") => Json::String(value.into()),
             ("clock24", "true" | "false") => Json::Bool(value == "true"),
+            ("setup", "done") => Json::String(value.into()),
             _ => return Err(format!("settings: invalid {key}={value}")),
         };
         let mut values = self.values.clone();
@@ -70,7 +75,9 @@ impl Settings {
 }
 
 fn apply(ui: &ComponentInstance, key: &str, enabled: bool, refresh_clock: fn(&ComponentInstance)) -> Result<(), String> {
-    if key == "clock24" {
+    if key == "setup" {
+        return Ok(());
+    } else if key == "clock24" {
         ui.set_property("clock24", Value::Bool(enabled))
             .map_err(|e| format!("clock24: {e:?}"))?;
         ui.set_global_property("HostState", "clock24", Value::Bool(enabled))
@@ -194,6 +201,26 @@ mod tests {
             assert!(settings.set(key, value).is_err());
         }
         assert!(settings.values.is_empty());
+    }
+
+    #[test]
+    fn setup_accepts_only_done_and_survives_reload() {
+        let dir = Dir::new();
+        let mut settings = Settings::load(Some(&dir.file()), |_| {});
+        assert!(!settings.setup_done());
+        for value in ["", "on", "true", "Done", "pending"] {
+            assert!(settings.set("setup", value).is_err());
+            assert!(!settings.setup_done());
+        }
+        settings.set("setup", "done").unwrap();
+        assert!(settings.setup_done());
+        assert!(Settings::load(Some(&dir.file()), |_| {}).setup_done());
+        assert!(settings.set("setup", "false").is_err());
+        assert!(settings.setup_done());
+        for value in [r#""pending""#, "true", "null"] {
+            fs::write(dir.file(), format!(r#"{{"setup":{value}}}"#)).unwrap();
+            assert!(!Settings::load(Some(&dir.file()), |_| {}).setup_done());
+        }
     }
 
     #[test]

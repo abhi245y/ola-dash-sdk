@@ -61,7 +61,7 @@ cp -r "$ROOT/themes/default/." "$B/assets/fallback/"       # bundled default the
 for d in ${EXTRA_THEMES:+"$EXTRA_THEMES"/*/}; do
     [ -f "$d/theme.json" ] || continue
     id=$(basename "$d")
-    case $id in active|*[!A-Za-z0-9_-]*) echo "bad theme id: $id" >&2; exit 1;; esac
+    case $id in active|previous|bad|strikes|restart|*[!A-Za-z0-9_-]*) echo "bad theme id: $id" >&2; exit 1;; esac
     mkdir -p "$B/assets/themes"
     cp -r "$d" "$B/assets/themes/$id"
 done

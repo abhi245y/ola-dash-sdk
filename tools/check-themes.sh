@@ -97,6 +97,23 @@ else
     echo "error: Display Off option not selected (pixel 736,192 is $got, want #ffc94a)" >&2
     status=1
 fi
+# Switching uses the host day background, above the theme and below the overlay.
+got=$("$SIM" "$ROOT/themes/minimal" --contract "$ROOT/contract" --switch default --at 5 --screenshot "$png" --pixel 104,104 | tail -n 1) || got=error
+if [ "$got" = "#f6f3ec" ]; then
+    echo "ok: switching card background (pixel 104,104 is $got)"
+else
+    echo "error: switching card missing (pixel 104,104 is $got, want #f6f3ec)" >&2
+    status=1
+fi
+# After a theme restart the switching card holds the lock screen until lock state is known.
+# The spinner steps every 125 ms: at t=2 (step 0) the top dot (640,354) is fully opaque.
+got=$("$SIM" "$ROOT/themes/minimal" --contract "$ROOT/contract" --state restart --at 2 --screenshot "$png" --pixel 640,354 | tail -n 1) || got=error
+if [ "$got" = "#0f2a2a" ]; then
+    echo "ok: restart holds the switching card (pixel 640,354 is $got)"
+else
+    echo "error: restart shows the lock screen (pixel 640,354 is $got, want #0f2a2a)" >&2
+    status=1
+fi
 # The theme contract stays HH:MM even when the host uses 12-hour time. At t=5 the
 # theme clock is 10:24; 730,647 is inside the lit upper-right segment of its tens-hour 1.
 printf '%s\n' '{"clock24": false}' > "$clock_settings"

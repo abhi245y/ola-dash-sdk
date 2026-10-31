@@ -19,6 +19,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.Calendar;
 
 /** Full-screen NativeActivity that hosts the Slint UI. Java only binds the vehicle and ticks the clock. */
@@ -49,6 +51,11 @@ public final class MainActivity extends NativeActivity {
     public void onOpenTrunk() {
         VehicleBridge.openTrunk();
     }
+
+    /** Called synchronously by Rust before a theme-switch process exit. */
+    public void onThemeExit() {
+        BadThemeGuard.cleanExit();
+    }
     private final Runnable clock = new Runnable() {
         @Override
         public void run() {
@@ -63,7 +70,7 @@ public final class MainActivity extends NativeActivity {
     protected void onCreate(Bundle state) {
         // Copy assets first: NativeActivity starts the Rust main thread inside super.onCreate.
         try {
-            copyAssets("");
+            copyAssetsIfChanged();
         } catch (IOException e) {
             Log.e(TAG, "asset copy failed", e);
         }
@@ -127,7 +134,27 @@ public final class MainActivity extends NativeActivity {
         super.onDestroy();
     }
 
-    /** Copies bundled contract, overlay and fallback theme into files/. Always overwrites. */
+    /** Skips the copy when files/.assets-stamp matches the APK's update time; any doubt copies. */
+    private void copyAssetsIfChanged() throws IOException {
+        String update = null;
+        try {
+            update = Long.toString(getPackageManager().getPackageInfo(getPackageName(), 0).lastUpdateTime);
+        } catch (Exception e) {
+            Log.w(TAG, "package info unavailable, copying assets", e);
+        }
+        File stamp = new File(getFilesDir(), ".assets-stamp");
+        try {
+            if (update != null && update.equals(new String(Files.readAllBytes(stamp.toPath()), StandardCharsets.UTF_8))) {
+                return;
+            }
+        } catch (IOException e) {
+            // Missing or unreadable stamp: copy.
+        }
+        copyAssets("");
+        if (update != null) Files.write(stamp.toPath(), update.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** Copies bundled assets into files/, overwriting bundled theme ids on APK updates. */
     private void copyAssets(String dir) throws IOException {
         String[] names = getAssets().list(dir);
         if (names == null) {

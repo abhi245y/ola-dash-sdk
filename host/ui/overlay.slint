@@ -6,6 +6,7 @@
 import { OverlayPlacement, Telltale, AlertPosition } from "vehicle.slint";
 import { UnlockScreen } from "unlock.slint";
 import { HostText } from "hosttext.slint";
+import { SwitchingScreen } from "theme-switch.slint";
 
 // ---- design tokens (docs/design/host-ui-tokens.md): restyle here, logic stays put ----
 export global OverlayTokens {
@@ -110,6 +111,8 @@ export global HostState {
     in property <bool> auth-available: false;
     // The park gate (TrunkGate.parked): host screens and app launches need it.
     in property <bool> parked: false;
+    // Theme name when this start follows a theme switch (files/themes/restart), else empty.
+    in property <string> restart-name;
 }
 
 // Telltale glyphs in a 28x28 viewbox: lit is a solid fill in the status colour, unlit a 40 % outline
@@ -327,7 +330,20 @@ export component HostOverlay inherits Rectangle {
     }
     property <bool> scrim-visible: !root.unlock-visible && HostState.alert-code != 0 && HostState.alert-code != root.dismissed;
 
-    if root.unlock-visible : UnlockScreen {
+    // After a theme restart the lock state is unknown until the first callback (phase 0):
+    // keep the switching card instead of flashing the lock screen, unless the retry key is needed.
+    property <bool> restarting: HostState.restart-name != "";
+    property <int> phase: HostState.auth-phase;
+    changed phase => { if root.phase != 0 { root.restarting = false; } }
+    property <bool> hold: root.restarting && root.phase == 0 && HostState.auth-error != 2;
+    // 15 s cap so a silent BCM shows "Waiting for vehicle status"; tune after M-replay.
+    Timer { interval: 15s; running: root.hold; triggered => { root.restarting = false; } }
+    if root.unlock-visible && root.hold : SwitchingScreen {
+        width: parent.width;
+        height: parent.height;
+        name: HostState.restart-name;
+    }
+    if root.unlock-visible && !root.hold : UnlockScreen {
         width: parent.width;
         height: parent.height;
         phase: HostState.auth-phase;

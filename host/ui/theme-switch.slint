@@ -1,0 +1,68 @@
+import { LockConfig } from "unlock.slint";
+import { HostText } from "hosttext.slint";
+import { Choice } from "kit.slint";
+
+export component SwitchingScreen inherits Rectangle {
+    in property <string> name;
+    background: LockConfig.style.background;
+    TouchArea { }
+    property <int> step: Math.mod(floor(animation-tick() / 125ms), 8);
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 80px; height: 80px;
+        for i in 8 : Rectangle {
+            x: 34px + 30px * Math.sin(i * 45deg);
+            y: 34px - 30px * Math.cos(i * 45deg);
+            width: 12px; height: 12px;
+            border-radius: 6px;
+            background: LockConfig.style.foreground;
+            opacity: 1 - Math.mod(root.step - i + 8, 8) * 0.1;
+        }
+    }
+    HostText {
+        x: 104px; y: parent.height / 2 + 64px;
+        width: parent.width - 208px; height: 48px;
+        text: "Switching to " + root.name;
+        color: LockConfig.style.foreground;
+        font-size: 32px;
+        font-weight: 800;
+        overflow: elide;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+export component ConfirmThemeScreen inherits Rectangle {
+    in property <int> seconds: 10;
+    callback keep();
+    callback revert();
+    background: LockConfig.style.background;
+    TouchArea { }
+    VerticalLayout {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 600px; height: 240px;
+        spacing: 24px;
+        HostText {
+            text: "Keep this theme?";
+            color: LockConfig.style.foreground;
+            font-size: 40px;
+            font-weight: 800;
+            horizontal-alignment: center;
+        }
+        HostText {
+            text: "Reverting in " + root.seconds + " s";
+            color: LockConfig.style.muted;
+            font-size: 22px;
+            horizontal-alignment: center;
+        }
+        Choice {
+            options: ["Keep", "Revert"];
+            selected: -1;
+            chosen(index) => {
+                if index == 0 { root.keep(); } else { root.revert(); }
+            }
+        }
+    }
+}

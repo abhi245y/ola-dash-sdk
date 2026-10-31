@@ -65,9 +65,17 @@ The overlay is compiled into the host and painted after the theme's `Dash` compo
 
 ## Host screens
 
-`Host.screen` in `host/src/theme_root.rs` accepts `dash` and `settings`. The settings frame (`host/ui/settings.slint`, using `kit.slint`) is drawn after the wrapped theme and before `HostOverlay`, so the strip, alerts and lock screen stay above it. Navigation stays in Slint: the hub and `Actions.open-settings()` / `open-themes()` request settings through the root gate, and Close returns to the dash. Leaving parked, an alert, locking or test mode resets the screen; the draw condition also checks the gate. The gate reads only host state, including `TrunkGate`'s parked result.
+`Host.screen` in `host/src/theme_root.rs` accepts `dash`, `settings`, `switching` and `confirm-theme`. Host screens are drawn after the wrapped theme and before `HostOverlay`, so the strip, alerts and lock screen stay above them. Navigation stays in Slint: the hub and `Actions.open-settings()` / `open-themes()` request settings through the root gate, and Close returns to the dash. Leaving parked, an alert, locking or test mode resets the screen; the draw condition also checks the gate. The gate reads only host state, including `TrunkGate`'s parked result.
 
 The rail lists Display, then About. Display has Night mode (Off / On) and Clock (24-hour / 12-hour), using the shared `Choice` control and checked `LockConfig` colours. About shows the host crate version, set once at startup in `HostState.version-text`, and the contract version. The shared clock and battery status line reads host copies and shows `--` for unknown values. `Host.settings-pane` stores the selected index (0 Display, 1 About), bound to `SettingsScreen.selected`. Only `SettingsScreen` has a rail `cursor`, initialized from `selected` when opened; `move(delta)` moves it, `select()` applies it, and `close()` returns to the dash. Apps is not built yet; its callback logs only.
+
+## Theme switching
+
+`Host.switch-theme(id)` (no caller yet; the Theme pane comes in E1.S4 PR2) runs only while `host-screens-allowed` and no switch or confirmation is pending. It shows the switching card (`host/ui/theme-switch.slint`) and calls Rust `apply-theme`. Rust refuses invalid IDs (loader rule), unknown, bad-listed, already-active and incompatible themes, and returns to Settings. After 50 ms, so the card is drawn, it rechecks the gate, writes `files/themes/previous` and `active` (`host/src/theme_switch.rs`, synced `.tmp` + rename), writes the `restart` marker with the theme name, clears the bad-theme strike through `MainActivity.onThemeExit()`, and exits. Android relaunches the home app; a development install that is not home must be reopened by hand.
+
+On the next start Rust reads and deletes `restart` into `HostState.restart-name`. While it is set and the lock state is still unknown (auth phase 0, no connection error), the overlay draws the switching card in place of the lock screen, so the keypad does not flash. If `previous` exists, the Keep / Revert card counts down 10 s while host screens are allowed (it pauses otherwise). Keep deletes `previous`. Revert or timeout restores it to `active` and restarts the same way; a corrupt `previous` is dropped. If the new theme fails to compile, the card shows over the fallback and Keep keeps the broken selection; the next start falls back again.
+
+`host/res/values/styles.xml` sets a `#F6F3EC` window background, the day switching colour, for the restart gap; at night the gap flashes light. `MainActivity` copies bundled assets only when `PackageInfo.lastUpdateTime` differs from `files/.assets-stamp` (written after a full copy). A fatal start deletes the stamp so the next start recopies.
 
 ## Settings persistence
 

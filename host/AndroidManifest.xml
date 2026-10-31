@@ -21,6 +21,7 @@
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
         <activity
             android:name="dev.olatool.dash.MainActivity"
+            android:theme="@style/OlaDashTheme"
             android:exported="true"
             android:screenOrientation="landscape"
             android:launchMode="singleTask"

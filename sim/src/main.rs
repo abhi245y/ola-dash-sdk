@@ -6,7 +6,7 @@
 //!   options: --contract <dir>  (default: <theme>/../../contract)
 //!            --placement top|bottom|left|right   preview another overlay placement
 //!            --alert <code>                      hold a host alert (1-6) instead of the mock cycle
-//!            --state ride|park|charge|reverse|trunk|easy-park|locked|locked-error|cooldown
+//!            --state ride|park|charge|reverse|trunk|easy-park|locked|locked-error|cooldown|restart
 //!                                                 hold one vehicle state (default: the mock ride cycle);
 //!                                                 the last three show the lock screen (see docs/themes.md)
 //!            --plugins / --nav                    feed mock plugin widgets / an active navigation card
@@ -15,6 +15,8 @@
 //!            --screen dash|settings               preview a host screen (settings needs --state park)
 //!            --pane display|about                 settings pane (default: display)
 //!            --settings <file>                    load and save host preferences (default: in memory)
+//!            --switch <id>                        preview switching without exiting (defaults to park)
+//!            --confirm-theme                      preview Keep / Revert countdown (defaults to park)
 //!
 //! The theme is loaded the way the device loads it: inside the host's `Host` root,
 //! with `HostOverlay` drawn above it (host/src/theme_root.rs, shared with the host).
@@ -42,6 +44,9 @@ use std::time::{Duration, Instant};
 mod theme_root;
 #[path = "../../host/src/settings.rs"]
 mod settings;
+#[allow(dead_code)] // the sim only previews; selection writes are host-only
+#[path = "../../host/src/theme_switch.rs"]
+mod theme_switch;
 
 /// Keys every theme.json must carry (see docs/themes.md).
 const REQUIRED_STR_KEYS: [&str; 7] = ["id", "name", "version", "author", "license", "entry", "description"];
@@ -106,6 +111,7 @@ enum Scenario {
     Locked,
     LockedError,
     Cooldown,
+    Restart,
 }
 
 impl Scenario {
@@ -120,6 +126,7 @@ impl Scenario {
             "locked" => Self::Locked,
             "locked-error" => Self::LockedError,
             "cooldown" => Self::Cooldown,
+            "restart" => Self::Restart,
             _ => return None,
         })
     }
@@ -134,6 +141,8 @@ impl Scenario {
             Self::LockedError => Some([1, 0, 3, 1, 0]),
             // Attempts used up: the service cooldown counts down.
             Self::Cooldown => Some([1, 0, 0, 0, 272]),
+            // First start after a theme switch: lock state not known yet.
+            Self::Restart => Some([0, 0, -1, 0, 0]),
             _ => None,
         }
     }
@@ -260,7 +269,7 @@ fn sim_at(t: f64, sc: Scenario) -> Sim {
             s.mode = "easy-park";
             s.ready = true;
         }
-        Scenario::Locked | Scenario::LockedError | Scenario::Cooldown => {
+        Scenario::Locked | Scenario::LockedError | Scenario::Cooldown | Scenario::Restart => {
             held(&mut s);
             s.state = "sleep";
             s.locked = true;
@@ -406,6 +415,8 @@ impl Feeder {
             self.set(inst, "HostState", prop, Value::Number(v as f64));
         }
         // Keys are live while passcode entry is open, and disabled during the cooldown.
+        let restart = if matches!(self.scenario, Scenario::Restart) { "Minimal" } else { "" };
+        self.set(inst, "HostState", "restart-name", Value::String(restart.into()));
         self.set(inst, "HostState", "auth-available", Value::Bool(matches!(self.scenario, Scenario::Locked | Scenario::LockedError)));
         self.set(inst, "HostState", "parked", Value::Bool(matches!(self.scenario, Scenario::Park | Scenario::Trunk | Scenario::Charge)));
         let alert = self.alert_override.unwrap_or(s.alert);
@@ -493,6 +504,8 @@ struct Args {
     screen: String,
     pane: i32,
     settings: Option<PathBuf>,
+    switch: Option<String>,
+    confirm_theme: bool,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -504,6 +517,7 @@ fn parse_args() -> Result<Args, String> {
     let mut placement = None;
     let mut alert = None;
     let mut scenario = Scenario::Ride;
+    let mut state_given = false;
     let mut plugins = false;
     let mut nav = false;
     let mut pixel = None;
@@ -512,6 +526,8 @@ fn parse_args() -> Result<Args, String> {
     let mut screen = "dash".to_string();
     let mut pane = 0;
     let mut settings = None;
+    let mut switch = None;
+    let mut confirm_theme = false;
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -527,10 +543,11 @@ fn parse_args() -> Result<Args, String> {
                 )
             }
             "--state" => {
+                state_given = true;
                 scenario = it
                     .next()
                     .and_then(|v| Scenario::parse(&v))
-                    .ok_or("--state needs ride, park, charge, reverse, trunk, easy-park, locked, locked-error or cooldown")?
+                    .ok_or("--state needs ride, park, charge, reverse, trunk, easy-park, locked, locked-error, cooldown or restart")?
             }
             "--plugins" => plugins = true,
             "--nav" => nav = true,
@@ -550,6 +567,11 @@ fn parse_args() -> Result<Args, String> {
             "--settings" => {
                 settings = Some(PathBuf::from(it.next().ok_or("--settings needs a file")?));
             }
+            "--switch" => {
+                switch = Some(it.next().filter(|id| theme_switch::valid_id(id))
+                    .ok_or("--switch needs a theme id (1-64 ASCII letters, digits, _ or -)")?);
+            }
+            "--confirm-theme" => confirm_theme = true,
             "--pixel" => {
                 pixel = Some(it
                     .next()
@@ -567,10 +589,11 @@ fn parse_args() -> Result<Args, String> {
             "-h" | "--help" => {
                 println!("usage: sim <theme-dir> [--screenshot out.png --at SECS] [--contract DIR]");
                 println!("       [--placement top|bottom|left|right] [--alert 1-6]");
-                println!("       [--state ride|park|charge|reverse|trunk|easy-park|locked|locked-error|cooldown] [--plugins] [--nav] [--night] [--stale]");
+                println!("       [--state ride|park|charge|reverse|trunk|easy-park|locked|locked-error|cooldown|restart] [--plugins] [--nav] [--night] [--stale]");
                 println!("       [--pixel X,Y]  (with --screenshot: also print the colour at that point)");
                 println!("       [--screen dash|settings]  (settings needs --state park)");
                 println!("       [--pane display|about] [--settings FILE]");
+                println!("       [--switch ID | --confirm-theme]  (default to --state park; no restart or theme-file writes)");
                 println!("       sim --check <theme-dir> [--contract DIR]");
                 std::process::exit(0);
             }
@@ -579,6 +602,10 @@ fn parse_args() -> Result<Args, String> {
         }
     }
     let theme = theme.ok_or("usage: sim <theme-dir> [...]")?;
+    if switch.is_some() && confirm_theme {
+        return Err("--switch and --confirm-theme are mutually exclusive".into());
+    }
+    if !state_given && (switch.is_some() || confirm_theme) { scenario = Scenario::Park; }
     // Default: the repo layout themes/<name>/ next to contract/.
     let contract = contract.unwrap_or_else(|| theme.join("../../contract"));
     // The compiler wants absolute include paths.
@@ -590,7 +617,7 @@ fn parse_args() -> Result<Args, String> {
             return Err(format!("--placement needs top, bottom, left or right, got {p}"));
         }
     }
-    Ok(Args { theme, contract, screenshot, at, check, placement, alert, scenario, plugins, nav, pixel, night, stale, screen, pane, settings })
+    Ok(Args { theme, contract, screenshot, at, check, placement, alert, scenario, plugins, nav, pixel, night, stale, screen, pane, settings, switch, confirm_theme })
 }
 
 /// Path of `to` relative to `from` (both absolute, same drive), with '/' separators.
@@ -652,6 +679,29 @@ fn bind_settings(inst: &ComponentInstance, args: &Args) -> Result<(), Box<dyn Er
         inst.set_global_property("HostState", "night", Value::Bool(true))?;
     }
     inst.set_property("settings-pane", Value::Number(args.pane as f64))?;
+    Ok(())
+}
+
+fn preview_screen(inst: &ComponentInstance, args: &Args) -> Result<(), Box<dyn Error>> {
+    inst.set_callback("apply-theme", |args| {
+        println!("theme switch: {:?} (sim: no restart)", args.first());
+        Value::Void
+    })?;
+    for name in ["keep-theme", "revert-theme"] {
+        let weak = inst.as_weak();
+        inst.set_callback(name, move |_| {
+            println!("{name} (sim: no restart or theme-file writes)");
+            if let Some(inst) = weak.upgrade() {
+                let _ = inst.set_property("confirm-theme", Value::Bool(false));
+            }
+            Value::Void
+        })?;
+    }
+    inst.set_property("screen", Value::String(args.screen.clone().into()))?;
+    inst.set_property("confirm-theme", Value::Bool(args.confirm_theme))?;
+    if let Some(id) = &args.switch {
+        inst.invoke("switch-theme", &[Value::String(id.clone().into())])?;
+    }
     Ok(())
 }
 
@@ -783,7 +833,7 @@ fn run_screenshot(args: &Args, out: &Path) -> Result<(), Box<dyn Error>> {
     let feeder = Feeder::new(args);
     feeder.wire_callbacks(&inst);
     feeder.push(&inst, 0.0);
-    inst.set_property("screen", Value::String(args.screen.clone().into()))?;
+    preview_screen(&inst, args)?;
     inst.show()?;
     window.set_size(slint::PhysicalSize::new(WIDTH, HEIGHT));
 
@@ -828,7 +878,7 @@ fn run_live(args: &Args) -> Result<(), Box<dyn Error>> {
     feeder.wire_callbacks(&inst);
     let start = Instant::now();
     feeder.push(&inst, 0.0);
-    inst.set_property("screen", Value::String(args.screen.clone().into()))?;
+    preview_screen(&inst, args)?;
     let f = feeder.clone();
     let weak = inst.as_weak();
     let timer = Timer::default();

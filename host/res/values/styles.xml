@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches the day switching card so the restart gap is not black. -->
+    <color name="switching">#F6F3EC</color>
+    <style name="OlaDashTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">@color/switching</item>
+    </style>
+</resources>

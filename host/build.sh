@@ -52,7 +52,7 @@ mkdir -p "$B/classes" "$B/dex" "$B/gen" "$B/assets/contract" "$B/assets/host" "$
 (cd "$HERE" && cargo build --release --target "$TRIPLE")
 cp "$HERE/target/$TRIPLE/release/liboladash.so" "$B/liboladash.so"
 
-# 2. Bundled assets, copied to files/ on first start (contract, overlay and host font, fallback, last-resort).
+# 2. Bundled assets, copied to files/ after each APK update.
 cp "$ROOT/contract/vehicle.slint" "$B/assets/contract/"
 cp "$HERE/ui/"*.slint "$B/assets/host/"
 cp -r "$HERE/ui/fonts" "$B/assets/host/"
@@ -94,10 +94,11 @@ if [ "$RELEASE" = 1 ]; then
     VCODE=$((10#${BASH_REMATCH[1]} * 10000 + 10#${BASH_REMATCH[2]} * 100 + 10#${BASH_REMATCH[3]}))
 fi
 
-# 4. Manifest + assets -> base APK, then add dex and the native library.
+# 4. Resources + manifest + assets -> base APK, then add dex and the native library.
+aapt2 compile --dir "$HERE/res" -o "$B/resources.zip"
 aapt2 link -I "$PLATFORM" --manifest "$HERE/AndroidManifest.xml" -A "$B/assets" \
     --min-sdk-version "$API" --target-sdk-version 34 --version-code "$VCODE" --version-name "$VNAME" --replace-version $DEBUGMODE \
-    -o "$B/base.apk"
+    -o "$B/base.apk" "$B/resources.zip"
 python3 - "$B/base.apk" "$B/dex/classes.dex" "$B/liboladash.so" "$B/unsigned.apk" <<'PY'
 import sys, zipfile
 base, dex, so, out = sys.argv[1:5]

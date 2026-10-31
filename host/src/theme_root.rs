@@ -192,7 +192,7 @@ fn font_escape(src: &str) -> Option<&str> {
 }
 
 /// Reads `path` if it is a plain file under `theme` or one of `allowed` (all canonical),
-/// and, inside `theme`, free of `BANNED` words.
+/// and, inside `theme`, a `.slint` file free of `BANNED` words.
 fn vet(path: &Path, allowed: &[PathBuf], theme: &Path) -> io::Result<String> {
     if std::fs::symlink_metadata(path)?.file_type().is_symlink() {
         return Err(deny(path, "symlinks are not allowed in themes"));
@@ -201,6 +201,9 @@ fn vet(path: &Path, allowed: &[PathBuf], theme: &Path) -> io::Result<String> {
     let in_theme = real.starts_with(theme);
     if !in_theme && !allowed.iter().any(|d| real.starts_with(d)) {
         return Err(deny(path, "a theme may only import its own folder and the contract"));
+    }
+    if in_theme && real.extension().is_none_or(|e| e != "slint") {
+        return Err(deny(path, "theme source imports must use the .slint extension"));
     }
     let src = std::fs::read_to_string(&real)?;
     if let Some(w) = BANNED.iter().find(|w| in_theme && src.contains(**w)) {
@@ -265,9 +268,12 @@ pub fn bind(ui: &ComponentInstance, log: fn(&str)) -> Result<(), String> {
     apply(ui, log);
     for name in ["open-settings", "open-themes"] {
         let weak = ui.as_weak();
+        let ignored = std::cell::Cell::new(false);
         ui.set_global_callback("Actions", name, move |_| {
             if let Some(ui) = weak.upgrade() {
-                if !matches!(ui.invoke("open-settings", &[]), Ok(Value::Bool(true))) {
+                if matches!(ui.invoke("open-settings", &[]), Ok(Value::Bool(true))) {
+                    ignored.set(false);
+                } else if !ignored.replace(true) {
                     log(&format!("action: {name} ignored (requires parked, no alert, unlocked and not test mode)"));
                 }
             }
@@ -578,6 +584,8 @@ mod tests {
     #[test]
     fn root_draws_settings_before_host_overlay() {
         assert!(ROOT.find("SettingsScreen {").unwrap() < ROOT.find("HostOverlay {").unwrap());
+        assert!(ROOT.contains("changed host-screens-allowed")
+            && ROOT.contains("HostState.parked && HostState.alert-code == 0\n        && HostState.auth-phase >= 4 && !HostState.test-mode"));
     }
 
     #[test]
@@ -700,6 +708,19 @@ mod tests {
         let (root, c, t) = tree("ok");
         assert!(vet(&t.join("ok.slint"), &[c.clone()], &t).is_ok());
         assert!(vet(&c.join("c.slint"), &[c.clone()], &t).is_ok());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn guard_refuses_theme_source_with_non_slint_extensions() {
+        let (root, c, t) = tree("extension");
+        let src = "export component X {}";
+        std::fs::write(t.join("lib.txt"), src).unwrap();
+        std::fs::write(t.join("lib.slint"), src).unwrap();
+        let error = vet(&t.join("lib.txt"), &[c.clone()], &t).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+        assert!(error.to_string().contains("import guard"));
+        assert_eq!(vet(&t.join("lib.slint"), &[c], &t).unwrap(), src);
         std::fs::remove_dir_all(root).unwrap();
     }
 

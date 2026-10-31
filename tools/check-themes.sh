@@ -98,6 +98,15 @@ for probe in "top 1220,24" "bottom 1220,744" "left 8,736" "right 1216,736"; do
         status=1
     fi
 done
+# Last pixel of the CHARGE label's box: slot-pad + 8 * slot-pitch-labels + slot + 6 + 74 - 1.
+# From overlay.slint: 16 + 8 * 120 + 40 + 6 + 74 - 1 = 1095; strip centre y = 24.
+got=$("$SIM" "$ROOT/themes/default" --contract "$ROOT/contract" --state park --placement top --at 13 --screenshot "$png" --pixel 1095,24 | tail -n 1) || got=error
+if [ "$got" != error ] && [ "$got" != "#ffc94a" ]; then
+    echo "ok: labelled CHARGE telltale clear of hub (pixel 1095,24 is $got)"
+else
+    echo "error: labelled CHARGE telltale covered by hub (pixel 1095,24 is $got, must not be #ffc94a)" >&2
+    status=1
+fi
 rm -f "$png"
 
 if [ "$checked" -eq 0 ]; then

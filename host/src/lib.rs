@@ -384,37 +384,29 @@ fn load_ui(files: &Path) -> Result<ComponentInstance, String> {
         })
 }
 
-enum Target {
-    Package(&'static str),
-}
-
 /// Start an activity from the NativeActivity through JNI (no app classes needed).
-fn launch(app: &AndroidApp, target: Target) {
+fn launch(app: &AndroidApp, pkg: &str) {
     let vm = unsafe { JavaVM::from_raw(app.vm_as_ptr() as *mut _) };
     let activity_ptr = app.activity_as_ptr() as jni::sys::jobject;
     let res = vm.attach_current_thread(|env| -> jni::errors::Result<bool> {
         // The NativeActivity ref is global, owned by the framework: never delete it.
         let activity = ManuallyDrop::new(unsafe { JObject::from_raw(&*env, activity_ptr) });
-        let intent = match target {
-            Target::Package(pkg) => {
-                let pm = env
-                    .call_method(
-                        &*activity,
-                        jni_str!("getPackageManager"),
-                        jni_sig!("()Landroid/content/pm/PackageManager;"),
-                        &[],
-                    )?
-                    .l()?;
-                let name = env.new_string(pkg)?;
-                env.call_method(
-                    &pm,
-                    jni_str!("getLaunchIntentForPackage"),
-                    jni_sig!("(Ljava/lang/String;)Landroid/content/Intent;"),
-                    &[JValue::Object(&name)],
-                )?
-                .l()?
-            }
-        };
+        let pm = env
+            .call_method(
+                &*activity,
+                jni_str!("getPackageManager"),
+                jni_sig!("()Landroid/content/pm/PackageManager;"),
+                &[],
+            )?
+            .l()?;
+        let name = env.new_string(pkg)?;
+        let intent = env.call_method(
+            &pm,
+            jni_str!("getLaunchIntentForPackage"),
+            jni_sig!("(Ljava/lang/String;)Landroid/content/Intent;"),
+            &[JValue::Object(&name)],
+        )?
+        .l()?;
         if intent.is_null() {
             log::warn!("launch: target not installed");
             return Ok(false);
@@ -452,7 +444,7 @@ fn wire(ui: &ComponentInstance, app: &AndroidApp) -> Result<(), String> {
     }).map_err(|e| format!("keypad callback: {e:?}"))?;
     let a = app.clone();
     ui.set_global_callback("Actions", "open-android-auto", move |_| {
-        launch(&a, Target::Package(HEADUNIT_PKG));
+        launch(&a, HEADUNIT_PKG);
         Value::Void
     })
     .map_err(err)?;

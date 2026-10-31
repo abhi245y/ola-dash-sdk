@@ -11,6 +11,8 @@ This project changes what a rider sees on a vehicle. The rules below apply to th
 ## Host-owned safety overlay
 
 - The overlay (telltales, alert cards, the unlock screen while locked) is drawn by the host after the theme, above every theme.
+- The hub button is host-owned: a fixed 64 px end cell along the strip (64 x 48 px horizontal, 72 x 64 px vertical), with no telltale moved or shrunk. It opens host settings only while parked, unlocked, with no alert and outside test mode. When data is stale, NO DATA wins and the hub hides; TEST DATA also hides the hub, so badges never overlap it.
+- Interactive host screens sit above the theme and below the overlay. Their navigation gate lives in the host root, using `HostState.parked` from `TrunkGate`; leaving parked, an alert, locking or test mode closes them before the next frame. They use host state and `HostText`, like the overlay.
 - No theme API can hide it, shrink it below the host minimums, drop a telltale, or draw over it. Themes may choose its placement, order and style (next point); the host still draws it.
 - Plugins cannot cover it either.
 - Themes can choose where the telltale strip sits (`overlay-placement`), in which order the telltales appear, the strip's colours and labels, and where alert cards sit. See [contract.md](contract.md#host-overlay-settings-v6).
@@ -30,7 +32,7 @@ This project changes what a rider sees on a vehicle. The rules below apply to th
 - Contrast. A strip background and foreground pair below 4.5:1, or a background on which a lit telltale colour is below 3:1, is replaced by the host default.
 - Icons. Themes cannot supply their own telltale icons.
 - What the overlay shows. It reads host-owned copies (`HostState.left-indicator`, `locked`, `clock-text`, `battery-pct` and the rest of the telltale values), not `Vehicle.*`. A theme can write `Vehicle.*`, and that changes only the theme's own view.
-- The font of host text. The overlay, alert cards and lock screen use the host's font family `OlaDash Host`. `sim --check` refuses a theme that ships a font file carrying that name, so a theme cannot swap in blank or look-alike glyphs.
+- The font of host text. The overlay, alert cards, lock screen and host screens use the host's font family `OlaDash Host`. `sim --check` refuses a theme that ships a font file carrying that name, so a theme cannot swap in blank or look-alike glyphs.
 - Dismissal. Fall or accident, tow or theft, side stand and steering lock cannot be dismissed. Fault and low battery can be tapped away, as before.
 - The TEST DATA badge, which is shown in every placement in debug builds, and the NO DATA badge (red, same slot, hidden while TEST DATA shows) shown when vehicle data is stale: the parser is gone, or no vehicle data callback arrived for 5 s while in drive.
 - Alert cards are the same in day and night: a white card on a 60 % scrim, a red frame (fall, tow, steering lock, fault) or an amber frame (side stand, low battery), an icon, a 32 px title and a one-line hint.
@@ -68,7 +70,7 @@ If a theme or plugin ever hides the overlay, that is a critical bug. Report it u
 | Commander connected | Parser binder present |
 | No repeat within 3 s | Time since the last request that was sent |
 
-Every request is logged as `trunk request: sent` or `trunk request: refused <reason>`. The host sends the command once. It does not retry and does not wait for an acknowledgement, so a lost command means the trunk does not open and the rider uses the stock control. Rules are in `host/java/dev/olatool/dash/TrunkGate.java`, tested by `host/test/TrunkGateTest.java`. The park rule is also exposed as `HostState.parked` (unlocked and parked and stopped, or unlocked and charging, never in test mode), and host screens will use the same gate.
+Every request is logged as `trunk request: sent` or `trunk request: refused <reason>`. The host sends the command once. It does not retry and does not wait for an acknowledgement, so a lost command means the trunk does not open and the rider uses the stock control. Rules are in `host/java/dev/olatool/dash/TrunkGate.java`, tested by `host/test/TrunkGateTest.java`. The park rule is also exposed as `HostState.parked` (unlocked and parked and stopped, or unlocked and charging, never in test mode), and host screens use the same gate.
 
 ## Plugins require the owner
 

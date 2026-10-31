@@ -150,7 +150,7 @@ Harmless actions, plus one gated vehicle request. Other vehicle commands (lock, 
 | Member | Type | Notes |
 |---|---|---|
 | `open-android-auto()` | callback | Launches Android Auto |
-| `open-settings()` | callback | Opens system settings. The host may ignore it unless the scooter is parked. |
+| `open-settings()` | callback | Opens the host settings frame while parked (see themes.md); otherwise ignored. |
 | `open-apps()` | callback | v7. Asks the host to open its apps screen. The host ignores it unless the scooter is parked; it only logs the call yet. |
 | `open-themes()` | callback | v7. Asks the host to open its themes screen. The host ignores it unless the scooter is parked; it only logs the call yet. |
 | `open-trunk()` | callback | v6. Asks the host to open the seat/trunk, like the stock trunk button. See below. |

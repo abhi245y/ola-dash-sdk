@@ -1,0 +1,58 @@
+import { Vehicle } from "vehicle.slint";
+import { HostState } from "overlay.slint";
+import { LockConfig } from "unlock.slint";
+import { HostText } from "hosttext.slint";
+import { RailRow, CloseButton, Pane } from "kit.slint";
+
+// Interactive host screen: parked only, enforced by Host in theme_root.rs.
+export component SettingsScreen inherits Rectangle {
+    callback close();
+    property <string> pane: "About";
+    background: LockConfig.style.background;
+    TouchArea { }
+
+    Rectangle {
+        x: 104px; y: 80px; width: 280px; height: root.height - 160px;
+        border-radius: 24px;
+        border-width: 1px;
+        border-color: LockConfig.style.key-border;
+        background: LockConfig.style.key-background;
+        for entry[i] in ["About"] : RailRow {
+            x: 16px; y: 16px + i * 88px; width: parent.width - 32px;
+            label: entry;
+            selected: root.pane == entry;
+            pressed => { root.pane = entry; }
+        }
+    }
+    CloseButton {
+        x: root.width - 168px; y: 80px;
+        pressed => { root.close(); }
+    }
+    if root.pane == "About" : Pane {
+        x: 432px; y: 88px; width: root.width - 640px; height: root.height - 248px;
+        title: "About";
+        VerticalLayout {
+            alignment: start;
+            spacing: 24px;
+            HostText {
+                text: "Host version  " + HostState.version-text;
+                color: LockConfig.style.foreground;
+                font-size: 22px;
+            }
+            HostText {
+                text: "Contract version  " + Vehicle.contract-version;
+                color: LockConfig.style.foreground;
+                font-size: 22px;
+            }
+        }
+    }
+    HostText {
+        x: 432px; y: root.height - 120px; width: root.width - 536px; height: 40px;
+        text: (HostState.clock-text == "" ? "--" : HostState.clock-text) + " · "
+            + (HostState.battery-pct < 0 ? "--" : HostState.battery-pct + "%");
+        color: LockConfig.style.muted;
+        font-size: 18px;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+}

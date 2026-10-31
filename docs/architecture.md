@@ -18,6 +18,7 @@ VehicleBridge.java          host/java/dev/olatool/dash/
 Rust host (liboladash.so)   host/src/lib.rs
    |- theme loader          loads themes/<id>/main.slint at runtime (slint-interpreter)
    |- contract globals      Vehicle, Display, Battery, Ride, Media, Navigation, Plugins, Actions
+   |- host screens          host/ui/settings.slint, above the theme, below the safety overlay
    |- safety overlay        host/ui/overlay.slint, drawn above the theme
    '- plugin data           JSON snapshot from PluginHost (widgets, media, navigation)
         ^  JNI PluginHost.nativeSetPlugins(json)
@@ -61,6 +62,12 @@ A theme that compiles but crashes the host at start (panic, out of memory) is ca
 ## Safety overlay
 
 The overlay is compiled into the host and painted after the theme's `Dash` component. Themes can choose its placement, telltale order and style through optional `Dash` properties, but have no API to hide it, drop a telltale, or draw over it. Telltales and alerts are host-owned. Debug builds add a TEST DATA banner while injected values are active. The full model is in [safety.md](safety.md).
+
+## Host screens
+
+`Host.screen` in `host/src/theme_root.rs` accepts `dash` and `settings`. The settings frame (`host/ui/settings.slint`, using `kit.slint`) is drawn after the wrapped theme and before `HostOverlay`, so the strip, alerts and lock screen stay above it. Navigation stays in Slint: the hub and `Actions.open-settings()` / `open-themes()` request settings through the root gate, and Close returns to the dash. Leaving parked, an alert, locking or test mode resets the screen; the draw condition also checks the gate. The gate reads only host state, including `TrunkGate`'s parked result.
+
+About is the only rail entry. It shows the host crate version, set once at startup in `HostState.version-text`, and the contract version. Its clock and battery status line reads host copies and shows `--` for unknown values. Apps is not built yet; its callback logs only.
 
 ## Keep-alive
 

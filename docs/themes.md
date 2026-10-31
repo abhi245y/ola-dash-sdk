@@ -112,8 +112,9 @@ export component Dash inherits Window {
 - **Re-exporting the globals is optional.** The host and `sim` wrap the theme in the same generated root, which imports the contract and re-exports its globals, so a theme need only export `Dash`. Re-exporting the globals is harmless (see [contract.md](contract.md#re-exporting-globals)).
 - Import the contract as `"vehicle.slint"`. The host and `sim` put `contract/` on the include path, so no copy is needed.
 - **What a theme may import.** Files in its own folder and in `contract/`, and fonts and images. A theme cannot import `host/ui/*.slint`, follow a symlink, or use `PopupWindow`, `ContextMenuArea`, `MenuBar`, `Tooltip`, `DragArea` or `std-widgets.slint` (the word anywhere in a theme file, comments included, is enough to refuse it). The host draws the safety overlay and the passcode keypad above the theme, and a popup would be drawn above them. A theme's own `z` on `Dash` only orders it inside the host's wrapper, so it stays below the overlay. A font file in the theme folder (`.ttf`, `.otf`, `.ttc`, any subfolder, at most 16 MiB) whose bytes contain the host font name `OlaDash Host` is refused too, and so is a font import with a `..` segment or an absolute path. A refused theme does not load: `sim --check` prints `import guard: ...` and the device falls back to the bundled theme.
-- **Themes cannot change host text.** The overlay, the alert cards and the lock screen are set in the host's own font, family `OlaDash Host` (Figtree, subset, weights 500, 700 and 800, tabular digits; `host/ui/fonts/`). A theme's `default-font-family` applies only to the theme's own text. Do not name a family `OlaDash Host`, and do not ship a font with that name.
-- **Host values are copies.** `Vehicle.*` properties are `in` properties, so a theme can write them (and its own writes show in the theme). The overlay and the lock screen read `HostState` copies that only the host sets, so a theme cannot blank a telltale, the clock or the battery figure on them.
+  Theme source imports must use the `.slint` extension; font imports such as `import "fonts/x.ttf";` bypass the source loader and are unaffected.
+- **Themes cannot change host text.** The overlay, alert cards, lock screen and host screens are set in the host's own font, family `OlaDash Host` (Figtree, subset, weights 500, 700 and 800, tabular digits; `host/ui/fonts/`). A theme's `default-font-family` applies only to the theme's own text. Do not name a family `OlaDash Host`, and do not ship a font with that name.
+- **Host values are copies.** `Vehicle.*` properties are `in` properties, so a theme can write them (and its own writes show in the theme). The overlay, lock screen and host screens read `HostState` copies that only the host sets, so a theme cannot blank a telltale, the clock or the battery figure on them.
 
 - **`Dash` must inherit `Window`:** `export component Dash inherits Window { ... }`. The host and `sim` wrap it in the same root window and read `default-font-family` from it.
 
@@ -167,6 +168,8 @@ Declare only what you need. A theme that omits all four properties works exactly
 ## Callbacks allowed
 
 `Media.play-pause()`, `Media.next()`, `Media.previous()`, `Actions.open-android-auto()`, `Actions.open-settings()`, `Actions.open-trunk()`, `Actions.open-apps()` (v7), `Actions.open-themes()` (v7) and `Plugins.widget-clicked(id)`. Nothing else. Never add a callback that can change vehicle state.
+
+`Actions.open-settings()` and `Actions.open-themes()` open the host settings frame (currently About only), rather than Android settings. The host accepts them only while parked, unlocked, with no alert and outside test mode; otherwise it ignores the request and logs one line. The strip's hub button opens the same frame from any theme. `Actions.open-apps()` only logs "not built yet"; there is no apps screen yet. Leaving parked, starting an alert, locking or entering test mode returns to the dash.
 
 `Actions.open-trunk()` asks the host to open the seat latch, as the stock trunk button does. The host ignores it unless the scooter is unlocked, in Park and at 0 km/h. The theme should still gate its own key, so the rider does not press a key that does nothing.
 
@@ -301,6 +304,7 @@ Options:
 |---|---|
 | `--state ride\|park\|charge\|reverse\|trunk\|easy-park` | Holds one vehicle state. `ride` (the default) is the mock loop: riding with indicators, a mode cycle of eco, normal, sport, hyper and custom every 12 s, a side-stand card at 100 to 110 s of each 120 s cycle, and then charging. |
 | `--state locked\|locked-error\|cooldown` | Shows the host lock screen: locked with two digits entered and four attempts left, a wrong passcode with three attempts left, or the cooldown after the attempts run out. The vehicle is locked. |
+| `--screen dash\|settings` | Starts on the requested host screen after creating the root. Settings requires parked (`--state park`); riding closes it. |
 | `--alert 1..6` | Holds one host alert on screen, instead of the mock cycle. Code 3 is the side-stand card. |
 | `--plugins` | Feeds three mock plugin widgets (`Plugins.widgets`). |
 | `--nav` | Feeds an active navigation card (`Navigation.active`), which replaces the media card. |

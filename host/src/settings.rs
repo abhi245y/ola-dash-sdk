@@ -6,6 +6,9 @@ use std::cell::RefCell;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
+
+pub type SharedSettings = Rc<RefCell<Settings>>;
 
 #[derive(Default)]
 pub struct Settings {
@@ -57,6 +60,20 @@ impl Settings {
         self.values.get("setup").and_then(Json::as_str) == Some("done")
     }
 
+    pub fn option(&self, theme: &str, id: &str) -> Option<&Json> {
+        self.values.get("theme-options")?.as_object()?.get(theme)?.as_object()?.get(id)
+    }
+
+    pub fn set_option(&mut self, theme: &str, id: &str, json: Json) -> Result<(), String> {
+        let mut values = self.values.clone();
+        let options = values.entry("theme-options").or_insert_with(|| Json::Object(Map::new()));
+        if !options.is_object() { *options = Json::Object(Map::new()); }
+        let theme = options.as_object_mut().unwrap().entry(theme).or_insert_with(|| Json::Object(Map::new()));
+        if !theme.is_object() { *theme = Json::Object(Map::new()); }
+        theme.as_object_mut().unwrap().insert(id.into(), json);
+        self.save(values)
+    }
+
     pub fn set(&mut self, key: &str, value: &str) -> Result<(), String> {
         let value = match (key, value) {
             ("night", "off" | "on") => Json::String(value.into()),
@@ -66,6 +83,10 @@ impl Settings {
         };
         let mut values = self.values.clone();
         values.insert(key.into(), value);
+        self.save(values)
+    }
+
+    fn save(&mut self, values: Map<String, Json>) -> Result<(), String> {
         if let Some(path) = &self.path {
             write(path, &values).map_err(|e| format!("settings: write failed: {e}"))?;
         }
@@ -92,11 +113,11 @@ fn apply(ui: &ComponentInstance, key: &str, enabled: bool, refresh_clock: fn(&Co
     Ok(())
 }
 
-pub fn bind(ui: &ComponentInstance, settings: Settings, log: fn(&str), refresh_clock: fn(&ComponentInstance)) -> Result<(), String> {
-    for (key, enabled) in [("night", settings.night()), ("clock24", settings.clock24())] {
+pub fn bind(ui: &ComponentInstance, settings: SharedSettings, log: fn(&str), refresh_clock: fn(&ComponentInstance)) -> Result<(), String> {
+    let preferences = { let s = settings.borrow(); [("night", s.night()), ("clock24", s.clock24())] };
+    for (key, enabled) in preferences {
         apply(ui, key, enabled, refresh_clock)?;
     }
-    let settings = RefCell::new(settings);
     let weak = ui.as_weak();
     ui.set_callback("set-setting", move |args| {
         if let [Value::String(key), Value::String(value)] = args {
@@ -201,6 +222,57 @@ mod tests {
             assert!(settings.set(key, value).is_err());
         }
         assert!(settings.values.is_empty());
+    }
+
+    #[test]
+    fn theme_options_round_trip_with_other_preferences_and_unknown_keys() {
+        let dir = Dir::new();
+        fs::write(dir.file(), r##"{"night":"auto","future":{"nested":[1,true]},"theme-options":{"other":{"accent":"#ffffff"},"theme":{"future-option":[4]}}}"##).unwrap();
+        let settings = Rc::new(RefCell::new(Settings::load(Some(&dir.file()), |_| {})));
+        let option_writer = settings.clone();
+        for (id, json) in [("accent", serde_json::json!("#123456")), ("enabled", serde_json::json!(false)),
+            ("count", serde_json::json!(-2)), ("style", serde_json::json!("thin"))] {
+            option_writer.borrow_mut().set_option("theme", id, json).unwrap();
+        }
+        settings.borrow_mut().set("clock24", "false").unwrap();
+        option_writer.borrow_mut().set_option("theme", "count", Json::from(8)).unwrap();
+        let saved = Settings::load(Some(&dir.file()), |_| panic!("valid JSON"));
+        assert_eq!(saved.option("theme", "count"), Some(&Json::from(8)));
+        assert_eq!(saved.option("theme", "enabled"), Some(&Json::Bool(false)));
+        assert_eq!(saved.option("theme", "accent"), Some(&Json::from("#123456")));
+        assert_eq!(saved.option("theme", "style"), Some(&Json::from("thin")));
+        assert_eq!(saved.option("other", "accent"), Some(&Json::from("#ffffff")));
+        assert_eq!(saved.option("theme", "future-option"), Some(&serde_json::json!([4])));
+        assert!(saved.option("missing", "count").is_none());
+        assert_eq!(saved.values["future"], serde_json::json!({"nested":[1,true]}));
+        assert_eq!(saved.values["night"], "auto");
+        assert!(!saved.clock24());
+    }
+
+    #[test]
+    fn set_option_creates_missing_file_and_keeps_state_on_failed_write() {
+        let dir = Dir::new();
+        let mut settings = Settings::load(Some(&dir.file()), |_| panic!("missing file is quiet"));
+        settings.set_option("theme", "count", Json::from(3)).unwrap();
+        assert_eq!(Settings::load(Some(&dir.file()), |_| {}).option("theme", "count"), Some(&Json::from(3)));
+        assert!(!sibling(&dir.file(), ".tmp").exists());
+        fs::create_dir(sibling(&dir.file(), ".tmp")).unwrap();
+        assert!(settings.set_option("theme", "count", Json::from(4)).is_err());
+        assert_eq!(settings.option("theme", "count"), Some(&Json::from(3)));
+        assert_eq!(Settings::load(Some(&dir.file()), |_| {}).option("theme", "count"), Some(&Json::from(3)));
+    }
+
+    #[test]
+    fn malformed_option_containers_use_defaults_and_can_be_replaced() {
+        let dir = Dir::new();
+        for json in [r#"{"theme-options":false,"future":7}"#, r#"{"theme-options":{"theme":null,"other":{"count":2}},"future":7}"#] {
+            fs::write(dir.file(), json).unwrap();
+            let mut settings = Settings::load(Some(&dir.file()), |_| {});
+            assert!(settings.option("theme", "count").is_none());
+            settings.set_option("theme", "count", Json::from(3)).unwrap();
+            assert_eq!(settings.option("theme", "count"), Some(&Json::from(3)));
+            assert_eq!(settings.values["future"], Json::from(7));
+        }
     }
 
     #[test]

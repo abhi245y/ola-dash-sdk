@@ -15,6 +15,7 @@
 //!            --stale                              set Vehicle.data-stale (shows the NO DATA badge)
 //!            --screen dash|settings               preview a host screen (settings needs --state park)
 //!            --pane display|theme|plugins|about    settings pane (default: display)
+//!            --theme-view options                  open Theme customization (defaults to park)
 //!            --plugins-file <file>                plugin inventory (default: empty; toggles stay in memory)
 //!            --settings <file>                    load and save host preferences (default: in memory)
 //!            --switch <id>                        preview switching without exiting (defaults to park)
@@ -511,6 +512,7 @@ struct Args {
     stale: bool,
     screen: String,
     pane: i32,
+    theme_options_open: bool,
     plugins_file: Option<PathBuf>,
     settings: Option<PathBuf>,
     switch: Option<String>,
@@ -536,6 +538,7 @@ fn parse_args() -> Result<Args, String> {
     let mut stale = false;
     let mut screen = "dash".to_string();
     let mut pane = 0;
+    let mut theme_options_open = false;
     let mut plugins_file = None;
     let mut settings = None;
     let mut switch = None;
@@ -586,6 +589,10 @@ fn parse_args() -> Result<Args, String> {
                     _ => return Err("--pane needs display, theme, plugins or about".into()),
                 };
             }
+            "--theme-view" => {
+                if it.next().as_deref() != Some("options") { return Err("--theme-view needs options".into()); }
+                theme_options_open = true;
+            }
             "--plugins-file" => {
                 plugins_file = Some(PathBuf::from(it.next().ok_or("--plugins-file needs a file")?));
             }
@@ -619,7 +626,7 @@ fn parse_args() -> Result<Args, String> {
                 println!("       [--pixel X,Y]  (with --screenshot: also print the colour at that point)");
                 println!("       [--opt id=value]  (repeatable; overrides theme option defaults)");
                 println!("       [--screen dash|settings]  (settings needs --state park)");
-                println!("       [--pane display|theme|plugins|about] [--settings FILE] [--plugins-file FILE]");
+                println!("       [--pane display|theme|plugins|about] [--theme-view options] [--settings FILE] [--plugins-file FILE]");
                 println!("       [--switch ID | --confirm-theme | --first-run]  (default to --state park; no restart or theme-file writes)");
                 println!("       sim --check <theme-dir> [--contract DIR]");
                 std::process::exit(0);
@@ -632,7 +639,8 @@ fn parse_args() -> Result<Args, String> {
     if u8::from(switch.is_some()) + u8::from(confirm_theme) + u8::from(first_run) > 1 {
         return Err("--switch, --confirm-theme and --first-run are mutually exclusive".into());
     }
-    if !state_given && (switch.is_some() || confirm_theme || first_run) { scenario = Scenario::Park; }
+    if theme_options_open { pane = 1; screen = "settings".into(); }
+    if !state_given && (switch.is_some() || confirm_theme || first_run || theme_options_open) { scenario = Scenario::Park; }
     // Default: the repo layout themes/<name>/ next to contract/.
     let contract = contract.unwrap_or_else(|| theme.join("../../contract"));
     // The compiler wants absolute include paths.
@@ -644,7 +652,7 @@ fn parse_args() -> Result<Args, String> {
             return Err(format!("--placement needs top, bottom, left or right, got {p}"));
         }
     }
-    Ok(Args { theme, contract, screenshot, at, check, placement, alert, scenario, plugins, nav, pixel, night, stale, screen, pane, plugins_file, settings, switch, confirm_theme, first_run, options })
+    Ok(Args { theme, contract, screenshot, at, check, placement, alert, scenario, plugins, nav, pixel, night, stale, screen, pane, theme_options_open, plugins_file, settings, switch, confirm_theme, first_run, options })
 }
 
 /// Path of `to` relative to `from` (both absolute, same drive), with '/' separators.
@@ -701,17 +709,10 @@ fn load(main: &Path, args: &Args) -> Result<(ComponentDefinition, Vec<theme_opti
     Ok((def, options))
 }
 
-fn bind_options(inst: &ComponentInstance, options: &[theme_options::ThemeOption], args: &Args) -> Result<(), Box<dyn Error>> {
-    theme_options::set_defaults(inst, options)?;
-    let mut skipped = HashSet::new();
-    for (id, text) in &args.options {
-        let Some(option) = options.iter().find(|o| &o.id == id) else {
-            if skipped.insert(id) { eprintln!("theme option '{id}' skipped: not declared by the theme"); }
-            continue;
-        };
-        let value = option.kind.parse_override(text).map_err(|e| format!("--opt {id}: {e}"))?;
-        inst.set_property(&format!("opt-{id}"), value.value())?;
-    }
+fn bind_options(inst: &ComponentInstance, options: &[theme_options::ThemeOption], args: &Args,
+    settings: settings::SharedSettings) -> Result<(), Box<dyn Error>> {
+    let theme = args.theme.file_name().unwrap().to_string_lossy();
+    theme_options::bind(inst, options, &theme, settings, &args.options, option_warn)?;
     Ok(())
 }
 
@@ -728,15 +729,19 @@ fn sim_warn(msg: &str) {
     eprintln!("sim: {msg}");
 }
 
-fn bind_settings(inst: &ComponentInstance, args: &Args) -> Result<(), Box<dyn Error>> {
-    let settings = settings::Settings::load(args.settings.as_deref(), sim_warn);
-    settings::bind(inst, settings, sim_warn, |_| {})?;
+fn option_warn(msg: &str) {
+    eprintln!("{msg}");
+}
+
+fn bind_settings(inst: &ComponentInstance, args: &Args) -> Result<settings::SharedSettings, Box<dyn Error>> {
+    let settings = Rc::new(RefCell::new(settings::Settings::load(args.settings.as_deref(), sim_warn)));
+    settings::bind(inst, settings.clone(), sim_warn, |_| {})?;
     if args.night {
         inst.set_global_property("Display", "night", Value::Bool(true))?;
         inst.set_global_property("HostState", "night", Value::Bool(true))?;
     }
     inst.set_property("settings-pane", Value::Number(args.pane as f64))?;
-    Ok(())
+    Ok(settings)
 }
 
 fn preview_screen(inst: &ComponentInstance, args: &Args) -> Result<(), Box<dyn Error>> {
@@ -762,6 +767,12 @@ fn preview_screen(inst: &ComponentInstance, args: &Args) -> Result<(), Box<dyn E
     inst.set_property("screen", Value::String(args.screen.clone().into()))?;
     inst.set_property("confirm-theme", Value::Bool(args.confirm_theme))?;
     inst.set_property("first-run", Value::Bool(args.first_run))?;
+    if args.theme_options_open && args.pane == 1 && args.screen == "settings"
+        && matches!(inst.get_property("host-screens-allowed"), Ok(Value::Bool(true))) {
+        // Slint defers changed handlers: finish screen/pane resets before this preview override.
+        slint::platform::update_timers_and_animations();
+        inst.set_property("theme-options-open", Value::Bool(true))?;
+    }
     if let Some(id) = &args.switch {
         inst.invoke("switch-theme", &[Value::String(id.clone().into())])?;
     }
@@ -940,9 +951,9 @@ fn run_screenshot(args: &Args, out: &Path) -> Result<(), Box<dyn Error>> {
     }))?;
     let (def, options) = load(&args.theme.join("main.slint"), args)?;
     let inst = def.create()?;
-    bind_options(&inst, &options, args)?;
     bind_overlay(&inst, args)?;
-    bind_settings(&inst, args)?;
+    let settings = bind_settings(&inst, args)?;
+    bind_options(&inst, &options, args, settings)?;
     let feeder = Feeder::new(args);
     feeder.wire_callbacks(&inst);
     feeder.push(&inst, 0.0);
@@ -985,9 +996,9 @@ fn run_screenshot(args: &Args, out: &Path) -> Result<(), Box<dyn Error>> {
 fn run_live(args: &Args) -> Result<(), Box<dyn Error>> {
     let (def, options) = load(&args.theme.join("main.slint"), args)?;
     let inst = def.create()?;
-    bind_options(&inst, &options, args)?;
     bind_overlay(&inst, args)?;
-    bind_settings(&inst, args)?;
+    let settings = bind_settings(&inst, args)?;
+    bind_options(&inst, &options, args, settings)?;
     let feeder = Rc::new(Feeder::new(args));
     feeder.wire_callbacks(&inst);
     let start = Instant::now();
@@ -1031,6 +1042,90 @@ fn main() {
 mod tests {
     use super::*;
     use serde_json::json;
+    use slint::Model;
+
+    #[test]
+    fn live_options_validate_share_settings_and_obey_host_gate() {
+        // Give the real interpreted host UI its own thread-local headless platform.
+        std::thread::spawn(|| {
+            let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
+            slint::platform::set_platform(Box::new(Headless {
+                window,
+                clock: Rc::new(Cell::new(Duration::ZERO)),
+            })).unwrap();
+            let repo = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+            let manifest = std::fs::read_to_string(repo.join("tools/fixtures/loads/options/theme.json")).unwrap();
+            let options = theme_options::parse(&serde_json::from_str(&manifest).unwrap()).unwrap();
+            let mut compiler = Compiler::default();
+            compiler.set_include_paths(vec![repo.join("contract")]);
+            let source = theme_root::root_source("../../tools/fixtures/loads/options/main.slint", &[], &options);
+            let compiled = pollster::block_on(compiler.build_from_source(source, repo.join("host/ui/options-test.slint")));
+            assert!(!compiled.has_errors(), "{:?}", compiled.diagnostics().collect::<Vec<_>>());
+            let ui = compiled.component("Host").unwrap().create().unwrap();
+            let settings = Rc::new(RefCell::new(settings::Settings::default()));
+            settings.borrow_mut().set_option("options", "count", json!(8)).unwrap();
+            settings.borrow_mut().set_option("options", "style", json!("unknown")).unwrap();
+            theme_root::bind(&ui, option_warn).unwrap();
+            settings::bind(&ui, settings.clone(), option_warn, |_| {}).unwrap();
+            theme_options::bind(&ui, &options, "options", settings.clone(),
+                &[("count".into(), "-2".into())], option_warn).unwrap();
+            assert_eq!(ui.get_property("opt-count").unwrap(), Value::Number(-2.0));
+            assert_eq!(ui.get_property("opt-style").unwrap(), Value::String("wide".into()));
+            assert_eq!(settings.borrow().option("options", "count"), Some(&json!(8)), "run override is not saved");
+            let edit = |id: &str, value: &str| {
+                ui.invoke("set-option", &[Value::String(id.into()), Value::String(value.into())]).unwrap();
+            };
+            edit("count", "7");
+            assert_eq!(ui.get_property("opt-count").unwrap(), Value::Number(-2.0), "closed gate refuses changes");
+            ui.set_global_property("HostState", "parked", Value::Bool(true)).unwrap();
+            ui.set_global_property("HostState", "auth-phase", Value::Number(5.0)).unwrap();
+            edit("count", "7");
+            edit("enabled", "false");
+            edit("style", "thin");
+            edit("accent", "#ff0000");
+            assert_eq!(settings.borrow().option("options", "count"), Some(&json!(7)));
+            assert_eq!(ui.get_property("opt-enabled").unwrap(), Value::Bool(false));
+            assert_eq!(ui.get_property("opt-style").unwrap(), Value::String("thin".into()));
+            assert_eq!(settings.borrow().option("options", "accent"), Some(&json!("#ff0000")));
+            let Value::Model(rows) = ui.get_property("theme-options").unwrap() else { panic!("missing option rows") };
+            let Value::Struct(count) = rows.row_data(2).unwrap() else { panic!("missing count row") };
+            assert_eq!(count.get_field("number"), Some(&Value::Number(7.0)));
+            for (id, bad) in [("count", "9"), ("count", "text"), ("enabled", "on"), ("style", "unknown"), ("accent", "red"), ("screen", "settings")] {
+                edit(id, bad);
+            }
+            assert_eq!(settings.borrow().option("options", "count"), Some(&json!(7)));
+            assert_eq!(ui.get_property("opt-count").unwrap(), Value::Number(7.0));
+            assert_eq!(ui.get_property("opt-enabled").unwrap(), Value::Bool(false));
+            assert_eq!(ui.get_property("opt-style").unwrap(), Value::String("thin".into()));
+            ui.invoke("set-setting", &[Value::String("clock24".into()), Value::String("false".into())]).unwrap();
+            edit("count", "6");
+            assert!(!settings.borrow().clock24());
+            assert_eq!(settings.borrow().option("options", "count"), Some(&json!(6)));
+            ui.set_property("settings-pane", Value::Number(1.0)).unwrap();
+            ui.invoke("open-settings", &[]).unwrap();
+            slint::platform::update_timers_and_animations();
+            ui.set_property("theme-options-open", Value::Bool(true)).unwrap();
+            ui.set_property("settings-pane", Value::Number(0.0)).unwrap();
+            slint::platform::update_timers_and_animations();
+            assert_eq!(ui.get_property("theme-options-open").unwrap(), Value::Bool(false));
+            ui.set_property("theme-options-open", Value::Bool(true)).unwrap();
+            ui.invoke("open-settings", &[]).unwrap();
+            assert_eq!(ui.get_property("theme-options-open").unwrap(), Value::Bool(false));
+            for (property, blocked, allowed) in [
+                ("parked", Value::Bool(false), Value::Bool(true)),
+                ("alert-code", Value::Number(1.0), Value::Number(0.0)),
+                ("auth-phase", Value::Number(1.0), Value::Number(5.0)),
+                ("test-mode", Value::Bool(true), Value::Bool(false)),
+            ] {
+                ui.set_global_property("HostState", property, blocked).unwrap();
+                edit("count", "5");
+                slint::platform::update_timers_and_animations();
+                assert_eq!(ui.get_property("opt-count").unwrap(), Value::Number(6.0));
+                assert_eq!(ui.get_property("screen").unwrap(), Value::String("dash".into()));
+                ui.set_global_property("HostState", property, allowed).unwrap();
+            }
+        }).join().unwrap();
+    }
 
     #[test]
     fn option_probe_keeps_types_and_skips_missing_or_mismatched_properties_once() {

@@ -74,7 +74,7 @@ const HOST_LOCK_NIGHT: Lock = Lock {
 const ROOT: &str = r#"import { Dash } from "{THEME}";
 import { HostOverlay, HostState, OverlayConfig } from "overlay.slint";
 import { LockConfig } from "unlock.slint";
-import { SettingsScreen, PluginInfo } from "settings.slint";
+import { SettingsScreen, PluginInfo, ThemeOptionInfo } from "settings.slint";
 import { ThemeInfo, SwitchingScreen, ConfirmThemeScreen, FirstRunScreen } from "theme-switch.slint";
 import { Vehicle, Display, Media, Actions, Battery, Ride, Navigation, Plugins, OverlayPlacement, OverlayStyle, Telltale, AlertPosition, LockStyle } from "vehicle.slint";
 export { Dash, Vehicle, Display, Media, Actions, Battery, Ride, Navigation, Plugins, HostState, OverlayConfig, LockConfig }
@@ -87,12 +87,15 @@ export component Host inherits Window {
     in property <[ThemeInfo]> themes;
     in property <string> active-theme;
     in property <[PluginInfo]> plugins;
+    in property <[ThemeOptionInfo]> theme-options;
+    in-out property <bool> theme-options-open: false;
     in-out property <int> confirm-seconds: 10;
     in-out property <string> switching-name;
     callback apply-theme(string);
     callback keep-theme();
     callback revert-theme();
     callback set-setting(string, string);
+    callback set-option(string, string);
     callback load-plugins();
     callback set-plugin(string, bool);
     out property <bool> host-screens-allowed: HostState.parked && HostState.alert-code == 0
@@ -108,7 +111,8 @@ export component Host inherits Window {
     changed host-screens-allowed => { root.settle(); }
     changed confirm-theme => { root.settle(); }
     changed first-run => { root.settle(); }
-    changed screen => { root.settle(); }
+    changed screen => { root.theme-options-open = false; root.settle(); }
+    changed settings-pane => { root.theme-options-open = false; }
     public function switch-theme(id: string) {
         if root.host-screens-allowed && !root.confirm-theme && !root.first-run && root.screen != "switching" {
             root.switching-name = id;
@@ -132,6 +136,7 @@ export component Host inherits Window {
     }
     public function open-settings() -> bool {
         if root.host-screens-allowed && !root.confirm-theme && !root.first-run && root.screen != "switching" {
+            root.theme-options-open = false;
             root.screen = "settings";
             return true;
         }
@@ -159,10 +164,13 @@ export component Host inherits Window {
         clock24: root.clock24;
         themes: root.themes;
         active-theme: root.active-theme;
+        theme-options: root.theme-options;
+        options-open <=> root.theme-options-open;
         plugins: root.plugins;
         load-plugins => { root.load-plugins(); }
         set-plugin(package, on) => { root.set-plugin(package, on); }
         set-setting(key, value) => { root.set-setting(key, value); }
+        set-option(id, value) => { root.set-option(id, value); }
         apply-theme(id) => { root.switch-theme(id); }
         closed => { root.screen = "dash"; }
     }

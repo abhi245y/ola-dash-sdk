@@ -12,6 +12,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- Theme customization (E3.S1 PR1): Settings > Theme > Customize offers live color swatches, Off / On choices, bounded integer steppers and choice controls, with validated values saved per theme through the shared atomic settings writer. Sim adds `--theme-view options`; run-only `--opt` overrides win over saved values, with persistence tests and control pixel probes.
 - Theme options (E1.S1 PR B, additive within contract 7): shared manifest validation for up to 16 color, bool, int or choice options, probed `Dash` bindings and host-applied defaults. Sim adds repeatable `--opt id=value` overrides and strict `--check` validation, with option fixtures, unit tests and pixel probes; existing themes remain unchanged.
 - Plugins pane (E1.S5): installed plugins expose declared slots and immediate Off / On choices behind the existing host-screen gate; atomic enablement writes preserve comments and slot restrictions. Sim adds `--pane plugins --plugins-file FILE` with in-memory toggles, a seeded fixture, unit tests and an On-pill pixel probe.
 - Theme pane and first-run setup (E1.S4 PR2): compatible installed themes can be selected and applied through the existing restart flow. Setup offers theme and immediate Night mode choices, persists Done, and waits for the host-screen gate beneath alerts and the lock screen. Sim adds `--pane theme` and `--first-run`, with discovery/setup unit tests and pixel probes.

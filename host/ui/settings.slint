@@ -2,7 +2,7 @@ import { Vehicle } from "vehicle.slint";
 import { HostState } from "overlay.slint";
 import { LockConfig } from "unlock.slint";
 import { HostText } from "hosttext.slint";
-import { RailRow, CloseButton, Pane, Choice, PillButton } from "kit.slint";
+import { RailRow, CloseButton, Pane, Choice, PillButton, Stepper, Swatches, OptionSwatch } from "kit.slint";
 import { ThemeInfo } from "theme-switch.slint";
 
 export struct PluginInfo {
@@ -12,15 +12,33 @@ export struct PluginInfo {
     enabled: bool,
 }
 
+export struct ThemeOptionInfo {
+    id: string,
+    label: string,
+    kind: string,
+    values: [string],
+    min: int,
+    max: int,
+    color: color,
+    flag: bool,
+    number: int,
+    text: string,
+    selected: int,
+    swatches: [OptionSwatch],
+}
+
 // Interactive host screen: parked only, enforced by Host in theme_root.rs.
 export component SettingsScreen inherits Rectangle {
     callback closed();
     callback set-setting(string, string);
+    callback set-option(string, string);
     callback apply-theme(string);
     callback load-plugins();
     callback set-plugin(string, bool);
     in property <[ThemeInfo]> themes;
     in property <[PluginInfo]> plugins;
+    in property <[ThemeOptionInfo]> theme-options;
+    in-out property <bool> options-open: false;
     in property <string> active-theme;
     in property <bool> clock24: true;
     in-out property <int> selected: 0;
@@ -34,6 +52,7 @@ export component SettingsScreen inherits Rectangle {
         if root.pane == "Plugins" { root.load-plugins(); }
     }
     changed selected => {
+        root.options-open = false;
         if root.pane == "Theme" { root.theme-selection = root.active-theme; }
         if root.pane == "Plugins" { root.load-plugins(); }
     }
@@ -107,7 +126,7 @@ export component SettingsScreen inherits Rectangle {
     if root.pane == "Theme" : Pane {
         x: 432px; y: 88px; width: root.width - 640px; height: root.height - 248px;
         title: "Theme";
-        Flickable {
+        if !root.options-open : Flickable {
             x: 0px; y: 0px; width: parent.width; height: parent.body-height - 88px;
             content-width: self.width;
             content-height: max(self.height, root.themes.length * 96px - 16px);
@@ -142,7 +161,7 @@ export component SettingsScreen inherits Rectangle {
                     overflow: elide;
                 }
                 if theme.id == root.active-theme : HostText {
-                    x: parent.width - 120px; width: 96px; height: parent.height;
+                    x: parent.width - 120px; y: 0px; width: 96px; height: parent.height;
                     text: "In use";
                     color: parent.secondary;
                     font-size: 18px;
@@ -153,11 +172,83 @@ export component SettingsScreen inherits Rectangle {
                 TouchArea { clicked => { root.theme-selection = theme.id; } }
             }
         }
-        PillButton {
+        if root.options-open : Flickable {
+            x: 0px; y: 0px; width: parent.width; height: parent.body-height - 88px;
+            content-width: self.width;
+            content-height: max(self.height, root.theme-options.length * 96px - 16px);
+            for option[i] in root.theme-options : Rectangle {
+                x: 0px; y: i * 96px; width: parent.width; height: 80px;
+                border-radius: 24px;
+                border-width: 1px;
+                border-color: LockConfig.style.key-border;
+                background: LockConfig.style.key-background;
+                property <length> control-width: option.kind == "color" ? max(0, option.swatches.length - 1) * 60px + 64px
+                    : option.kind == "bool" ? 200px
+                    : option.kind == "choice" && option.values.length <= 4 ? min(420px, option.values.length * 96px + (option.values.length - 1) * 16px)
+                    : 256px;
+                HostText {
+                    x: 24px; y: 0px; width: parent.width - parent.control-width - 48px; height: parent.height;
+                    text: option.label;
+                    color: LockConfig.style.foreground;
+                    font-size: 26px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                if option.kind == "bool" : Choice {
+                    x: parent.width - self.width - 24px; y: 8px; width: 200px;
+                    options: ["Off", "On"];
+                    selected: option.flag ? 1 : 0;
+                    chosen(index) => { root.set-option(option.id, index == 1 ? "true" : "false"); }
+                }
+                if option.kind == "choice" && option.values.length <= 4 : Choice {
+                    x: parent.width - self.width - 24px; y: 8px; width: parent.control-width;
+                    options: option.values;
+                    selected: option.selected;
+                    chosen(index) => { root.set-option(option.id, option.values[index]); }
+                }
+                if option.kind == "int" : Stepper {
+                    x: parent.width - self.width - 24px; y: 8px;
+                    label: option.label;
+                    value: option.number;
+                    can-decrease: option.number > option.min;
+                    can-increase: option.number < option.max;
+                    stepped(delta) => { root.set-option(option.id, (option.number + delta) + ""); }
+                }
+                if option.kind == "choice" && option.values.length > 4 : Stepper {
+                    x: parent.width - self.width - 24px; y: 8px;
+                    label: option.label;
+                    value: option.text;
+                    stepped(delta) => {
+                        root.set-option(option.id, option.values[Math.mod(option.selected + delta + option.values.length, option.values.length)]);
+                    }
+                }
+                if option.kind == "color" : Swatches {
+                    x: parent.width - self.width - 24px; y: 8px;
+                    options: option.swatches;
+                    selected: option.color;
+                    label: option.label;
+                    chosen(text) => { root.set-option(option.id, text); }
+                }
+            }
+        }
+        if !root.options-open && root.theme-options.length > 0 && root.theme-selection == root.active-theme : PillButton {
+            x: parent.width - 496px; y: parent.body-height - self.height;
+            label: "Customize";
+            primary: false;
+            pressed => { root.options-open = true; }
+        }
+        if !root.options-open : PillButton {
             x: parent.width - self.width; y: parent.body-height - self.height;
             label: "Apply";
             enabled: root.theme-selection != "" && root.theme-selection != root.active-theme;
             pressed => { root.apply-theme(root.theme-selection); }
+        }
+        if root.options-open : PillButton {
+            x: parent.width - self.width; y: parent.body-height - self.height;
+            label: "Back";
+            primary: false;
+            pressed => { root.options-open = false; }
         }
     }
     if root.pane == "Plugins" : Pane {

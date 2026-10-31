@@ -1,0 +1,11 @@
+{
+  "id": "options-type",
+  "name": "Options type mismatch",
+  "version": "1.0.0",
+  "author": "Ola Dash SDK contributors",
+  "license": "GPL-3.0-or-later",
+  "contract": 7,
+  "entry": "main.slint",
+  "description": "An int option bound to a length must fail the root compile.",
+  "options": [{ "id": "x", "type": "int", "default": 3, "label": "X" }]
+}

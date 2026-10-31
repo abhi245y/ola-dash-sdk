@@ -18,6 +18,7 @@ use slint_interpreter::{Compiler, ComponentHandle, ComponentInstance, Value};
 
 mod plugins;
 mod settings;
+mod theme_options;
 mod theme_root;
 mod theme_switch;
 use theme_switch::DEFAULT_THEME;
@@ -354,9 +355,23 @@ fn build_root(files: &Path, theme: &str) -> Result<ComponentInstance, String> {
     theme_root::guard(&mut probe, &[&contract], &theme_dir, &entry_path, true)?;
     let probed = spin_on::spin_on(probe.build_from_path(&entry_path));
     let declared = theme_root::declared(&probed)?;
+    // Invalid options disable only options, never an otherwise valid theme.
+    let options = if theme == LAST_RESORT {
+        Vec::new()
+    } else {
+        let text = std::fs::read_to_string(theme_dir.join("theme.json")).map_err(|e| e.to_string())?;
+        let manifest = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+        theme_options::parse(&manifest).unwrap_or_else(|errors| {
+            log::warn!("theme options ignored: {}", errors.join("; "));
+            Vec::new()
+        })
+    };
+    let options = theme_root::kept_options(&probed, &options, |id, why| {
+        log::warn!("theme option '{id}' skipped: {why}");
+    })?;
     timing("probe", t);
     let t = Instant::now();
-    let src = theme_root::root_source(&format!("../{rel}/{entry}"), &declared);
+    let src = theme_root::root_source(&format!("../{rel}/{entry}"), &declared, &options);
     let mut compiler = Compiler::new();
     compiler.set_include_paths(include);
     theme_root::guard(&mut compiler, &[&contract, &host], &theme_dir, &entry_path, false)?;
@@ -370,6 +385,7 @@ fn build_root(files: &Path, theme: &str) -> Result<ComponentInstance, String> {
     let t = Instant::now();
     let ui = def.create().map_err(|e| e.to_string())?;
     timing("create", t);
+    theme_options::set_defaults(&ui, &options)?;
     theme_root::bind(&ui, log_warn)?;
     Ok(ui)
 }

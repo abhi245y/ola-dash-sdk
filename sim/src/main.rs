@@ -11,6 +11,7 @@
 //!                                                 the last three show the lock screen (see docs/themes.md)
 //!            --plugins / --nav                    feed mock plugin widgets / an active navigation card
 //!            --night                              set Display.night and HostState.night
+//!            --opt id=value                       override a theme option (repeatable)
 //!            --stale                              set Vehicle.data-stale (shows the NO DATA badge)
 //!            --screen dash|settings               preview a host screen (settings needs --state park)
 //!            --pane display|theme|plugins|about    settings pane (default: display)
@@ -44,6 +45,8 @@ use std::time::{Duration, Instant};
 // The host's root window and overlay settings, shared with the Android build.
 #[path = "../../host/src/theme_root.rs"]
 mod theme_root;
+#[path = "../../host/src/theme_options.rs"]
+mod theme_options;
 #[path = "../../host/src/settings.rs"]
 mod settings;
 #[allow(dead_code)] // the sim only previews; selection writes are host-only
@@ -513,6 +516,7 @@ struct Args {
     switch: Option<String>,
     confirm_theme: bool,
     first_run: bool,
+    options: Vec<(String, String)>,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -537,6 +541,7 @@ fn parse_args() -> Result<Args, String> {
     let mut switch = None;
     let mut confirm_theme = false;
     let mut first_run = false;
+    let mut options = Vec::new();
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -561,6 +566,12 @@ fn parse_args() -> Result<Args, String> {
             "--plugins" => plugins = true,
             "--nav" => nav = true,
             "--night" => night = true,
+            "--opt" => {
+                let arg = it.next().ok_or("--opt needs id=value")?;
+                let (id, value) = arg.split_once('=').filter(|(id, _)| !id.is_empty())
+                    .ok_or("--opt needs id=value")?;
+                options.push((id.to_string(), value.to_string()));
+            }
             "--stale" => stale = true,
             "--screen" => {
                 screen = it.next().filter(|s| matches!(s.as_str(), "dash" | "settings"))
@@ -606,6 +617,7 @@ fn parse_args() -> Result<Args, String> {
                 println!("       [--placement top|bottom|left|right] [--alert 1-6]");
                 println!("       [--state ride|park|charge|reverse|trunk|easy-park|locked|locked-error|cooldown|restart] [--plugins] [--nav] [--night] [--stale]");
                 println!("       [--pixel X,Y]  (with --screenshot: also print the colour at that point)");
+                println!("       [--opt id=value]  (repeatable; overrides theme option defaults)");
                 println!("       [--screen dash|settings]  (settings needs --state park)");
                 println!("       [--pane display|theme|plugins|about] [--settings FILE] [--plugins-file FILE]");
                 println!("       [--switch ID | --confirm-theme | --first-run]  (default to --state park; no restart or theme-file writes)");
@@ -632,7 +644,7 @@ fn parse_args() -> Result<Args, String> {
             return Err(format!("--placement needs top, bottom, left or right, got {p}"));
         }
     }
-    Ok(Args { theme, contract, screenshot, at, check, placement, alert, scenario, plugins, nav, pixel, night, stale, screen, pane, plugins_file, settings, switch, confirm_theme, first_run })
+    Ok(Args { theme, contract, screenshot, at, check, placement, alert, scenario, plugins, nav, pixel, night, stale, screen, pane, plugins_file, settings, switch, confirm_theme, first_run, options })
 }
 
 /// Path of `to` relative to `from` (both absolute, same drive), with '/' separators.
@@ -646,7 +658,16 @@ fn relative(from: &Path, to: &Path) -> String {
 }
 
 /// Compiles the theme inside the host's `Host` root, as the device does.
-fn load(main: &Path, args: &Args) -> Result<ComponentDefinition, Box<dyn Error>> {
+fn load(main: &Path, args: &Args) -> Result<(ComponentDefinition, Vec<theme_options::ThemeOption>), Box<dyn Error>> {
+    let text = std::fs::read_to_string(args.theme.join("theme.json"))?;
+    let manifest = serde_json::from_str(&text)?;
+    let options = match theme_options::parse(&manifest) {
+        Ok(options) => options,
+        Err(errors) => {
+            eprintln!("theme options ignored: {}", errors.join("; "));
+            Vec::new()
+        }
+    };
     let include = vec![args.contract.clone()];
     let host_ui = args.contract.parent().unwrap_or(Path::new(".")).join("host/ui");
     let mut probe = Compiler::default();
@@ -657,7 +678,15 @@ fn load(main: &Path, args: &Args) -> Result<ComponentDefinition, Box<dyn Error>>
         eprintln!("{d}");
     }
     let declared = theme_root::declared(&probed).map_err(|e| format!("{}: {e}", main.display()))?;
-    let src = theme_root::root_source(&relative(&host_ui, main), &declared);
+    let mut errors = Vec::new();
+    let options = theme_root::kept_options(&probed, &options, |id, why| {
+        let message = format!("theme option '{id}' skipped: {why}");
+        if args.check { errors.push(message); }
+        // An override of a skipped option gets exactly one 'not declared' line below.
+        else if !args.options.iter().any(|(key, _)| key == id) { eprintln!("{message}"); }
+    })?;
+    if !errors.is_empty() { return Err(errors.join("\n").into()); }
+    let src = theme_root::root_source(&relative(&host_ui, main), &declared, &options);
     let mut compiler = Compiler::default();
     compiler.set_include_paths(include);
     theme_root::guard(&mut compiler, &[&args.contract, &host_ui], &args.theme, main, false)?;
@@ -666,11 +695,24 @@ fn load(main: &Path, args: &Args) -> Result<ComponentDefinition, Box<dyn Error>>
         eprintln!("{d}");
     }
     if result.has_errors() {
-        return Err(format!("{} failed to compile", main.display()).into());
+        return Err(format!("{}: host root failed to compile", main.display()).into());
     }
-    result
-        .component("Host")
-        .ok_or_else(|| "host root component missing".into())
+    let def = result.component("Host").ok_or("host root component missing")?;
+    Ok((def, options))
+}
+
+fn bind_options(inst: &ComponentInstance, options: &[theme_options::ThemeOption], args: &Args) -> Result<(), Box<dyn Error>> {
+    theme_options::set_defaults(inst, options)?;
+    let mut skipped = HashSet::new();
+    for (id, text) in &args.options {
+        let Some(option) = options.iter().find(|o| &o.id == id) else {
+            if skipped.insert(id) { eprintln!("theme option '{id}' skipped: not declared by the theme"); }
+            continue;
+        };
+        let value = option.kind.parse_override(text).map_err(|e| format!("--opt {id}: {e}"))?;
+        inst.set_property(&format!("opt-{id}"), value.value())?;
+    }
+    Ok(())
 }
 
 /// Binds the host overlay and applies the sim-only placement override, if any.
@@ -813,6 +855,7 @@ fn check_manifest(theme: &Path, current: i64, errors: &mut Vec<String>) -> Optio
         errors.push(format!("{}: top level must be an object", path.display()));
         return None;
     };
+    if let Err(problems) = theme_options::parse(&json) { errors.extend(problems); }
     for key in REQUIRED_STR_KEYS {
         match obj.get(key).and_then(|v| v.as_str()) {
             Some(s) if !s.trim().is_empty() => {}
@@ -895,8 +938,9 @@ fn run_screenshot(args: &Args, out: &Path) -> Result<(), Box<dyn Error>> {
         window: window.clone(),
         clock: clock.clone(),
     }))?;
-    let def = load(&args.theme.join("main.slint"), args)?;
+    let (def, options) = load(&args.theme.join("main.slint"), args)?;
     let inst = def.create()?;
+    bind_options(&inst, &options, args)?;
     bind_overlay(&inst, args)?;
     bind_settings(&inst, args)?;
     let feeder = Feeder::new(args);
@@ -939,8 +983,9 @@ fn run_screenshot(args: &Args, out: &Path) -> Result<(), Box<dyn Error>> {
 }
 
 fn run_live(args: &Args) -> Result<(), Box<dyn Error>> {
-    let def = load(&args.theme.join("main.slint"), args)?;
+    let (def, options) = load(&args.theme.join("main.slint"), args)?;
     let inst = def.create()?;
+    bind_options(&inst, &options, args)?;
     bind_overlay(&inst, args)?;
     bind_settings(&inst, args)?;
     let feeder = Rc::new(Feeder::new(args));
@@ -979,5 +1024,45 @@ fn main() {
     if let Err(e) = result {
         eprintln!("sim: {e}");
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn option_probe_keeps_types_and_skips_missing_or_mismatched_properties_once() {
+        let mut compiler = Compiler::default();
+        let probed = pollster::block_on(compiler.build_from_source(r#"
+            export component Dash inherits Window {
+                in property <color> opt-accent;
+                in property <bool> opt-enabled;
+                in property <int> opt-count;
+                in property <string> opt-style;
+                in property <string> opt-wrong;
+                in property <length> opt-length;
+                in property <float> opt-float;
+            }
+        "#.into(), PathBuf::from("options-probe.slint")));
+        assert!(!probed.has_errors());
+        let options = theme_options::parse(&json!({"options": [
+            {"id":"accent", "type":"color", "default":"#123456", "label":"Accent"},
+            {"id":"enabled", "type":"bool", "default":true, "label":"Enabled"},
+            {"id":"count", "type":"int", "default":3, "label":"Count"},
+            {"id":"style", "type":"choice", "default":"thin", "label":"Style", "values":["thin", "wide"]},
+            {"id":"wrong", "type":"bool", "default":true, "label":"Wrong"},
+            {"id":"missing", "type":"int", "default":0, "label":"Missing"},
+            {"id":"length", "type":"int", "default":0, "label":"Length"},
+            {"id":"float", "type":"int", "default":0, "label":"Float"}
+        ]})).unwrap();
+        let mut skipped = Vec::new();
+        let kept = theme_root::kept_options(&probed, &options, |id, why| skipped.push((id.to_string(), why.to_string()))).unwrap();
+        assert_eq!(kept.iter().map(|o| o.id.as_str()).collect::<Vec<_>>(),
+            ["accent", "enabled", "count", "style", "length", "float"]);
+        assert_eq!(skipped.len(), 2);
+        assert_eq!(skipped[0], ("wrong".into(), "Dash.opt-wrong has type String, expected Bool".into()));
+        assert_eq!(skipped[1], ("missing".into(), "Dash.opt-missing missing".into()));
     }
 }

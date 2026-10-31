@@ -25,6 +25,8 @@ History (from the file's comment):
 | 6 | Optional `Dash` properties for the host overlay: `overlay-placement`, `telltale-order`, `overlay-style`, `alert-position`; enums `OverlayPlacement`, `Telltale`, `AlertPosition`; struct `OverlayStyle`; `Vehicle.trunk-open`; `Actions.open-trunk()` (gated, see below). v6 also: optional `Dash` property `lock-style` for the lock screen (added within v6, see below) |
 | 7 | `Display.night`; `Vehicle.data-stale`; `Actions.open-apps()`, `Actions.open-themes()`. Additive only: v6 themes load unchanged. |
 
+Theme options are an additive part of contract 7, with no version bump: an optional `theme.json` `options` array describes `color`, `bool`, `int` and `choice` values, and `Dash` opts in through matching `in property <T> opt-<id>` declarations (`choice` uses `string`). The host exposes corresponding root properties and binds them only into `Dash`, then applies manifest defaults; options cannot write `HostState`, the overlay or host screens. Existing themes remain unchanged. Validation and examples are in [Theme options](themes.md#theme-options).
+
 ## Enums
 
 ### `DriveMode`

@@ -1,0 +1,12 @@
+export component Dash inherits Window {
+    width: 1280px; height: 768px; background: #000;
+    in property <color> opt-accent: #abcdef;
+    in property <bool> opt-enabled: false;
+    in property <int> opt-count: 0;
+    in property <string> opt-style: "thin";
+    Rectangle {
+        x: 0px; y: 48px;
+        width: parent.width; height: parent.height - 48px;
+        background: root.opt-accent;
+    }
+}

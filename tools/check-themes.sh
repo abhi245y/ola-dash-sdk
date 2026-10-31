@@ -2,8 +2,8 @@
 # Checks themes: theme.json fields, contract range, and a full compile (via `sim --check`).
 # Usage: tools/check-themes.sh [theme-dir ...]   (default: every themes/*/ with a theme.json)
 # SIM=/path/to/sim overrides the binary; otherwise sim/ is built in release mode first.
-# Also requires the import guard to refuse every tools/fixtures/refused/* theme, and every
-# tools/fixtures/loads/* theme to load with the host overlay intact (hostile on purpose).
+# Also checks refused fixtures (import guard and options validation), and every
+# tools/fixtures/loads/* theme with the host overlay intact.
 # Exits non-zero if any theme fails or a fixture loads, so it can gate CI.
 set -euo pipefail
 
@@ -33,15 +33,20 @@ done
 
 for dir in "$ROOT"/tools/fixtures/refused/*/; do
     dir="${dir%/}"
+    expected="import guard"
+    case "$(basename "$dir")" in
+        options-bad) expected="theme.json: options[" ;;
+        options-type) expected="host root failed to compile" ;;
+    esac
     if out=$("$SIM" --check "$dir" --contract "$ROOT/contract" 2>&1); then
-        echo "error: fixture $dir loaded; the import guard must refuse it" >&2
+        echo "error: fixture $dir loaded; it must be refused" >&2
         status=1
-    elif ! grep -q "import guard" <<<"$out"; then
-        echo "error: fixture $dir failed, but not in the import guard:" >&2
+    elif ! grep -Fq "$expected" <<<"$out"; then
+        echo "error: fixture $dir failed, but not for $expected:" >&2
         echo "$out" >&2
         status=1
     else
-        echo "ok: $(basename "$dir") refused: $(grep -m1 "import guard" <<<"$out")"
+        echo "ok: $(basename "$dir") refused: $(grep -Fm1 "$expected" <<<"$out")"
     fi
 done
 
@@ -69,6 +74,35 @@ for dir in "$ROOT"/tools/fixtures/loads/*/; do
         fi
     done
 done
+# Options use manifest defaults, then typed command-line overrides, inside Dash only.
+for accent in default '#ff0000'; do
+    flags=()
+    want="#123456"
+    if [ "$accent" != default ]; then
+        flags=(--opt "accent=$accent" --opt enabled=false --opt count=-2 --opt style=thin)
+        want="$accent"
+    fi
+    got=$("$SIM" "$ROOT/tools/fixtures/loads/options" --contract "$ROOT/contract" "${flags[@]}" --state park --at 5 --screenshot "$png" --pixel 640,384 | tail -n 1) || got=error
+    if [ "$got" = "$want" ]; then
+        echo "ok: theme option accent ($accent, pixel 640,384 is $got)"
+    else
+        echo "error: theme option accent ($accent, pixel 640,384 is $got, want $want)" >&2
+        status=1
+    fi
+done
+if out=$("$SIM" "$ROOT/themes/default" --contract "$ROOT/contract" --opt accent=#ff0000 --at 5 --screenshot "$png" 2>&1); then
+    if [ "$(grep -Fxc "theme option 'accent' skipped: not declared by the theme" <<<"$out")" -eq 1 ]; then
+        echo "ok: undeclared accent skipped once; default theme still renders"
+    else
+        echo "error: default theme must log exactly one undeclared accent skip:" >&2
+        echo "$out" >&2
+        status=1
+    fi
+else
+    echo "error: default theme failed with an undeclared option:" >&2
+    echo "$out" >&2
+    status=1
+fi
 # NO DATA badge: --stale must paint it red (OverlayTokens.red) at the left edge of its slot, off the text.
 got=$("$SIM" "$ROOT/themes/minimal" --contract "$ROOT/contract" --stale --at 13 --screenshot "$png" --pixel 1120,24 | tail -n 1) || got=error
 if [ "$got" = "#ff3b30" ]; then

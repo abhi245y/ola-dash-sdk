@@ -64,7 +64,7 @@ Rows: concept mock-up (AI-generated, see [docs/img/concepts](docs/img/concepts/)
         |  JNI
         v
  Rust host (Slint runtime, liboladash.so)
-   |- theme loader    themes/<id>/main.slint  -> Vehicle, Battery, Ride, Media, Navigation, Plugins
+   |- theme loader    themes/<id>/main.slint  -> Vehicle, Display, Battery, Ride, Media, Navigation, Plugins
    |- safety overlay  host/ui/overlay.slint   always drawn above the theme
    '- plugin host     owner-enabled  <-- IDashHost / IDashPlugin --> plugin APKs
 ```

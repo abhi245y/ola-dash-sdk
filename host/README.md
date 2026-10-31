@@ -130,7 +130,7 @@ bash host/test/hmi-swap.sh stock
 - `theme.json` manifest (required): `id`, `name`, `version`, `author`, `license`,
   `contract` (integer, the lowest contract version the theme needs) and `entry`
   (the Slint file to load, inside the theme folder). The host rejects a theme with
-  `contract` above its own (`HOST_CONTRACT` in `src/lib.rs`, currently 6), a missing
+  `contract` above its own (`HOST_CONTRACT` in `src/lib.rs`, currently 7), a missing
   `contract` or `entry`, or an `entry` that is absolute, contains `..`, or does not
   exist. A rejected theme logs the reason under `OlaDash` and the fallback tier loads.
 - The entry file must export `export component Dash inherits Window`. The host
@@ -141,7 +141,7 @@ bash host/test/hmi-swap.sh stock
   each change re-applies the `OverlayConfig` global. Contrast and order rules are
   applied in `theme_root.rs`. The host re-exports `Vehicle`, `Battery`, `Ride`, `Media`,
   `Navigation`, `Plugins`, `Actions` and `HostState` from its root. It imports the contract as
-  `import { Vehicle, Battery, Ride, Media, Actions, DriveMode } from "vehicle.slint";`.
+  `import { Vehicle, Display, Battery, Ride, Media, Actions, DriveMode } from "vehicle.slint";`.
   The host supplies the include path, so no copy of the contract is needed.
 - Unknown values: `-1` means "not reported yet" for `Vehicle.battery-pct`,
   `Vehicle.range-km` and the `Battery` and `Ride` temperatures and health. Themes show

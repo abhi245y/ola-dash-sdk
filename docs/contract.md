@@ -1,6 +1,6 @@
 # Theme contract reference
 
-The contract is `contract/vehicle.slint`, currently **`contract-version: 6`**. It is the only API a theme may use. Themes read `in` properties and invoke the callbacks listed here. The host writes the `in` properties; themes must never assign to them.
+The contract is `contract/vehicle.slint`, currently **`contract-version: 7`**. It is the only API a theme may use. Themes read `in` properties and invoke the callbacks listed here. The host writes the `in` properties; themes must never assign to them.
 
 Units: distances in km, speed in km/h, temperatures in °C, current in A, voltage in V. `-1` means "not reported yet" wherever a default of `-1` is listed. Themes should show `--`.
 
@@ -23,6 +23,7 @@ History (from the file's comment):
 | 4 | `DriveMode.easy-park` |
 | 5 | `VehicleState`, `Battery`, `Ride`, `Navigation`, `Plugins`; `Vehicle.state` |
 | 6 | Optional `Dash` properties for the host overlay: `overlay-placement`, `telltale-order`, `overlay-style`, `alert-position`; enums `OverlayPlacement`, `Telltale`, `AlertPosition`; struct `OverlayStyle`; `Vehicle.trunk-open`; `Actions.open-trunk()` (gated, see below). v6 also: optional `Dash` property `lock-style` for the lock screen (added within v6, see below) |
+| 7 | `Display.night`; `Vehicle.data-stale`; `Actions.open-apps()`, `Actions.open-themes()`. Additive only: v6 themes load unchanged. |
 
 ## Enums
 
@@ -51,7 +52,7 @@ History (from the file's comment):
 
 | Property | Type | Default | Notes |
 |---|---|---|---|
-| `contract-version` | `out int` | 6 | Read-only. The contract version the theme was compiled against. |
+| `contract-version` | `out int` | 7 | Read-only. The contract version the theme was compiled against. |
 | `speed-kmh` | `in float` | 0 | km/h |
 | `battery-pct` | `in int` | -1 | Rounded state of charge, %. Use `Battery.soc-pct` for the fine value. |
 | `range-km` | `in int` | -1 | Estimated range, km |
@@ -69,6 +70,13 @@ History (from the file's comment):
 | `ready-to-ride` | `in bool` | false | Equals `state == VehicleState.drive`. Kept for v1 themes. |
 | `trunk-open` | `in bool` | false | v6. True while the seat/trunk latch is open. It closes when the seat is pressed down. Themes may ignore it. Derived from `isTrunkLock` as `!locked`; that polarity is inferred from logs and not yet verified on a scooter. |
 | `clock-text` | `in string` | "" | Preformatted clock, for example `10:24` |
+| `data-stale` | `in bool` | false | v7. For when vehicle data stops arriving; the other values then show the last known state. Not set by the host yet (E0.S3). Themes may show a hint or ignore it. |
+
+## `Display` global (v7)
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `night` | `in bool` | false | True when it is dark. Not set by the host yet (E3.S1). Themes may switch to a night palette or ignore it. |
 
 ## `Battery` global (v5)
 
@@ -142,7 +150,9 @@ Harmless actions, plus one gated vehicle request. Other vehicle commands (lock, 
 | Member | Type | Notes |
 |---|---|---|
 | `open-android-auto()` | callback | Launches Android Auto |
-| `open-settings()` | callback | Opens system settings |
+| `open-settings()` | callback | Opens system settings. The host may ignore it unless the scooter is parked. |
+| `open-apps()` | callback | v7. Asks the host to open its apps screen. The host ignores it unless the scooter is parked; it only logs the call yet. |
+| `open-themes()` | callback | v7. Asks the host to open its themes screen. The host ignores it unless the scooter is parked; it only logs the call yet. |
 | `open-trunk()` | callback | v6. Asks the host to open the seat/trunk, like the stock trunk button. See below. |
 
 ### `open-trunk()` (v6)

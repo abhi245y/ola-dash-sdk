@@ -377,7 +377,9 @@ impl Feeder {
         self.set(inst, "Vehicle", "locked", Value::Bool(s.locked));
         self.set(inst, "Vehicle", "ready-to-ride", Value::Bool(s.ready));
         let clock24 = !matches!(inst.get_property("clock24"), Ok(Value::Bool(false)));
-        self.set(inst, "Vehicle", "clock-text", Value::String(settings::clock_text(s.clock, clock24).into()));
+        self.set(inst, "Vehicle", "clock-text", Value::String(settings::clock_text(s.clock, true).into()));
+        self.set(inst, "HostState", "clock-text", Value::String(settings::clock_text(s.clock, clock24).into()));
+        self.set(inst, "HostState", "clock-hhmm", Value::Number(s.clock as f64));
         self.set(inst, "Vehicle", "trunk-open", Value::Bool(s.trunk));
         self.set(inst, "Vehicle", "hyper-available", Value::Bool(s.hyper_available));
         self.set(inst, "Vehicle", "data-stale", Value::Bool(self.stale));
@@ -489,7 +491,7 @@ struct Args {
     night: bool,
     stale: bool,
     screen: String,
-    pane: String,
+    pane: i32,
     settings: Option<PathBuf>,
 }
 
@@ -508,7 +510,7 @@ fn parse_args() -> Result<Args, String> {
     let mut night = false;
     let mut stale = false;
     let mut screen = "dash".to_string();
-    let mut pane = "Display".to_string();
+    let mut pane = 0;
     let mut settings = None;
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
@@ -540,8 +542,8 @@ fn parse_args() -> Result<Args, String> {
             }
             "--pane" => {
                 pane = match it.next().as_deref() {
-                    Some("display") => "Display".into(),
-                    Some("about") => "About".into(),
+                    Some("display") => 0,
+                    Some("about") => 1,
                     _ => return Err("--pane needs display or about".into()),
                 };
             }
@@ -649,7 +651,7 @@ fn bind_settings(inst: &ComponentInstance, args: &Args) -> Result<(), Box<dyn Er
         inst.set_global_property("Display", "night", Value::Bool(true))?;
         inst.set_global_property("HostState", "night", Value::Bool(true))?;
     }
-    inst.set_property("settings-pane", Value::String(args.pane.clone().into()))?;
+    inst.set_property("settings-pane", Value::Number(args.pane as f64))?;
     Ok(())
 }
 

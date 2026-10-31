@@ -78,7 +78,7 @@ import { Vehicle, Display, Media, Actions, Battery, Ride, Navigation, Plugins, O
 export { Dash, Vehicle, Display, Media, Actions, Battery, Ride, Navigation, Plugins, HostState, OverlayConfig, LockConfig }
 export component Host inherits Window {
     in-out property <string> screen: "dash";
-    in-out property <string> settings-pane: "Display";
+    in-out property <int> settings-pane: 0;
     in-out property <bool> clock24: true;
     callback set-setting(string, string);
     out property <bool> host-screens-allowed: HostState.parked && HostState.alert-code == 0
@@ -116,7 +116,7 @@ export component Host inherits Window {
     }
     if root.screen == "settings" && root.host-screens-allowed : SettingsScreen {
         width: parent.width; height: parent.height;
-        pane <=> root.settings-pane;
+        selected <=> root.settings-pane;
         clock24: root.clock24;
         set-setting(key, value) => { root.set-setting(key, value); }
         closed => { root.screen = "dash"; }
@@ -167,10 +167,11 @@ const MAX_FONT: u64 = 16 << 20;
 
 /// `Vehicle` properties the host draws, with their `HostState` copy. The host and the sim set
 /// both; a theme can write `Vehicle.*` (they are `in`), so the overlay reads only the copy.
-pub const HOST_COPY: [(&str, &str); 10] = [
+/// Clock text is set separately: Vehicle stays HH:MM; HostState follows the preference.
+pub const HOST_COPY: [(&str, &str); 9] = [
     ("left-indicator", "left-indicator"), ("right-indicator", "right-indicator"),
     ("high-beam", "high-beam"), ("headlight", "headlight"), ("ready-to-ride", "ready"),
-    ("locked", "locked"), ("charging", "charging"), ("clock-text", "clock-text"),
+    ("locked", "locked"), ("charging", "charging"),
     ("battery-pct", "battery-pct"), ("data-stale", "data-stale"),
 ];
 

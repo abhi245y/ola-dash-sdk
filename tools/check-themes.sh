@@ -50,6 +50,8 @@ done
 # indicator is lit (slot 0 icon, OverlayTokens.ind-color); a theme writing Vehicle.* must not blank it.
 probes=("ride 13 1200,24 -" "ride 13 36,24 #5cff9d" "locked 5 600,280 -")
 png="$(mktemp)"
+clock_settings="$(mktemp)"
+trap 'rm -f "$png" "$clock_settings"' EXIT
 for dir in "$ROOT"/tools/fixtures/loads/*/; do
     dir="${dir%/}"
     if ! "$SIM" --check "$dir" --contract "$ROOT/contract" >&2; then
@@ -95,6 +97,24 @@ else
     echo "error: Display Off option not selected (pixel 736,192 is $got, want #ffc94a)" >&2
     status=1
 fi
+# The theme contract stays HH:MM even when the host uses 12-hour time. At t=5 the
+# theme clock is 10:24; 730,647 is inside the lit upper-right segment of its tens-hour 1.
+printf '%s\n' '{"clock24": false}' > "$clock_settings"
+got=$("$SIM" "$ROOT/themes/segment" --contract "$ROOT/contract" --settings "$clock_settings" --at 5 --screenshot "$png" --pixel 730,647 | tail -n 1) || got=error
+if [ "$got" = "#1d201c" ]; then
+    echo "ok: segment theme keeps 24-hour clock with clock24=false (pixel 730,647 is $got)"
+else
+    echo "error: segment clock missing with clock24=false (pixel 730,647 is $got, want #1d201c)" >&2
+    status=1
+fi
+# Locked time is 18:24: the host shows 6:24 and a separate PM label at its baseline.
+got=$("$SIM" "$ROOT/themes/minimal" --contract "$ROOT/contract" --settings "$clock_settings" --state locked --at 5 --screenshot "$png" --pixel 388,164 | tail -n 1) || got=error
+if [ "$got" != error ] && [ "$got" != "#f6f3ec" ]; then
+    echo "ok: lock clock has PM label with clock24=false (pixel 388,164 is $got)"
+else
+    echo "error: lock clock PM label missing with clock24=false (pixel 388,164 is $got)" >&2
+    status=1
+fi
 # Hub end cells stay clear of all nine telltales in every strip placement.
 for probe in "top 1220,24" "bottom 1220,744" "left 8,736" "right 1216,736"; do
     read -r placement xy <<<"$probe"
@@ -115,8 +135,6 @@ else
     echo "error: labelled CHARGE telltale covered by hub (pixel 1095,24 is $got, must not be #ffc94a)" >&2
     status=1
 fi
-rm -f "$png"
-
 if [ "$checked" -eq 0 ]; then
     echo "error: no themes with a theme.json found" >&2
     exit 1

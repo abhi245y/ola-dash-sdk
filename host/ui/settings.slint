@@ -9,14 +9,16 @@ export component SettingsScreen inherits Rectangle {
     callback closed();
     callback set-setting(string, string);
     in property <bool> clock24: true;
-    in-out property <string> pane: "Display";
+    in-out property <int> selected: 0;
     property <[string]> panes: ["Display", "About"];
+    property <string> pane: panes[selected];
     in-out property <int> cursor: 0;
+    init => { root.cursor = root.selected; }
     public function move(delta: int) {
         root.cursor = max(0, min(root.panes.length - 1, root.cursor + delta));
     }
     public function select() {
-        root.pane = root.panes[root.cursor];
+        root.selected = root.cursor;
     }
     public function close() { root.closed(); }
     background: LockConfig.style.background;

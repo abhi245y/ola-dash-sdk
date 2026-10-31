@@ -297,9 +297,12 @@ fn refresh_clock(ui: &ComponentInstance) {
     let hhmm = LAST_HHMM.load(Ordering::Relaxed);
     if hhmm == u32::MAX { return; }
     let clock24 = !matches!(ui.get_property("clock24"), Ok(Value::Bool(false)));
-    let text = settings::clock_text(hhmm, clock24);
-    for global in ["HostState", "Vehicle"] {
-        if let Err(e) = ui.set_global_property(global, "clock-text", Value::String(text.clone().into())) {
+    if let Err(e) = ui.set_global_property("HostState", "clock-hhmm", Value::Number(hhmm as f64)) {
+        log::warn!("set HostState.clock-hhmm failed: {e:?}");
+    }
+    for (global, format24) in [("HostState", clock24), ("Vehicle", true)] {
+        let text = settings::clock_text(hhmm, format24);
+        if let Err(e) = ui.set_global_property(global, "clock-text", Value::String(text.into())) {
             log::warn!("set {global}.clock-text failed: {e:?}");
         }
     }

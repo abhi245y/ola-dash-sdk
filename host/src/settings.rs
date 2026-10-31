@@ -4,7 +4,7 @@ use serde_json::{Map, Value as Json};
 use slint_interpreter::{ComponentHandle, ComponentInstance, Value};
 use std::cell::RefCell;
 use std::fs;
-use std::io;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 #[derive(Default)]
@@ -21,7 +21,9 @@ fn sibling(path: &Path, suffix: &str) -> PathBuf {
 
 fn write(path: &Path, values: &Map<String, Json>) -> io::Result<()> {
     let tmp = sibling(path, ".tmp");
-    fs::write(&tmp, serde_json::to_vec(values)?)?;
+    let mut file = fs::File::create(&tmp)?;
+    file.write_all(&serde_json::to_vec(values)?)?;
+    file.sync_all()?;
     fs::rename(tmp, path)
 }
 
@@ -65,31 +67,40 @@ impl Settings {
         self.values = values;
         Ok(())
     }
+}
 
-    fn apply(&self, ui: &ComponentInstance, key: &str, refresh_clock: fn(&ComponentInstance)) -> Result<(), String> {
-        if key == "clock24" {
-            ui.set_property("clock24", Value::Bool(self.clock24()))
-                .map_err(|e| format!("clock24: {e:?}"))?;
-            refresh_clock(ui);
-        } else {
-            for global in ["Display", "HostState"] {
-                ui.set_global_property(global, "night", Value::Bool(self.night()))
-                    .map_err(|e| format!("{global}.night: {e:?}"))?;
-            }
+fn apply(ui: &ComponentInstance, key: &str, enabled: bool, refresh_clock: fn(&ComponentInstance)) -> Result<(), String> {
+    if key == "clock24" {
+        ui.set_property("clock24", Value::Bool(enabled))
+            .map_err(|e| format!("clock24: {e:?}"))?;
+        ui.set_global_property("HostState", "clock24", Value::Bool(enabled))
+            .map_err(|e| format!("HostState.clock24: {e:?}"))?;
+        refresh_clock(ui);
+    } else {
+        for global in ["Display", "HostState"] {
+            ui.set_global_property(global, "night", Value::Bool(enabled))
+                .map_err(|e| format!("{global}.night: {e:?}"))?;
         }
-        Ok(())
     }
+    Ok(())
 }
 
 pub fn bind(ui: &ComponentInstance, settings: Settings, log: fn(&str), refresh_clock: fn(&ComponentInstance)) -> Result<(), String> {
-    for key in ["night", "clock24"] { settings.apply(ui, key, refresh_clock)?; }
+    for (key, enabled) in [("night", settings.night()), ("clock24", settings.clock24())] {
+        apply(ui, key, enabled, refresh_clock)?;
+    }
     let settings = RefCell::new(settings);
     let weak = ui.as_weak();
     ui.set_callback("set-setting", move |args| {
         if let [Value::String(key), Value::String(value)] = args {
-            let mut settings = settings.borrow_mut();
-            let result = settings.set(key.as_str(), value.as_str()).and_then(|_| {
-                if let Some(ui) = weak.upgrade() { settings.apply(&ui, key.as_str(), refresh_clock)?; }
+            let saved = {
+                let mut settings = settings.borrow_mut();
+                settings.set(key.as_str(), value.as_str()).map(|_| {
+                    if key == "clock24" { settings.clock24() } else { settings.night() }
+                })
+            };
+            let result = saved.and_then(|enabled| {
+                if let Some(ui) = weak.upgrade() { apply(&ui, key.as_str(), enabled, refresh_clock)?; }
                 Ok(())
             });
             if let Err(e) = result { log(&e); }

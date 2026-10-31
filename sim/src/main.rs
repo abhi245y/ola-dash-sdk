@@ -10,7 +10,7 @@
 //!                                                 hold one vehicle state (default: the mock ride cycle);
 //!                                                 the last three show the lock screen (see docs/themes.md)
 //!            --plugins / --nav                    feed mock plugin widgets / an active navigation card
-//!            --night                              set Display.night
+//!            --night                              set Display.night and HostState.night
 //!            --stale                              set Vehicle.data-stale (shows the NO DATA badge)
 //!
 //! The theme is loaded the way the device loads it: inside the host's `Host` root,
@@ -298,7 +298,7 @@ struct Feeder {
     /// `--alert <code>`: holds this host alert instead of the mock cycle.
     alert_override: Option<i64>,
     scenario: Scenario,
-    /// `--night`: Display.night = true.
+    /// `--night`: Display.night and HostState.night = true.
     night: bool,
     /// `--stale`: Vehicle.data-stale = true.
     stale: bool,
@@ -454,6 +454,8 @@ impl Feeder {
             });
         }
         self.set(inst, "Display", "night", Value::Bool(self.night));
+        self.set(inst, "HostState", "night", Value::Bool(self.night));
+        self.set(inst, "HostState", "date-text", Value::String(theme_root::date_text(20251031).into()));
         let _ = inst.set_global_callback("Plugins", "widget-clicked", |args| {
             println!("plugins: widget-clicked {:?}", args.first());
             Value::Void

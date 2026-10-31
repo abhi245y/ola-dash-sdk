@@ -36,6 +36,7 @@ const HYPER_AVAILABLE: usize = 14;
 const ALERT_CODE: usize = 20;
 const SIDE_STAND: usize = 21;
 const FAULT: usize = 22;
+const DATE_YMD: usize = 23;
 const CLOCK_HHMM: usize = 30;
 const TEST_MODE: usize = 31;
 const AUTH_PHASE: usize = 32;
@@ -245,6 +246,7 @@ fn apply(ui: &ComponentInstance, id: usize, v: f64) {
             let text = format!("{:02}:{:02}", hhmm / 100, hhmm % 100);
             ("Vehicle", "clock-text", Value::String(text.into()))
         }
+        DATE_YMD => ("HostState", "date-text", Value::String(theme_root::date_text(v as u32).into())),
         ALERT_CODE => ("HostState", "alert-code", n),
         SIDE_STAND => ("HostState", "side-stand", b),
         FAULT => ("HostState", "fault", b),
@@ -359,6 +361,7 @@ fn build_root(files: &Path, theme: &str) -> Result<ComponentInstance, String> {
     let t = Instant::now();
     let ui = def.create().map_err(|e| e.to_string())?;
     timing("create", t);
+    // HostState.night stays day until E3.S1 sets it together with Display.night.
     theme_root::bind(&ui, log_warn)?;
     Ok(ui)
 }

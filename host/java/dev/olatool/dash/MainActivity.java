@@ -54,6 +54,7 @@ public final class MainActivity extends NativeActivity {
         public void run() {
             Calendar c = Calendar.getInstance();
             VehicleBridge.setClock(c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE));
+            VehicleBridge.setDate(c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1, c.get(Calendar.DAY_OF_MONTH));
             handler.postDelayed(this, 60_000L - (System.currentTimeMillis() % 60_000L));
         }
     };

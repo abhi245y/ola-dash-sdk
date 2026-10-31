@@ -18,7 +18,6 @@
         android:hasCode="true"
         android:extractNativeLibs="true"
         android:allowBackup="false"
-        android:debuggable="true"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
         <activity
             android:name="dev.olatool.dash.MainActivity"

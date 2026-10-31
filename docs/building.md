@@ -51,7 +51,20 @@ The script:
 4. Links the manifest with `aapt2`, then adds `classes.dex` and the native library with a short Python step.
 5. Aligns with `zipalign` and signs with `apksigner` using the debug key.
 
-Output: `host/out/ola-dash-debug.apk`. The APK is debug-signed and `android:debuggable="true"`. That enables the test channel. See [safety.md](safety.md).
+Output: `host/out/ola-dash-debug.apk`. The APK is debug-signed and debuggable (the script links with `aapt2 link --debug-mode`; the manifest itself has no `android:debuggable`). That enables the test channel. See [safety.md](safety.md).
+
+### Release build
+
+```sh
+OLADASH_KEYSTORE=/path/release.jks OLADASH_KEY_ALIAS=release \
+OLADASH_KS_PASS=... OLADASH_KEY_PASS=... host/build.sh --release
+```
+
+All four variables are required; the build stops with a message if one is unset. Output: `host/out/ola-dash-release.apk`.
+
+- Not debuggable, so the test channel (gated on `FLAG_DEBUGGABLE` in `MainActivity`) is not registered. After signing, the build fails and deletes the APK if `aapt2 dump badging` contains `application-debuggable`.
+- `versionCode` and `versionName` come from `git describe --tags --match 'v*'`: tag `v1.2.3` gives code 10203 (`MAJOR*10000 + MINOR*100 + PATCH`) and name `1.2.3`; commits after the tag give a name such as `1.2.3-4-gabc1234` with the same code. With no `v*` tag the defaults (1, `0.1.0`) are used.
+- Runs `apksigner verify --print-certs` and prints the signer's SHA-256 digest, the value to publish for users to compare.
 
 ## Install and uninstall
 

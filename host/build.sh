@@ -2,7 +2,23 @@
 # Builds the debug-signed host APK on a Linux build machine (see docs/building.md):
 #   host/build.sh
 # Output: host/out/ola-dash-debug.apk
+# Release build (non-debuggable, signed with your key from the environment):
+#   OLADASH_KEYSTORE=... OLADASH_KEY_ALIAS=... OLADASH_KS_PASS=... OLADASH_KEY_PASS=... host/build.sh --release
+# Output: host/out/ola-dash-release.apk
 set -euo pipefail
+
+RELEASE=0
+case "${1:-}" in
+    "") ;;
+    --release) RELEASE=1 ;;
+    *) echo "usage: host/build.sh [--release]" >&2; exit 2 ;;
+esac
+if [ "$RELEASE" = 1 ]; then
+    for v in OLADASH_KEYSTORE OLADASH_KEY_ALIAS OLADASH_KS_PASS OLADASH_KEY_PASS; do
+        [ -n "${!v:-}" ] || { echo "release build: $v is not set (needs OLADASH_KEYSTORE, OLADASH_KEY_ALIAS, OLADASH_KS_PASS, OLADASH_KEY_PASS)" >&2; exit 1; }
+    done
+    [ -f "$OLADASH_KEYSTORE" ] || { echo "release build: keystore not found: $OLADASH_KEYSTORE" >&2; exit 1; }
+fi
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
@@ -64,9 +80,21 @@ javac --release 8 -encoding UTF-8 -Xlint:-options -cp "$PLATFORM" -d "$B/classes
 find "$B/classes" -name '*.class' > "$B/classes.txt"
 d8 --release --min-api "$API" --lib "$PLATFORM" --output "$B/dex" @"$B/classes.txt"
 
+# Debug keeps the defaults and --debug-mode (the manifest no longer says debuggable).
+# Release: version from the latest v* tag (code = MAJOR*10000+MINOR*100+PATCH), else the defaults.
+VCODE=1 VNAME=0.1.0 DEBUGMODE=--debug-mode
+if [ "$RELEASE" = 1 ]; then
+    DEBUGMODE=
+    if DESC=$(git -C "$ROOT" describe --tags --match 'v[0-9]*' 2>/dev/null); then
+        TAG=${DESC%%-*}; VNAME=${DESC#v}
+        IFS=. read -r MA MI PA <<<"${TAG#v}"
+        VCODE=$((MA * 10000 + MI * 100 + ${PA:-0}))
+    fi
+fi
+
 # 4. Manifest + assets -> base APK, then add dex and the native library.
 aapt2 link -I "$PLATFORM" --manifest "$HERE/AndroidManifest.xml" -A "$B/assets" \
-    --min-sdk-version "$API" --target-sdk-version 34 --version-code 1 --version-name 0.1.0 \
+    --min-sdk-version "$API" --target-sdk-version 34 --version-code "$VCODE" --version-name "$VNAME" $DEBUGMODE \
     -o "$B/base.apk"
 python3 - "$B/base.apk" "$B/dex/classes.dex" "$B/liboladash.so" "$B/unsigned.apk" <<'PY'
 import sys, zipfile
@@ -78,15 +106,27 @@ with zipfile.ZipFile(base) as src, zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATE
     dst.write(so, "lib/arm64-v8a/liboladash.so")
 PY
 
-# 5. Align and sign with the debug key (created once).
+# 5. Align and sign: the debug key (created once), or the release key from the environment.
 zipalign -p -f 4 "$B/unsigned.apk" "$B/aligned.apk"
-if [ ! -f "$KS" ]; then
-    mkdir -p "$(dirname "$KS")"
-    keytool -genkeypair -keystore "$KS" -storepass android -keypass android \
-        -alias androiddebugkey -dname "CN=Android Debug,O=Android,C=US" \
-        -keyalg RSA -keysize 2048 -validity 10000
+if [ "$RELEASE" = 1 ]; then
+    OUT="$HERE/out/ola-dash-release.apk"
+    apksigner sign --ks "$OLADASH_KEYSTORE" --ks-pass env:OLADASH_KS_PASS --key-pass env:OLADASH_KEY_PASS \
+        --ks-key-alias "$OLADASH_KEY_ALIAS" --out "$OUT" "$B/aligned.apk"
+    if aapt2 dump badging "$OUT" | grep -q application-debuggable; then
+        rm -f "$OUT"; echo "release APK is debuggable; refusing" >&2; exit 1
+    fi
+    apksigner verify --print-certs "$OUT" | tee "$B/certs.txt"
+    echo "signer SHA-256: $(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$B/certs.txt")"
+else
+    OUT="$HERE/out/ola-dash-debug.apk"
+    if [ ! -f "$KS" ]; then
+        mkdir -p "$(dirname "$KS")"
+        keytool -genkeypair -keystore "$KS" -storepass android -keypass android \
+            -alias androiddebugkey -dname "CN=Android Debug,O=Android,C=US" \
+            -keyalg RSA -keysize 2048 -validity 10000
+    fi
+    apksigner sign --ks "$KS" --ks-pass pass:android --key-pass pass:android \
+        --ks-key-alias androiddebugkey --out "$OUT" "$B/aligned.apk"
+    apksigner verify "$OUT"
 fi
-apksigner sign --ks "$KS" --ks-pass pass:android --key-pass pass:android \
-    --ks-key-alias androiddebugkey --out "$HERE/out/ola-dash-debug.apk" "$B/aligned.apk"
-apksigner verify "$HERE/out/ola-dash-debug.apk"
-ls -l "$HERE/out/ola-dash-debug.apk"
+ls -l "$OUT"

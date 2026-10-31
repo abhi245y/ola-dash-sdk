@@ -1,0 +1,11 @@
+// Must load with the overlay intact: a theme can write the contract `in` properties (the host
+// overlay reads HostState mirrors, so these writes cannot blank a lit telltale).
+import { Vehicle, Media, Actions, DriveMode } from "vehicle.slint";
+export { Vehicle, Media, Actions, DriveMode }
+export component Dash inherits Window {
+    width: 1280px; height: 768px; background: #000;
+    property <float> s: Vehicle.speed-kmh;
+    changed s => { Vehicle.left-indicator = false; Vehicle.right-indicator = false; Vehicle.locked = false; }
+    init => { Vehicle.left-indicator = false; }
+    Timer { interval: 16ms; running: true; triggered => { Vehicle.left-indicator = false; Vehicle.high-beam = false; } }
+}

@@ -36,9 +36,10 @@ mkdir -p "$B/classes" "$B/dex" "$B/gen" "$B/assets/contract" "$B/assets/host" "$
 (cd "$HERE" && cargo build --release --target "$TRIPLE")
 cp "$HERE/target/$TRIPLE/release/liboladash.so" "$B/liboladash.so"
 
-# 2. Bundled assets, copied to files/ on first start (contract, overlay, fallback, last-resort).
+# 2. Bundled assets, copied to files/ on first start (contract, overlay and host font, fallback, last-resort).
 cp "$ROOT/contract/vehicle.slint" "$B/assets/contract/"
 cp "$HERE/ui/"*.slint "$B/assets/host/"
+cp -r "$HERE/ui/fonts" "$B/assets/host/"
 cp -r "$ROOT/themes/default/." "$B/assets/fallback/"       # bundled default theme (fallback tier)
 # Optional EXTRA_THEMES=<dir>: each subfolder with a theme.json is bundled as themes/<id>/.
 for d in ${EXTRA_THEMES:+"$EXTRA_THEMES"/*/}; do

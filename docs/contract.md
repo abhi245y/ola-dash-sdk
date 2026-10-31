@@ -233,7 +233,7 @@ A theme may declare one more optional `out` property on `Dash`: `lock-style`. It
 
 ### `LockDigits` (v6)
 
-`sans` draws digits with the theme's default font. `segment` draws them with the host's seven-segment shapes in the foreground colour.
+`sans` draws digits with the host font (`OlaDash Host`), not the theme's. `segment` draws them with the host's seven-segment shapes in the foreground colour.
 
 ### Host checks
 

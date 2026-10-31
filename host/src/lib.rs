@@ -274,6 +274,12 @@ fn apply(ui: &ComponentInstance, id: usize, v: f64) {
         MCU_TEMP => ("Ride", "mcu-temp-c", n),
         _ => return,
     };
+    let copy = theme_root::HOST_COPY.iter().find(|(p, _)| global == "Vehicle" && *p == prop);
+    if let Some((_, host)) = copy {
+        if let Err(e) = ui.set_global_property("HostState", host, val.clone()) {
+            log::warn!("set HostState.{host} failed: {e:?}");
+        }
+    }
     if let Err(e) = ui.set_global_property(global, prop, val) {
         log::warn!("set {global}.{prop} failed: {e:?}");
     }
@@ -325,13 +331,13 @@ fn build_root(files: &Path, theme: &str) -> Result<ComponentInstance, String> {
     probe.set_include_paths(include.clone());
     let entry_path = files.join(&rel).join(&entry);
     let (contract, theme_dir, host) = (files.join("contract"), files.join(&rel), files.join("host"));
-    theme_root::guard(&mut probe, &[&contract], &theme_dir, &entry_path)?;
+    theme_root::guard(&mut probe, &[&contract], &theme_dir, &entry_path, true)?;
     let probed = spin_on::spin_on(probe.build_from_path(&entry_path));
     let declared = theme_root::declared(&probed)?;
     let src = theme_root::root_source(&format!("../{rel}/{entry}"), &declared);
     let mut compiler = Compiler::new();
     compiler.set_include_paths(include);
-    theme_root::guard(&mut compiler, &[&contract, &host], &theme_dir, &entry_path)?;
+    theme_root::guard(&mut compiler, &[&contract, &host], &theme_dir, &entry_path, false)?;
     let result = spin_on::spin_on(compiler.build_from_source(src, files.join("host/root.slint")));
     if result.has_errors() {
         let msgs: Vec<String> = result.diagnostics().map(|d| d.to_string()).collect();

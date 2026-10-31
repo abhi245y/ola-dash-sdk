@@ -339,6 +339,9 @@ impl Feeder {
     }
 
     fn set(&self, inst: &ComponentInstance, global: &str, prop: &str, v: Value) {
+        if let Some((_, host)) = theme_root::HOST_COPY.iter().find(|(p, _)| global == "Vehicle" && *p == prop) {
+            self.set(inst, "HostState", host, v.clone());
+        }
         if let Err(e) = inst.set_global_property(global, prop, v) {
             let key = format!("{global}.{prop}");
             if self.warned.borrow_mut().insert(key.clone()) {
@@ -576,7 +579,7 @@ fn load(main: &Path, args: &Args) -> Result<ComponentDefinition, Box<dyn Error>>
     let host_ui = args.contract.parent().unwrap_or(Path::new(".")).join("host/ui");
     let mut probe = Compiler::default();
     probe.set_include_paths(include.clone());
-    theme_root::guard(&mut probe, &[&args.contract], &args.theme, main)?;
+    theme_root::guard(&mut probe, &[&args.contract], &args.theme, main, true)?;
     let probed = pollster::block_on(probe.build_from_path(main));
     for d in probed.diagnostics() {
         eprintln!("{d}");
@@ -585,7 +588,7 @@ fn load(main: &Path, args: &Args) -> Result<ComponentDefinition, Box<dyn Error>>
     let src = theme_root::root_source(&relative(&host_ui, main), &declared);
     let mut compiler = Compiler::default();
     compiler.set_include_paths(include);
-    theme_root::guard(&mut compiler, &[&args.contract, &host_ui], &args.theme, main)?;
+    theme_root::guard(&mut compiler, &[&args.contract, &host_ui], &args.theme, main, false)?;
     let result = pollster::block_on(compiler.build_from_source(src, host_ui.join("root.slint")));
     for d in result.diagnostics() {
         eprintln!("{d}");

@@ -1,0 +1,10 @@
+{
+  "id": "evil1",
+  "name": "evil1",
+  "version": "1.0.0",
+  "author": "Ola Dash SDK contributors",
+  "license": "GPL-3.0-or-later",
+  "contract": 6,
+  "entry": "main.slint",
+  "description": "Must load with the overlay intact: writes Vehicle.left-indicator, right-indicator, high-beam and locked = false from a 16 ms Timer, a changed handler and init."
+}

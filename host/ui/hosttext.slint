@@ -1,0 +1,12 @@
+// Text the host draws. The family is the host's own: themes cannot ship a font with this
+// name (`sim --check` refuses it), so the host's faces are the only ones that can answer.
+// Regular, SemiBold and Bold are the only weights it ships (tools/subset-host-font.py).
+// Importing the files registers them when the root is created, so Rust registers nothing, and
+// no registration order is relied on: the name is unique, not first.
+import "fonts/OlaDashHost-Regular.ttf";
+import "fonts/OlaDashHost-SemiBold.ttf";
+import "fonts/OlaDashHost-Bold.ttf";
+
+export component HostText inherits Text {
+    font-family: "OlaDash Host";
+}

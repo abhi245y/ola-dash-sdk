@@ -73,7 +73,7 @@ const HOST_LOCK_NIGHT: Lock = Lock {
 const ROOT: &str = r#"import { Dash } from "{THEME}";
 import { HostOverlay, HostState, OverlayConfig } from "overlay.slint";
 import { LockConfig } from "unlock.slint";
-import { SettingsScreen } from "settings.slint";
+import { SettingsScreen, PluginInfo } from "settings.slint";
 import { ThemeInfo, SwitchingScreen, ConfirmThemeScreen, FirstRunScreen } from "theme-switch.slint";
 import { Vehicle, Display, Media, Actions, Battery, Ride, Navigation, Plugins, OverlayPlacement, OverlayStyle, Telltale, AlertPosition, LockStyle } from "vehicle.slint";
 export { Dash, Vehicle, Display, Media, Actions, Battery, Ride, Navigation, Plugins, HostState, OverlayConfig, LockConfig }
@@ -85,12 +85,15 @@ export component Host inherits Window {
     in-out property <bool> first-run: false;
     in property <[ThemeInfo]> themes;
     in property <string> active-theme;
+    in property <[PluginInfo]> plugins;
     in-out property <int> confirm-seconds: 10;
     in-out property <string> switching-name;
     callback apply-theme(string);
     callback keep-theme();
     callback revert-theme();
     callback set-setting(string, string);
+    callback load-plugins();
+    callback set-plugin(string, bool);
     out property <bool> host-screens-allowed: HostState.parked && HostState.alert-code == 0
         && HostState.auth-phase >= 4 && !HostState.test-mode;
     function settle() {
@@ -155,6 +158,9 @@ export component Host inherits Window {
         clock24: root.clock24;
         themes: root.themes;
         active-theme: root.active-theme;
+        plugins: root.plugins;
+        load-plugins => { root.load-plugins(); }
+        set-plugin(package, on) => { root.set-plugin(package, on); }
         set-setting(key, value) => { root.set-setting(key, value); }
         apply-theme(id) => { root.switch-theme(id); }
         closed => { root.screen = "dash"; }

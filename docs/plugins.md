@@ -23,7 +23,7 @@ In the plugin's `AndroidManifest.xml`:
 
 ## Owner enablement
 
-The host binds a plugin only when the owner has enabled it. Installing an APK is not enough. Enablement is per plugin, and per slot: a plugin enabled for `widgets` does not get to publish `media`. The enablement UI is on the [roadmap](roadmap.md). Until it exists, enablement is a developer action.
+While parked, open Settings → Plugins to turn installed plugins Off or On; changes bind or unbind immediately. Installing an APK is not enough. On enables every declared slot unless an existing enablement line restricts it; that restriction is preserved. Off removes the plugin's enablement lines.
 
 The enablement file is `files/plugins/enabled` in the host's private data directory (`/data/data/dev.olatool.dash/files/plugins/enabled`). One plugin per line:
 
@@ -40,7 +40,7 @@ On a debug build, `run-as` writes the file as the app's own user, so the host ca
 adb shell 'run-as dev.olatool.dash sh -c "mkdir -p files/plugins && echo dev.example.dash.weather > files/plugins/enabled"'
 ```
 
-The host reads the file at start and whenever a package is added, removed or replaced. A plugin removed from the file is unbound at the next of those events, not immediately. Lines starting with `#` and blank lines are ignored.
+The host reads the file at start, after a pane toggle, and whenever a package is added, removed or replaced. After editing it through adb, restart the host to apply it. Lines starting with `#` and blank lines are ignored.
 
 ### Built-in media source and the listener grant
 

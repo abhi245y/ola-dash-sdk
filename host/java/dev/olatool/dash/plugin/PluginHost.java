@@ -22,6 +22,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -96,12 +97,14 @@ public final class PluginHost {
         return stockPlaying;
     }
 
-    /** Main thread. Called by MainActivity for Media.* and Plugins.widget-clicked from the UI. */
+    /** Main thread. Called by MainActivity for media, widget and host refresh actions. */
     public static void action(String action) {
         if (app == null || action == null) {
             return;
         }
-        if (action.startsWith("media.")) {
+        if (action.equals("plugins.refresh")) {
+            refresh();
+        } else if (action.startsWith("media.")) {
             MediaInfo m = displayMedia();
             if (m != null && m.owner != null) {
                 sendAction(m.owner, action);
@@ -133,6 +136,7 @@ public final class PluginHost {
         if (app == null) {
             return;
         }
+        writeInstalled();
         Map<String, String> want = readEnabled();
         for (Entry e : new ArrayList<>(entries)) {
             String w = want.get(e.pkg);
@@ -150,6 +154,59 @@ public final class PluginHost {
                 main.removeCallbacks(e.rebind);
                 bind(e);
             }
+        }
+    }
+
+    /** Inventory includes disabled plugins; duplicate services contribute one package row. */
+    private static void writeInstalled() {
+        try {
+            PackageManager pm = app.getPackageManager();
+            Map<String, Integer> slots = new LinkedHashMap<>();
+            Map<String, String> labels = new LinkedHashMap<>();
+            for (ResolveInfo found : pm.queryIntentServices(new Intent(ACTION), PackageManager.GET_META_DATA)) {
+                ServiceInfo si = found.serviceInfo;
+                if (si == null) {
+                    continue;
+                }
+                String declared = si.metaData == null ? null : si.metaData.getString(SLOTS_META);
+                // mask() treats empty enablement as all slots; empty declarations declare none.
+                int known = declared == null || declared.trim().isEmpty() ? 0 : mask(declared);
+                if (known == 0) {
+                    continue;
+                }
+                Integer previous = slots.get(si.packageName);
+                slots.put(si.packageName, known | (previous == null ? 0 : previous));
+                String label = si.applicationInfo.loadLabel(pm).toString().trim();
+                int end = label.offsetByCodePoints(0, Math.min(48, label.codePointCount(0, label.length())));
+                labels.put(si.packageName, label.substring(0, end));
+            }
+            List<String> packages = new ArrayList<>(slots.keySet());
+            packages.sort((a, b) -> {
+                int order = String.CASE_INSENSITIVE_ORDER.compare(labels.get(a), labels.get(b));
+                return order == 0 ? a.compareTo(b) : order;
+            });
+            JSONArray installed = new JSONArray();
+            for (String pkg : packages) {
+                List<String> names = new ArrayList<>();
+                int known = slots.get(pkg);
+                if ((known & WIDGETS) != 0) names.add("widgets");
+                if ((known & MEDIA) != 0) names.add("media");
+                if ((known & NAVIGATION) != 0) names.add("navigation");
+                installed.put(new JSONObject().put("package", pkg).put("label", labels.get(pkg))
+                        .put("slots", String.join(",", names)));
+            }
+            File dir = new File(app.getFilesDir(), "plugins");
+            Files.createDirectories(dir.toPath());
+            File tmp = new File(dir, "installed.json.tmp");
+            try (FileOutputStream out = new FileOutputStream(tmp)) {
+                out.write(installed.toString().getBytes(StandardCharsets.UTF_8));
+                out.getFD().sync();
+            }
+            if (!tmp.renameTo(new File(dir, "installed.json"))) {
+                throw new IOException("installed.json rename failed");
+            }
+        } catch (IOException | JSONException | RuntimeException e) {
+            Trace.event("plugins: cannot write installed.json: " + e);
         }
     }
 
@@ -206,7 +263,7 @@ public final class PluginHost {
         ServiceInfo si = found.get(0).serviceInfo;
         String declared = si.metaData == null ? null : si.metaData.getString(SLOTS_META);
         e.slots = mask(declared) & mask(e.wanted);
-        if (declared == null || e.slots == 0) {
+        if (declared == null || declared.trim().isEmpty() || e.slots == 0) {
             Trace.event("plugin " + e.pkg + " rejected: slots declared=" + declared + " enabled=" + e.wanted);
             return;
         }

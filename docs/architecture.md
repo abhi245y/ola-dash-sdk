@@ -67,7 +67,7 @@ The overlay is compiled into the host and painted after the theme's `Dash` compo
 
 `Host.screen` in `host/src/theme_root.rs` accepts `dash`, `settings`, `switching`, `confirm-theme` and `first-run`. All host screens sit below `HostOverlay` and require `host-screens-allowed` (parked, no alert, unlocked, not test mode). One `settle()` function runs when the gate, confirmation, first-run flag or screen changes: a closed gate forces `dash`; pending confirmation forces `confirm-theme`; pending setup forces `first-run` unless switching; otherwise only `dash`, `settings` and `switching` remain valid. The hub and `Actions.open-settings()` / `open-themes()` request settings through the root gate (`open-themes()` opens the Theme pane); pending confirmation or setup blocks opening settings and switching. Close returns to the dash.
 
-The rail lists Display, Theme, About (`Host.settings-pane` indices 0, 1, 2). Display has Night mode (Off / On) and Clock (24-hour / 12-hour), using shared `Choice` controls and checked `LockConfig` colours. About shows host and contract versions. The clock/battery status line shows `--` for unknown values. `SettingsScreen.selected` binds the pane index; its rail `cursor` initializes from that selection, `move(delta)` moves it, `select()` applies it, and `close()` returns to the dash. Apps only logs.
+The rail lists Display, Theme, Plugins, About (`Host.settings-pane` indices 0–3). Display has Night mode (Off / On) and Clock (24-hour / 12-hour), using shared `Choice` controls and checked `LockConfig` colours. About shows host and contract versions. The clock/battery status line shows `--` for unknown values. `SettingsScreen.selected` binds the pane index; its rail `cursor` initializes from that selection, `move(delta)` moves it, `select()` applies it, and `close()` returns to the dash. Apps only logs.
 
 Theme lists compatible installed themes once per startup: bundled default first, then valid, non-bad-listed folders sorted by name. Opening the pane selects the active theme; Apply switches only after choosing another row. First-run offers up to four theme names and immediate Night mode changes when the gate first allows it. Done saves `setup: "done"`, clears the pending flag, then switches the chosen theme or returns to the dash; it launches nothing.
 
@@ -128,6 +128,8 @@ How the host handles them:
 - The keep-alive also counts media playing while in PARK or charging, as the stock HMI does. Only the built-in source counts, never a plugin's `publishMedia`.
 
 Limits and the enablement format are in [plugins.md](plugins.md#owner-enablement).
+
+On every refresh Java atomically writes `files/plugins/installed.json` (package, application label, known declared slots), sorted by label. Opening Settings → Plugins loads up to 32 entries through shared `host/src/plugins.rs`; capped labels are plain, elided host text. Gated toggles atomically rewrite `plugins/enabled`, preserve comments and existing slot restrictions, reload the model even on failure, and send `plugins.refresh` through `onDashAction` after success. The sim shares the model but keeps toggle state in memory.
 
 ## Build-time pieces
 

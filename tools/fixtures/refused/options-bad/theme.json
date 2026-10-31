@@ -1,0 +1,11 @@
+{
+  "id": "options-bad",
+  "name": "Invalid options",
+  "version": "1.0.0",
+  "author": "Ola Dash SDK contributors",
+  "license": "GPL-3.0-or-later",
+  "contract": 7,
+  "entry": "main.slint",
+  "description": "A choice default outside values must fail manifest validation.",
+  "options": [{ "id": "style", "type": "choice", "default": "missing", "label": "Style", "values": ["thin", "wide"] }]
+}

@@ -8,6 +8,7 @@
 //! Values are checked here (contrast, telltale list) and written to the
 //! `OverlayConfig` global, which the overlay reads.
 
+use crate::theme_options::ThemeOption;
 use slint::{Brush, Color, Model, ModelRc, VecModel};
 use slint_interpreter::Struct;
 use slint_interpreter::{CompilationResult, Compiler, ComponentHandle, ComponentInstance, Value};
@@ -141,7 +142,7 @@ export component Host inherits Window {
     callback theme-overlay-changed();
     out property <bool> host-night: HostState.night;
     changed host-night => { root.theme-overlay-changed(); }
-{MIRRORS}    width: 1280px;
+{MIRRORS}{OPTIONS}    width: 1280px;
     height: 768px;
     background: #000000;
     // Slint scopes this to the whole window, so it is for the theme's text only: every host
@@ -150,7 +151,7 @@ export component Host inherits Window {
     // The wrapper keeps a theme's own `z` (it merges onto this use-site) below the overlay.
     Rectangle {
         width: parent.width; height: parent.height;
-        dash := Dash { width: parent.width; height: parent.height; }
+        dash := Dash { width: parent.width; height: parent.height;{OPTION_BINDINGS} }
     }
     if root.screen == "settings" && root.host-screens-allowed : SettingsScreen {
         width: parent.width; height: parent.height;
@@ -201,7 +202,8 @@ export component Host inherits Window {
 /// Root source for a theme. `theme_import` is the theme entry, relative to `root_dir`
 /// (the directory the root file is imported from: `files/host` on the device).
 /// `declared` lists the optional Dash properties the theme defines (see `declared`).
-pub fn root_source(theme_import: &str, declared: &[String]) -> String {
+/// `options` contains validated manifest options kept by the probe.
+pub fn root_source(theme_import: &str, declared: &[String], options: &[ThemeOption]) -> String {
     let mut mirrors = String::new();
     for name in declared {
         let Some((_, ty)) = OPTIONAL.iter().find(|(n, _)| n == name) else { continue };
@@ -209,7 +211,33 @@ pub fn root_source(theme_import: &str, declared: &[String]) -> String {
             "    out property <{ty}> theme-{name}: dash.{name};\n    changed theme-{name} => {{ root.theme-overlay-changed(); }}\n"
         ));
     }
+    let mut properties = String::new();
+    let mut bindings = String::new();
+    for option in options {
+        let (id, ty) = (&option.id, option.kind.slint_type());
+        properties.push_str(&format!("    in-out property <{ty}> opt-{id};\n"));
+        bindings.push_str(&format!(" opt-{id}: root.opt-{id};"));
+    }
     ROOT.replace("{THEME}", theme_import).replace("{MIRRORS}", &mirrors)
+        .replace("{OPTIONS}", &properties).replace("{OPTION_BINDINGS}", &bindings)
+}
+
+/// Keep only options with a public Dash property of the probed type. Number deliberately
+/// includes length/float: Slint's root compile checks the actual int binding afterwards.
+pub fn kept_options(result: &CompilationResult, options: &[ThemeOption], mut skipped: impl FnMut(&str, &str)) -> Result<Vec<ThemeOption>, String> {
+    let dash = result.component("Dash").ok_or("theme does not export component Dash")?;
+    let properties: Vec<_> = dash.properties().collect();
+    Ok(options.iter().filter(|option| {
+        let name = format!("opt-{}", option.id);
+        match properties.iter().find(|(n, _)| n == &name) {
+            None => { skipped(&option.id, &format!("Dash.{name} missing")); false }
+            Some((_, ty)) if *ty != option.kind.probe_type() => {
+                skipped(&option.id, &format!("Dash.{name} has type {ty:?}, expected {:?}", option.kind.probe_type()));
+                false
+            }
+            Some(_) => true,
+        }
+    }).cloned().collect())
 }
 
 /// Which optional Dash properties the compiled theme defines. Errors if it did not compile.
@@ -657,6 +685,36 @@ fn contrast(a: Color, b: Color) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn root_without_options_keeps_the_original_source() {
+        let original = ROOT.replace("{THEME}", "../theme/main.slint").replace("{MIRRORS}", "")
+            .replace("{OPTIONS}", "").replace("{OPTION_BINDINGS}", "");
+        let src = root_source("../theme/main.slint", &[], &[]);
+        assert_eq!(src, original);
+        assert!(src.contains("dash := Dash { width: parent.width; height: parent.height; }"));
+        assert!(!src.contains("opt-"));
+    }
+
+    #[test]
+    fn root_binds_all_option_types_only_into_dash() {
+        let options = crate::theme_options::parse(&serde_json::json!({"options": [
+            {"id":"accent", "type":"color", "default":"#123456", "label":"Accent"},
+            {"id":"enabled", "type":"bool", "default":true, "label":"Enabled"},
+            {"id":"count", "type":"int", "default":3, "label":"Count"},
+            {"id":"style", "type":"choice", "default":"thin", "label":"Style", "values":["thin", "wide"]}
+        ]})).unwrap();
+        let src = root_source("../theme/main.slint", &["overlay-placement".into()], &options);
+        assert!(src.contains("out property <OverlayPlacement> theme-overlay-placement: dash.overlay-placement;"));
+        let dash = src.split("dash := Dash {").nth(1).unwrap().split('}').next().unwrap();
+        for (id, ty) in [("accent", "color"), ("enabled", "bool"), ("count", "int"), ("style", "string")] {
+            assert!(src.contains(&format!("    in-out property <{ty}> opt-{id};\n")));
+            let binding = format!("opt-{id}: root.opt-{id};");
+            assert!(dash.contains(&binding));
+            assert_eq!(src.matches(&binding).count(), 1);
+        }
+        assert!(!src.contains("#123456"), "defaults are applied in Rust, never interpolated into Slint");
+    }
 
     #[test]
     fn root_draws_settings_before_host_overlay() {

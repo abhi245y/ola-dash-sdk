@@ -1,0 +1,16 @@
+{
+  "id": "options",
+  "name": "Options",
+  "version": "1.0.0",
+  "author": "Ola Dash SDK contributors",
+  "license": "GPL-3.0-or-later",
+  "contract": 7,
+  "entry": "main.slint",
+  "description": "One theme option of each type, with a pixel-probe accent rectangle.",
+  "options": [
+    { "id": "accent", "type": "color", "default": "#123456", "label": "Accent" },
+    { "id": "enabled", "type": "bool", "default": true, "label": "Enabled" },
+    { "id": "count", "type": "int", "default": 3, "label": "Count" },
+    { "id": "style", "type": "choice", "default": "wide", "label": "Style", "values": ["thin", "wide"] }
+  ]
+}

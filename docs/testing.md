@@ -17,6 +17,7 @@ For each theme, `sim --check` verifies:
 - `contract` is an integer between 1 and the `contract-version` in `contract/vehicle.slint`.
 - `entry` exists.
 - The entry file compiles against the contract and exports `Dash`.
+- Optional `options` entries validate, match the probed `Dash` properties and compile in the generated host root.
 
 The script exits non-zero if any theme fails. The check does not render anything, so it does not cover visual problems. Use screenshots for those. The check also does not enforce the theme size budget; reviewers check that by hand.
 
@@ -38,6 +39,8 @@ The sim loop is 120 s:
 Useful times are 5 s (start), 20 s (eco, indicators on), 50 s (hyper) and 75 s (charging). Include screenshots of the default theme and of your theme when you change the look.
 
 The live window (no `--screenshot`) runs the same mock data in real time and needs a display.
+
+`--opt id=value` overrides a typed theme option for one run (repeatable), for example `sim tools/fixtures/loads/options --contract contract --opt accent=#ff0000 --screenshot options.png`.
 
 Settings opens on Display by default; `--pane display|theme|plugins|about` chooses the pane. `--first-run` previews setup; Apply and Done log without restarting:
 

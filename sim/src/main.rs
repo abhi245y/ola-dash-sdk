@@ -3,6 +3,7 @@
 //!   sim <theme-dir>                              interactive window
 //!   sim <theme-dir> --screenshot out.png --at 30 headless PNG at sim time 30 s
 //!   sim --check <theme-dir>                      validate theme.json and compile (no window)
+//!   sim <theme-dir> --write-preview              write preview.png (riding at 13 s, half size)
 //!   options: --contract <dir>  (default: <theme>/../../contract)
 //!            --placement top|bottom|left|right   preview another overlay placement
 //!            --alert <code>                      hold a host alert (1-6) instead of the mock cycle
@@ -332,7 +333,7 @@ struct Feeder {
 impl Feeder {
     fn new(args: &Args) -> Self {
         // SIM_PLUGINS=1 is the older spelling of --plugins --nav.
-        let env = std::env::var_os("SIM_PLUGINS").is_some();
+        let env = !args.write_preview && std::env::var_os("SIM_PLUGINS").is_some();
         Self {
             media: MediaState::new(),
             warned: Default::default(),
@@ -509,6 +510,7 @@ struct Args {
     theme: PathBuf,
     contract: PathBuf,
     screenshot: Option<PathBuf>,
+    write_preview: bool,
     at: f64,
     check: bool,
     placement: Option<String>,
@@ -547,6 +549,7 @@ fn parse_args() -> Result<Args, String> {
     let mut theme = None;
     let mut contract = None;
     let mut screenshot = None;
+    let mut write_preview = false;
     let mut at = 5.0;
     let mut check = false;
     let mut placement = None;
@@ -569,10 +572,15 @@ fn parse_args() -> Result<Args, String> {
     let mut confirm_theme = false;
     let mut first_run = false;
     let mut options = Vec::new();
+    let mut capture_override = false;
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
+        if a.starts_with('-') && !matches!(a.as_str(), "--write-preview" | "--contract" | "-h" | "--help") {
+            capture_override = true;
+        }
         match a.as_str() {
             "--check" => check = true,
+            "--write-preview" => write_preview = true,
             "--contract" => contract = it.next().map(PathBuf::from),
             "--placement" => placement = it.next(),
             "--alert" => {
@@ -659,6 +667,7 @@ fn parse_args() -> Result<Args, String> {
                 println!("       [--pane display|theme|plugins|about] [--theme-view options] [--settings FILE] [--plugins-file FILE]");
                 println!("       [--switch ID | --confirm-theme | --first-run]  (default to --state park; no restart or theme-file writes)");
                 println!("       sim --check <theme-dir> [--contract DIR]");
+                println!("       sim <theme-dir> --write-preview [--contract DIR]  (riding at 13 s, 640 x 384)");
                 std::process::exit(0);
             }
             _ if theme.is_none() => theme = Some(PathBuf::from(a)),
@@ -666,6 +675,12 @@ fn parse_args() -> Result<Args, String> {
         }
     }
     let theme = theme.ok_or("usage: sim <theme-dir> [...]")?;
+    if write_preview {
+        if capture_override {
+            return Err("--write-preview accepts only a theme directory and --contract".into());
+        }
+        at = 13.0;
+    }
     if u8::from(switch.is_some()) + u8::from(confirm_theme) + u8::from(first_run) > 1 {
         return Err("--switch, --confirm-theme and --first-run are mutually exclusive".into());
     }
@@ -682,7 +697,7 @@ fn parse_args() -> Result<Args, String> {
             return Err(format!("--placement needs top, bottom, left or right, got {p}"));
         }
     }
-    Ok(Args { theme, contract, screenshot, at, check, placement, alert, scenario, plugins, nav, pixel, night, clock, untrusted_clock, stale, screen, pane, theme_options_open, plugins_file, settings, switch, confirm_theme, first_run, options })
+    Ok(Args { theme, contract, screenshot, write_preview, at, check, placement, alert, scenario, plugins, nav, pixel, night, clock, untrusted_clock, stale, screen, pane, theme_options_open, plugins_file, settings, switch, confirm_theme, first_run, options })
 }
 
 /// Path of `to` relative to `from` (both absolute, same drive), with '/' separators.
@@ -788,9 +803,23 @@ fn refresh_clock(inst: &ComponentInstance) {
 
 fn preview_screen(inst: &ComponentInstance, args: &Args) -> Result<(), Box<dyn Error>> {
     preview_plugins(inst, args.plugins_file.as_deref())?;
-    let mut themes = theme_switch::scan(args.theme.parent().unwrap_or(Path::new(".")), current_contract(&args.contract)?);
-    themes.sort_by_key(|theme| theme.id != theme_switch::DEFAULT_THEME);
-    inst.set_property("themes", theme_switch::model(themes))?;
+    let dir = args.theme.parent().unwrap_or(Path::new(".")).to_path_buf();
+    let contract = current_contract(&args.contract)?;
+    let load_themes = move || {
+        let mut themes = theme_switch::scan(&dir, contract);
+        themes.sort_by_key(|theme| theme.id != theme_switch::DEFAULT_THEME);
+        theme_switch::model(themes)
+    };
+    inst.set_property("themes", load_themes())?;
+    let weak = inst.as_weak();
+    inst.set_callback("load-themes", move |_| {
+        if let Some(inst) = weak.upgrade() {
+            if matches!(inst.get_property("host-screens-allowed"), Ok(Value::Bool(true))) {
+                let _ = inst.set_property("themes", load_themes());
+            }
+        }
+        Value::Void
+    })?;
     inst.set_property("active-theme", Value::String(args.theme.file_name().unwrap().to_string_lossy().into_owned().into()))?;
     inst.set_callback("apply-theme", |args| {
         println!("theme switch: {:?} (sim: no restart)", args.first());
@@ -954,6 +983,7 @@ fn run_check(args: &Args) -> bool {
         }
     };
     let entry = check_manifest(&args.theme, current, &mut errors);
+    if let Err(e) = check_preview(&args.theme) { errors.push(format!("preview.png: {e}")); }
     if let (true, Some(entry)) = (errors.is_empty(), entry) {
         match load(&entry, args) {
             Ok(_) => println!("ok: {} (sim contract {current})", args.theme.display()),
@@ -966,7 +996,56 @@ fn run_check(args: &Args) -> bool {
     errors.is_empty()
 }
 
-fn write_png(path: &Path, buf: &[PremultipliedRgbaColor]) -> Result<(), Box<dyn Error>> {
+/// Missing previews are allowed locally; an existing preview must be fully decodable.
+fn check_preview(theme: &Path) -> Result<(), Box<dyn Error>> {
+    let path = theme.join("preview.png");
+    let file = match std::fs::File::open(&path) {
+        Ok(file) => file,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            eprintln!("warning: {}: missing preview.png (optional for local themes)", theme.display());
+            return Ok(());
+        }
+        Err(e) => return Err(e.into()),
+    };
+    if file.metadata()?.len() > theme_switch::MAX_PREVIEW {
+        return Err("preview.png must be at most 1 MiB (the host shows a placeholder otherwise)".into());
+    }
+    let decoder = png::Decoder::new_with_limits(std::io::BufReader::new(file), png::Limits { bytes: 16 * 1024 * 1024 });
+    let mut reader = decoder.read_info()?;
+    let info = reader.info();
+    if info.width != WIDTH / 2 || info.height != HEIGHT / 2 {
+        return Err("must be exactly 640 x 384".into());
+    }
+    if !matches!(info.color_type, png::ColorType::Rgb | png::ColorType::Rgba) {
+        return Err("must be an RGB or RGBA PNG".into());
+    }
+    let mut buf = vec![0; reader.output_buffer_size().ok_or("decoded buffer too large")?];
+    reader.next_frame(&mut buf)?;
+    reader.finish()?;
+    Ok(())
+}
+
+/// Average each 2x2 block in premultiplied space before PNG un-premultiplication.
+fn downscale_2x2(buf: &[PremultipliedRgbaColor], width: usize, height: usize) -> Vec<PremultipliedRgbaColor> {
+    assert!(width % 2 == 0 && height % 2 == 0 && buf.len() == width * height);
+    let mut out = Vec::with_capacity(width * height / 4);
+    for y in (0..height).step_by(2) {
+        for x in (0..width).step_by(2) {
+            let block = [buf[y * width + x], buf[y * width + x + 1],
+                buf[(y + 1) * width + x], buf[(y + 1) * width + x + 1]];
+            let average = |channel: fn(PremultipliedRgbaColor) -> u8| {
+                (block.iter().map(|p| channel(*p) as u16).sum::<u16>() / 4) as u8
+            };
+            out.push(PremultipliedRgbaColor {
+                red: average(|p| p.red), green: average(|p| p.green),
+                blue: average(|p| p.blue), alpha: average(|p| p.alpha),
+            });
+        }
+    }
+    out
+}
+
+fn write_png(path: &Path, buf: &[PremultipliedRgbaColor], width: u32, height: u32) -> Result<(), Box<dyn Error>> {
     let mut data = Vec::with_capacity(buf.len() * 4);
     for p in buf {
         // Theme backgrounds are opaque; un-premultiply anyway for translucent pixels.
@@ -977,7 +1056,7 @@ fn write_png(path: &Path, buf: &[PremultipliedRgbaColor]) -> Result<(), Box<dyn 
         data.extend_from_slice(&[un(p.red), un(p.green), un(p.blue), p.alpha]);
     }
     let file = std::io::BufWriter::new(std::fs::File::create(path)?);
-    let mut enc = png::Encoder::new(file, WIDTH, HEIGHT);
+    let mut enc = png::Encoder::new(file, width, height);
     enc.set_color(png::ColorType::Rgba);
     enc.set_depth(png::BitDepth::Eight);
     enc.write_header()?.write_image_data(&data)?;
@@ -1026,7 +1105,12 @@ fn run_screenshot(args: &Args, out: &Path) -> Result<(), Box<dyn Error>> {
     window.draw_if_needed(|r| {
         r.render(&mut buf, WIDTH as usize);
     });
-    write_png(out, &buf)?;
+    if args.write_preview {
+        let preview = downscale_2x2(&buf, WIDTH as usize, HEIGHT as usize);
+        write_png(out, &preview, WIDTH / 2, HEIGHT / 2)?;
+    } else {
+        write_png(out, &buf, WIDTH, HEIGHT)?;
+    }
     println!("wrote {} (sim t={:.2}s)", out.display(), args.at);
     if let Some((x, y)) = args.pixel {
         let p = buf[y * WIDTH as usize + x];
@@ -1070,9 +1154,13 @@ fn main() {
     if args.check {
         std::process::exit(if run_check(&args) { 0 } else { 1 });
     }
-    let result = match &args.screenshot {
-        Some(out) => run_screenshot(&args, out),
-        None => run_live(&args),
+    let result = if args.write_preview {
+        run_screenshot(&args, &args.theme.join("preview.png"))
+    } else {
+        match &args.screenshot {
+            Some(out) => run_screenshot(&args, out),
+            None => run_live(&args),
+        }
     };
     if let Err(e) = result {
         eprintln!("sim: {e}");
@@ -1085,6 +1173,78 @@ mod tests {
     use super::*;
     use serde_json::json;
     use slint::Model;
+
+    struct PreviewTemp(PathBuf);
+    impl PreviewTemp {
+        fn new() -> Self {
+            static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+            let path = std::env::temp_dir().join(format!("oladash-preview-{}-{}", std::process::id(),
+                NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+            std::fs::create_dir(&path).unwrap();
+            Self(path)
+        }
+    }
+    impl Drop for PreviewTemp {
+        fn drop(&mut self) { let _ = std::fs::remove_dir_all(&self.0); }
+    }
+
+    #[test]
+    fn box_downscale_averages_each_two_by_two_block() {
+        let buf: Vec<_> = [
+            [0, 4, 8, 64], [4, 8, 12, 128], [16, 20, 24, 128], [20, 24, 28, 192],
+            [8, 12, 16, 192], [12, 16, 20, 252], [24, 28, 32, 224], [28, 32, 36, 252],
+        ].into_iter().map(|[red, green, blue, alpha]| PremultipliedRgbaColor { red, green, blue, alpha }).collect();
+        let out = downscale_2x2(&buf, 4, 2);
+        let channels: Vec<_> = out.iter().map(|p| [p.red, p.green, p.blue, p.alpha]).collect();
+        assert_eq!(channels, [[6, 10, 14, 159], [22, 26, 30, 199]]);
+    }
+
+    #[test]
+    fn preview_check_allows_missing_but_rejects_bad_data_and_dimensions() {
+        let t = PreviewTemp::new();
+        assert!(check_preview(&t.0).is_ok());
+        let path = t.0.join("preview.png");
+        std::fs::write(&path, b"not a PNG").unwrap();
+        assert!(check_preview(&t.0).is_err());
+        let pixel = PremultipliedRgbaColor { red: 18, green: 52, blue: 86, alpha: 255 };
+        write_png(&path, &[pixel], 1, 1).unwrap();
+        assert!(check_preview(&t.0).unwrap_err().to_string().contains("640 x 384"));
+        write_png(&path, &vec![pixel; 640 * 384], 640, 384).unwrap();
+        assert!(check_preview(&t.0).is_ok());
+        let mut bytes = std::fs::read(&path).unwrap();
+        bytes.truncate(bytes.len() / 2);
+        std::fs::write(&path, bytes).unwrap();
+        assert!(check_preview(&t.0).is_err(), "valid headers alone are insufficient");
+    }
+
+    #[test]
+    fn preview_model_loads_images_and_falls_back_on_bad_or_grown_files() {
+        std::thread::spawn(|| {
+            slint::platform::set_platform(Box::new(Headless {
+                window: MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer),
+                clock: Rc::new(Cell::new(Duration::ZERO)),
+            })).unwrap();
+            let t = PreviewTemp::new();
+            let path = t.0.join("preview.png");
+            let image_size = |preview| {
+                let Value::Model(rows) = theme_switch::model(vec![theme_switch::ThemeInfo {
+                    id: "preview".into(), name: "Preview".into(), description: String::new(),
+                    source: "sideloaded".into(), preview,
+                }]) else { panic!("missing theme model") };
+                let Value::Struct(row) = rows.row_data(0).unwrap() else { panic!("missing theme row") };
+                let Some(Value::Image(image)) = row.get_field("preview") else { panic!("missing preview field") };
+                image.size().width
+            };
+            assert_eq!(image_size(None), 0);
+            std::fs::write(&path, b"not a PNG").unwrap();
+            assert_eq!(image_size(Some(path.clone())), 0);
+            let pixel = PremultipliedRgbaColor { red: 18, green: 52, blue: 86, alpha: 255 };
+            write_png(&path, &vec![pixel; 640 * 384], 640, 384).unwrap();
+            assert_eq!(image_size(Some(path.clone())), 640);
+            std::fs::OpenOptions::new().write(true).open(&path).unwrap().set_len(1024 * 1024 + 1).unwrap();
+            assert_eq!(image_size(Some(path)), 0, "model rechecks cap after discovery");
+        }).join().unwrap();
+    }
 
     #[test]
     fn capture_clock_accepts_only_valid_hhmm() {

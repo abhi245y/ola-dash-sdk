@@ -551,6 +551,18 @@ fn theme_label(files: &Path, id: &str) -> String {
 
 fn wire_theme(ui: &ComponentInstance, app: &AndroidApp, files: &Path) -> Result<(), String> {
     let weak = ui.as_weak();
+    let dir = files.to_path_buf();
+    ui.set_callback("load-themes", move |_| {
+        if let Some(ui) = weak.upgrade() {
+            if matches!(ui.get_property("host-screens-allowed"), Ok(Value::Bool(true))) {
+                if let Err(e) = ui.set_property("themes", theme_switch::model(theme_switch::installed(&dir, HOST_CONTRACT))) {
+                    log::warn!("load-themes: {e:?}");
+                }
+            }
+        }
+        Value::Void
+    }).map_err(|e| format!("load-themes: {e:?}"))?;
+    let weak = ui.as_weak();
     let a = app.clone();
     let dir = files.to_path_buf();
     ui.set_callback("apply-theme", move |args| {

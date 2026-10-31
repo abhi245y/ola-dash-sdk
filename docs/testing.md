@@ -57,6 +57,8 @@ sim/target/release/sim themes/minimal --first-run --night --settings tmp/setting
 
 Auto night: with `--settings FILE` containing `{"night":"auto"}`, `--clock 21:00` selects night, `--clock 12:00` selects day, and `--clock 21:00 --untrusted-clock` selects day; `check-themes.sh` probes these Settings backgrounds and Auto selection, and sim Rust tests cover schedule bounds, parsing, trust, unknown clocks and live edits.
 
+Theme previews: `tools/previews.sh` regenerates captures; `sim --check` warns on missing previews and rejects invalid PNGs/dimensions, Rust tests cover sources, the 1 MiB cap and box averaging, and `check-themes.sh` probes a temporary fixture preview plus the selected row at its new coordinate `(448,440)` (previously `(448,408)`).
+
 Plugin inventory/enablement, settings persistence and clock-format unit tests are included in the sim test target, alongside the host root tests:
 
 ```sh

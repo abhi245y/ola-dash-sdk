@@ -134,6 +134,8 @@ fn deny(path: &Path, why: &str) -> io::Error {
 /// The first font path in theme source that leaves the theme folder (`..` segment or absolute).
 /// Font imports are read outside the file loader, so `vet_fonts` cannot see them. Scans every
 /// string ending in a font extension, not just `import`, so a comment or stray quote fails closed.
+/// Import paths are taken verbatim (no `\u{..}` decoding, i-slint-compiler typeloader.rs:1840), so
+/// matching the source text matches what the compiler opens.
 fn font_escape(src: &str) -> Option<&str> {
     let low = src.to_ascii_lowercase();
     [".ttf", ".ttc", ".otf"].iter().flat_map(|e| low.match_indices(e)).find_map(|(i, e)| {
@@ -178,9 +180,9 @@ fn vet_fonts(dir: &Path) -> io::Result<()> {
             return Err(deny(&path, "symlinks are not allowed in themes"));
         } else if kind.is_dir() {
             vet_fonts(&path)?;
-        } else if matches!(path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).as_deref(), Some("ttf" | "otf" | "ttc" | "otc")) {
+        } else if matches!(path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).as_deref(), Some("ttf" | "otf" | "ttc")) {
             if std::fs::metadata(&path)?.len() > MAX_FONT {
-                return Err(deny(&path, "font files may not be larger than 16 MiB"));
+                return Err(deny(&path, &format!("font files may not be larger than {} MiB", MAX_FONT >> 20)));
             }
             let bytes = std::fs::read(&path)?;
             if [HOST_FONT.as_bytes(), &utf16].iter().any(|n| bytes.windows(n.len()).any(|w| w.eq_ignore_ascii_case(n))) {

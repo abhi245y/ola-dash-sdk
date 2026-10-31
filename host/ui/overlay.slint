@@ -82,9 +82,13 @@ export global HostState {
     in property <bool> locked: false;
     in property <bool> charging: false;
     in property <string> clock-text;
+    // Numeric 24-hour hhmm for lock digits; -1 means unknown. Text follows the preference.
+    in property <int> clock-hhmm: -1;
+    in property <bool> clock24: true;
     in property <int> battery-pct: -1;
     in property <bool> data-stale: false;
-    // Day (false) or night. The host sets it with Display.night (E3.S1 on the device, `--night` in sim).
+    // Day (false) or night, set with Display.night by Settings (Off / On) or sim --night.
+    // E3.S1 adds automatic switching.
     in property <bool> night: false;
     // Lock-screen date, "Fri 31 Oct". Empty hides it.
     in property <string> date-text;
@@ -333,7 +337,8 @@ export component HostOverlay inherits Rectangle {
         cooldown: HostState.auth-cooldown;
         available: HostState.auth-available;
         test-mode: HostState.test-mode;
-        clock-text: HostState.clock-text;
+        clock-hhmm: HostState.clock-hhmm;
+        clock24: HostState.clock24;
         battery-pct: HostState.battery-pct;
         date-text: HostState.date-text;
         key(key) => { root.unlock-key(key); }

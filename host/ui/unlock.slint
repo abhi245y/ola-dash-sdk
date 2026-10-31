@@ -84,7 +84,8 @@ export component UnlockScreen inherits Rectangle {
     in property <bool> available;
     in property <bool> test-mode;
     // Left column, from the host's own vehicle values.
-    in property <string> clock-text;
+    in property <int> clock-hhmm: -1;
+    in property <bool> clock24: true;
     in property <string> date-text;
     in property <int> battery-pct: -1;
     callback key(int);
@@ -93,8 +94,15 @@ export component UnlockScreen inherits Rectangle {
     property <bool> segment: LockConfig.style.digits == LockDigits.segment;
     property <bool> square-cells: LockConfig.style.key-shape == LockKeyShape.square;
     property <bool> entering: root.phase == 1 || root.phase == 2;
-    // Clock as hhmm (10:24 is 1024) for the segment digits; -1 = ghost only.
-    property <int> clock-val: root.clock-text == "" ? -1 : round(root.clock-text.replace-all(":", "").to-float());
+    // Both clock styles use numeric host time, never parse the formatted status text.
+    property <int> hour: floor(root.clock-hhmm / 100);
+    property <int> minute: Math.mod(root.clock-hhmm, 100);
+    property <int> clock-hour: root.clock24 ? root.hour : Math.mod(root.hour + 11, 12) + 1;
+    property <int> clock-val: root.clock-hour * 100 + root.minute;
+    property <bool> short-hour: !root.clock24 && root.clock-hour < 10;
+    property <string> clock-label: root.clock-hhmm < 0 ? "--:--"
+        : (root.clock24 && root.clock-hour < 10 ? "0" : "") + root.clock-hour + ":"
+            + (root.minute < 10 ? "0" : "") + root.minute;
     property <int> pct: root.battery-pct > 100 ? 100 : root.battery-pct;
     // Right column: 596 px wide, 104 px from the edge (clear of a 72 px side strip); the left
     // column is the 444 px before it. HostOverlay draws the alert footer in the left column.
@@ -119,35 +127,52 @@ export component UnlockScreen inherits Rectangle {
     TouchArea { }
 
     // ---- left column: clock, date, battery (the strip carries lock and charging) ----
-    if !root.segment : HostText {
-        x: 104px; y: 60px; width: 444px; height: 144px;
-        text: root.clock-text == "" ? "--:--" : root.clock-text;
+    clock := HostText {
+        visible: !root.segment || root.clock-hhmm < 0;
+        x: 104px; y: 60px; width: self.preferred-width; height: 144px;
+        text: root.clock-label;
         color: LockConfig.style.foreground;
         font-size: 120px;
         font-weight: 800;
         vertical-alignment: center;
     }
-    if root.segment : Rectangle {
-        x: 104px; y: 76px; width: 268px; height: 112px;
+    segment-clock := Rectangle {
+        visible: root.segment && root.clock-hhmm >= 0;
+        x: 104px; y: 76px; width: root.short-hour ? 204px : 268px; height: 112px;
         background: transparent;
         LockSegDigit {
+            visible: !root.short-hour;
             x: 0px; width: 56px; height: 112px; ink: LockConfig.style.foreground;
             digit: root.clock-val < 0 ? -1 : Math.mod(floor(root.clock-val / 1000), 10);
         }
         LockSegDigit {
-            x: 64px; width: 56px; height: 112px; ink: LockConfig.style.foreground;
+            x: root.short-hour ? 0px : 64px; width: 56px; height: 112px; ink: LockConfig.style.foreground;
             digit: root.clock-val < 0 ? -1 : Math.mod(floor(root.clock-val / 100), 10);
         }
-        Rectangle { x: 130px; y: 36px; width: 10px; height: 10px; background: LockConfig.style.foreground; }
-        Rectangle { x: 130px; y: 66px; width: 10px; height: 10px; background: LockConfig.style.foreground; }
+        Rectangle { x: root.short-hour ? 66px : 130px; y: 36px; width: 10px; height: 10px; background: LockConfig.style.foreground; }
+        Rectangle { x: root.short-hour ? 66px : 130px; y: 66px; width: 10px; height: 10px; background: LockConfig.style.foreground; }
         LockSegDigit {
-            x: 148px; width: 56px; height: 112px; ink: LockConfig.style.foreground;
+            x: root.short-hour ? 84px : 148px; width: 56px; height: 112px; ink: LockConfig.style.foreground;
             digit: root.clock-val < 0 ? -1 : Math.mod(floor(root.clock-val / 10), 10);
         }
         LockSegDigit {
-            x: 212px; width: 56px; height: 112px; ink: LockConfig.style.foreground;
+            x: root.short-hour ? 148px : 212px; width: 56px; height: 112px; ink: LockConfig.style.foreground;
             digit: root.clock-val < 0 ? -1 : Math.mod(root.clock-val, 10);
         }
+    }
+    HostText {
+        visible: !root.clock24 && root.clock-hhmm >= 0;
+        // 12:59 at 120/800 plus 12 px gap and AM/PM at 26/700 fits the 444 px column.
+        x: (root.segment ? segment-clock.x + segment-clock.width : clock.x + clock.width) + 12px;
+        // Sans baseline comes from the font metrics; segment digits end at their baseline.
+        y: (root.segment ? segment-clock.y + segment-clock.height
+            : clock.y + (clock.height + clock.font-metrics.ascent + clock.font-metrics.descent) / 2)
+            - self.font-metrics.ascent;
+        height: self.font-metrics.ascent - self.font-metrics.descent;
+        text: root.hour < 12 ? "AM" : "PM";
+        color: LockConfig.style.foreground;
+        font-size: 26px;
+        font-weight: 700;
     }
     HostText {
         x: 104px; y: 208px; width: 444px; height: 32px;

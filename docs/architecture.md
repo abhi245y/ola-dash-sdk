@@ -67,7 +67,15 @@ The overlay is compiled into the host and painted after the theme's `Dash` compo
 
 `Host.screen` in `host/src/theme_root.rs` accepts `dash` and `settings`. The settings frame (`host/ui/settings.slint`, using `kit.slint`) is drawn after the wrapped theme and before `HostOverlay`, so the strip, alerts and lock screen stay above it. Navigation stays in Slint: the hub and `Actions.open-settings()` / `open-themes()` request settings through the root gate, and Close returns to the dash. Leaving parked, an alert, locking or test mode resets the screen; the draw condition also checks the gate. The gate reads only host state, including `TrunkGate`'s parked result.
 
-About is the only rail entry. It shows the host crate version, set once at startup in `HostState.version-text`, and the contract version. Its clock and battery status line reads host copies and shows `--` for unknown values. Apps is not built yet; its callback logs only.
+The rail lists Display, then About. Display has Night mode (Off / On) and Clock (24-hour / 12-hour), using the shared `Choice` control and checked `LockConfig` colours. About shows the host crate version, set once at startup in `HostState.version-text`, and the contract version. The shared clock and battery status line reads host copies and shows `--` for unknown values. `Host.settings-pane` stores the selected index (0 Display, 1 About), bound to `SettingsScreen.selected`. Only `SettingsScreen` has a rail `cursor`, initialized from `selected` when opened; `move(delta)` moves it, `select()` applies it, and `close()` returns to the dash. Apps is not built yet; its callback logs only.
+
+## Settings persistence
+
+Rust owns `files/settings.json` (`host/src/settings.rs`); Java never reads or writes it. `run()` reads it before `load_ui`. Missing files use defaults without creating a file. Invalid JSON or a non-object is renamed to `settings.json.bad`, logged once, and replaced in memory with defaults. Read or rename errors are logged and startup continues.
+
+Current keys are `night` (`"off"` by default, or `"on"`) and `clock24` (boolean, default `true`). `night: "auto"` is accepted and preserved when reading, but acts as Off until E3.S1. Missing or mistyped values use defaults. Unknown keys, including nested future values, survive rewrites.
+
+The root `Host.set-setting(key, value)` callback accepts `night=off|on` and `clock24=true|false`. One writer creates `settings.json.tmp` beside the file, writes the updated object, calls `sync_all`, then atomically renames it over `settings.json`. Failed writes log an error and keep the previous in-memory value. The settings borrow is released before applying UI changes. `Host.clock24` and `HostState.clock24` expose the clock preference; `Host.host-night` exposes `HostState.night`. Night changes set `Display.night` and `HostState.night` together, reusing the root's night-change hook to reapply checked overlay and lock defaults. Clock format changes immediately, using the last `CLOCK_HHMM` value. Only `HostState.clock-text` follows the preference; `Vehicle.clock-text` always stays 24-hour `HH:MM`, so themes are unaffected. The lock screen reads numeric `HostState.clock-hhmm` (-1 means unknown), shows `--:--` while unknown, and in 12-hour mode shows h:mm with a separate AM/PM label aligned to the clock baseline.
 
 ## Keep-alive
 

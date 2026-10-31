@@ -39,6 +39,24 @@ Useful times are 5 s (start), 20 s (eco, indicators on), 50 s (hyper) and 75 s (
 
 The live window (no `--screenshot`) runs the same mock data in real time and needs a display.
 
+Settings opens on Display by default; `--pane display|about` chooses the pane:
+
+```sh
+sim/target/release/sim themes/minimal --state park --screen settings --pane display --screenshot display.png
+sim/target/release/sim themes/minimal --state park --screen settings --pane about --screenshot about.png
+sim/target/release/sim themes/minimal --state park --screen settings --settings tmp/settings.json
+```
+
+`--settings FILE` loads and saves preferences through the same Rust code as the host. Create the parent directory first. Without the flag, preferences start at defaults and changes stay in memory. For a repeatable night / 12-hour capture, use a file containing `{"night":"on","clock24":false}`. `--night` overrides the loaded night value for the preview without writing it. Clock changes appear on the next sim update. Invalid JSON is renamed to `FILE.bad`; updates use `FILE.tmp` followed by rename. `tools/check-themes.sh` also probes the selected Off option in Display for the accent colour, that the segment theme keeps its 24-hour clock with `clock24` false, and that the lock clock shows its AM/PM label.
+
+Settings persistence and clock-format unit tests are included in the sim test target, alongside the host root tests:
+
+```sh
+CARGO_NET_OFFLINE=true cargo test --release --manifest-path sim/Cargo.toml
+```
+
+These cover missing and corrupt files, `.bad` recovery, preserving unknown keys and `night: "auto"`, atomic replacement and write failure, invalid changes, and midnight/noon/12-hour formatting. Offline runs require all dependencies in the local Cargo cache.
+
 ## 3. Host checks
 
 Unit tests for the unlock state machine run on a desktop JDK without a scooter:

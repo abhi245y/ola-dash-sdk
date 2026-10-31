@@ -83,6 +83,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         ui.set_global_property("Vehicle", "range-km", Value::Number(80.0))?;
         ui.set_global_property("Vehicle", "clock-text", Value::String("10:24".into()))?;
         ui.set_global_property("HostState", "clock-text", Value::String("10:24".into()))?;
+        ui.set_global_property("HostState", "clock-hhmm", Value::Number(1024.0))?;
         ui.set_global_property("Vehicle", "mode", Value::EnumerationValue("DriveMode".into(),
             if *phase == 5 { "normal" } else { "park" }.into()))?;
         ui.show()?;

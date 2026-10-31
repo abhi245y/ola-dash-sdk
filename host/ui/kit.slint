@@ -64,3 +64,36 @@ export component Pane inherits Rectangle {
         @children
     }
 }
+
+export component Choice inherits HorizontalLayout {
+    in property <[string]> options;
+    in property <int> selected;
+    callback chosen(int);
+    spacing: 16px;
+    height: 64px;
+    for option[i] in root.options : Rectangle {
+        width: (root.width - (root.options.length - 1) * 16px) / max(1, root.options.length);
+        height: 64px;
+        border-radius: 32px;
+        border-width: 1px;
+        border-color: LockConfig.style.key-border;
+        property <color> fill: root.selected == i ? LockConfig.style.accent : LockConfig.style.key-background;
+        property <color> ink: root.selected == i ? LockConfig.on-accent : LockConfig.style.foreground;
+        background: touch.pressed ? self.fill.mix(self.ink, 0.15) : self.fill;
+        accessible-role: button;
+        accessible-label: option;
+        accessible-checkable: true;
+        accessible-checked: root.selected == i;
+        accessible-action-default => { root.chosen(i); }
+        HostText {
+            width: parent.width; height: parent.height;
+            text: option;
+            color: parent.ink;
+            font-size: 22px;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        touch := TouchArea { clicked => { root.chosen(i); } }
+    }
+}

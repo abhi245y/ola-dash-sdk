@@ -13,6 +13,8 @@
 //!            --night                              set Display.night and HostState.night
 //!            --stale                              set Vehicle.data-stale (shows the NO DATA badge)
 //!            --screen dash|settings               preview a host screen (settings needs --state park)
+//!            --pane display|about                 settings pane (default: display)
+//!            --settings <file>                    load and save host preferences (default: in memory)
 //!
 //! The theme is loaded the way the device loads it: inside the host's `Host` root,
 //! with `HostOverlay` drawn above it (host/src/theme_root.rs, shared with the host).
@@ -38,6 +40,8 @@ use std::time::{Duration, Instant};
 // The host's root window and overlay settings, shared with the Android build.
 #[path = "../../host/src/theme_root.rs"]
 mod theme_root;
+#[path = "../../host/src/settings.rs"]
+mod settings;
 
 /// Keys every theme.json must carry (see docs/themes.md).
 const REQUIRED_STR_KEYS: [&str; 7] = ["id", "name", "version", "author", "license", "entry", "description"];
@@ -72,7 +76,7 @@ struct Sim {
     /// Host alert code (0 none, 3 side stand) on the mock cycle.
     alert: i64,
     state: &'static str,
-    clock: String,
+    clock: u32,
     trunk: bool,
     hyper_available: bool,
     // Battery global (contract v5).
@@ -182,7 +186,7 @@ fn sim_at(t: f64, sc: Scenario) -> Sim {
         locked: false,
         ready: true,
         state: if riding { "drive" } else { "charging" },
-        clock: format!("{:02}:{:02}", minutes / 60, minutes % 60),
+        clock: (minutes / 60 * 100 + minutes % 60) as u32,
         trunk: false,
         hyper_available,
         soc: battery_f,
@@ -260,7 +264,7 @@ fn sim_at(t: f64, sc: Scenario) -> Sim {
             held(&mut s);
             s.state = "sleep";
             s.locked = true;
-            s.clock = "18:24".into();
+            s.clock = 1824;
             s.battery = 70;
             s.soc = 70.0;
             s.range = 74;
@@ -299,8 +303,6 @@ struct Feeder {
     /// `--alert <code>`: holds this host alert instead of the mock cycle.
     alert_override: Option<i64>,
     scenario: Scenario,
-    /// `--night`: Display.night and HostState.night = true.
-    night: bool,
     /// `--stale`: Vehicle.data-stale = true.
     stale: bool,
 }
@@ -316,7 +318,6 @@ impl Feeder {
             nav: args.nav || env,
             alert_override: args.alert,
             scenario: args.scenario,
-            night: args.night,
             stale: args.stale,
         }
     }
@@ -375,7 +376,10 @@ impl Feeder {
         self.set(inst, "Vehicle", "headlight", Value::Bool(s.headlight));
         self.set(inst, "Vehicle", "locked", Value::Bool(s.locked));
         self.set(inst, "Vehicle", "ready-to-ride", Value::Bool(s.ready));
-        self.set(inst, "Vehicle", "clock-text", Value::String(s.clock.into()));
+        let clock24 = !matches!(inst.get_property("clock24"), Ok(Value::Bool(false)));
+        self.set(inst, "Vehicle", "clock-text", Value::String(settings::clock_text(s.clock, true).into()));
+        self.set(inst, "HostState", "clock-text", Value::String(settings::clock_text(s.clock, clock24).into()));
+        self.set(inst, "HostState", "clock-hhmm", Value::Number(s.clock as f64));
         self.set(inst, "Vehicle", "trunk-open", Value::Bool(s.trunk));
         self.set(inst, "Vehicle", "hyper-available", Value::Bool(s.hyper_available));
         self.set(inst, "Vehicle", "data-stale", Value::Bool(self.stale));
@@ -448,8 +452,6 @@ impl Feeder {
             println!("action: open-apps (not built yet)");
             Value::Void
         });
-        self.set(inst, "Display", "night", Value::Bool(self.night));
-        self.set(inst, "HostState", "night", Value::Bool(self.night));
         self.set(inst, "HostState", "date-text", Value::String(theme_root::date_text(20251031).into()));
         self.set(inst, "HostState", "version-text", Value::String(env!("CARGO_PKG_VERSION").into()));
         let _ = inst.set_global_callback("Plugins", "widget-clicked", |args| {
@@ -489,6 +491,8 @@ struct Args {
     night: bool,
     stale: bool,
     screen: String,
+    pane: i32,
+    settings: Option<PathBuf>,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -506,6 +510,8 @@ fn parse_args() -> Result<Args, String> {
     let mut night = false;
     let mut stale = false;
     let mut screen = "dash".to_string();
+    let mut pane = 0;
+    let mut settings = None;
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -534,6 +540,16 @@ fn parse_args() -> Result<Args, String> {
                 screen = it.next().filter(|s| matches!(s.as_str(), "dash" | "settings"))
                     .ok_or("--screen needs dash or settings")?;
             }
+            "--pane" => {
+                pane = match it.next().as_deref() {
+                    Some("display") => 0,
+                    Some("about") => 1,
+                    _ => return Err("--pane needs display or about".into()),
+                };
+            }
+            "--settings" => {
+                settings = Some(PathBuf::from(it.next().ok_or("--settings needs a file")?));
+            }
             "--pixel" => {
                 pixel = Some(it
                     .next()
@@ -554,6 +570,7 @@ fn parse_args() -> Result<Args, String> {
                 println!("       [--state ride|park|charge|reverse|trunk|easy-park|locked|locked-error|cooldown] [--plugins] [--nav] [--night] [--stale]");
                 println!("       [--pixel X,Y]  (with --screenshot: also print the colour at that point)");
                 println!("       [--screen dash|settings]  (settings needs --state park)");
+                println!("       [--pane display|about] [--settings FILE]");
                 println!("       sim --check <theme-dir> [--contract DIR]");
                 std::process::exit(0);
             }
@@ -573,7 +590,7 @@ fn parse_args() -> Result<Args, String> {
             return Err(format!("--placement needs top, bottom, left or right, got {p}"));
         }
     }
-    Ok(Args { theme, contract, screenshot, at, check, placement, alert, scenario, plugins, nav, pixel, night, stale, screen })
+    Ok(Args { theme, contract, screenshot, at, check, placement, alert, scenario, plugins, nav, pixel, night, stale, screen, pane, settings })
 }
 
 /// Path of `to` relative to `from` (both absolute, same drive), with '/' separators.
@@ -625,6 +642,17 @@ fn bind_overlay(inst: &ComponentInstance, args: &Args) -> Result<(), Box<dyn Err
 
 fn sim_warn(msg: &str) {
     eprintln!("sim: {msg}");
+}
+
+fn bind_settings(inst: &ComponentInstance, args: &Args) -> Result<(), Box<dyn Error>> {
+    let settings = settings::Settings::load(args.settings.as_deref(), sim_warn);
+    settings::bind(inst, settings, sim_warn, |_| {})?;
+    if args.night {
+        inst.set_global_property("Display", "night", Value::Bool(true))?;
+        inst.set_global_property("HostState", "night", Value::Bool(true))?;
+    }
+    inst.set_property("settings-pane", Value::Number(args.pane as f64))?;
+    Ok(())
 }
 
 /// Contract version the SDK ships: `contract-version: N;` in contract/vehicle.slint.
@@ -751,6 +779,7 @@ fn run_screenshot(args: &Args, out: &Path) -> Result<(), Box<dyn Error>> {
     let def = load(&args.theme.join("main.slint"), args)?;
     let inst = def.create()?;
     bind_overlay(&inst, args)?;
+    bind_settings(&inst, args)?;
     let feeder = Feeder::new(args);
     feeder.wire_callbacks(&inst);
     feeder.push(&inst, 0.0);
@@ -794,6 +823,7 @@ fn run_live(args: &Args) -> Result<(), Box<dyn Error>> {
     let def = load(&args.theme.join("main.slint"), args)?;
     let inst = def.create()?;
     bind_overlay(&inst, args)?;
+    bind_settings(&inst, args)?;
     let feeder = Rc::new(Feeder::new(args));
     feeder.wire_callbacks(&inst);
     let start = Instant::now();

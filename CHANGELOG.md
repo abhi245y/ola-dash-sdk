@@ -6,6 +6,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- Bad-theme guard (`BadThemeGuard.java`): the host counts a start strike for the active theme in `files/themes/strikes` before Slint starts and clears it after 10 s. A theme that crashed two starts in a row is replaced by `default` and listed in `files/themes/bad`. `BadThemeGuard.cleanExit()` clears the strike for an intentional exit (for the theme switch, not called yet).
 - Contract v7 (additive, v6 themes load unchanged): `Display.night`, `Vehicle.data-stale`, `Actions.open-apps()` and `Actions.open-themes()`. The host only logs the two callbacks until the host screens exist. `sim --night` sets `Display.night`, `sim --stale` sets `Vehicle.data-stale`. Bundled themes stay on contract 6.
 - Stale data: the host sets `Vehicle.data-stale` and its own `HostState.data-stale` (field 38) when the vehicle parser disconnects or dies, or when no real vehicle data callback arrived for 5 s while in drive (checked by the existing 1 s keep-alive tick; injected test events do not count). The overlay shows a red NO DATA badge in the TEST DATA slot (hidden while TEST DATA shows). It clears when callbacks resume or the parser resubscribes.
 - The host keeps the screen on (`FLAG_KEEP_SCREEN_ON`) and logs `timing probe|root|create|first-frame <N> ms` under tag `OlaDash` (first frame counts from `android_main` entry).

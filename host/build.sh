@@ -85,10 +85,13 @@ d8 --release --min-api "$API" --lib "$PLATFORM" --output "$B/dex" @"$B/classes.t
 VCODE=1 VNAME=0.1.0 DEBUGMODE=--debug-mode
 if [ "$RELEASE" = 1 ]; then
     DEBUGMODE=
-    if DESC=$(git -C "$ROOT" describe --tags --match 'v[0-9]*' 2>/dev/null); then
+    # OLADASH_VERSION (e.g. v1.2.3) stands in for the tag where .git is not synced (build host).
+    if DESC=${OLADASH_VERSION:-$(git -C "$ROOT" describe --tags --match 'v[0-9]*' 2>/dev/null)}; [ -n "$DESC" ]; then
         TAG=${DESC%%-*}; VNAME=${DESC#v}
         IFS=. read -r MA MI PA <<<"${TAG#v}"
-        VCODE=$((MA * 10000 + MI * 100 + ${PA:-0}))
+        PA=${PA:-0}
+        [[ "$MA$MI$PA" =~ ^[0-9]+$ && $MI -lt 100 && $PA -lt 100 ]] || { echo "release build: bad version $DESC" >&2; exit 1; }
+        VCODE=$((MA * 10000 + MI * 100 + PA))
     fi
 fi
 

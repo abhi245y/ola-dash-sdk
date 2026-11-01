@@ -207,15 +207,37 @@ else
     echo "error: plugin On option not selected (pixel 976,200 is $got, want #ffc94a)" >&2
     status=1
 fi
-# First-run column: (200,208), 880 px wide; Done at (840,496), size 240 x 64.
-# (864,528) is in the pill's left padding, clear of its text and rounded edge.
-got=$("$SIM" "$ROOT/themes/minimal" --contract "$ROOT/contract" --first-run --at 5 --screenshot "$png" --pixel 864,528 | tail -n 1) || got=error
+# First-run column: (200,84), 880 px wide; Done at (840,620), size 240 x 64.
+# (864,652) is in the pill's left padding, clear of its text and rounded edge.
+got=$("$SIM" "$ROOT/themes/minimal" --contract "$ROOT/contract" --first-run --at 5 --screenshot "$png" --pixel 864,652 | tail -n 1) || got=error
 if [ "$got" = "#ffc94a" ]; then
-    echo "ok: first-run Done pill visible (pixel 864,528 is $got)"
+    echo "ok: first-run Done pill visible (pixel 864,652 is $got)"
 else
-    echo "error: first-run Done pill missing (pixel 864,528 is $got, want #ffc94a)" >&2
+    echo "error: first-run Done pill missing (pixel 864,652 is $got, want #ffc94a)" >&2
     status=1
 fi
+# Confirm card: (280,536), 720 x 200; Keep pill at (312,652), 320 x 64.
+# Bottom placement lifts the card by 48 px. Probe the pill's left padding,
+# clear of its text and rounded edge, plus the live theme well above the card.
+# Choice.selected is -1: the Keep fill is LockConfig.style.key-background (#ffffff).
+for placement in top bottom; do
+    pill_y=684
+    if [ "$placement" = bottom ]; then pill_y=636; fi
+    got=$("$SIM" "$ROOT/themes/minimal" --contract "$ROOT/contract" --confirm-theme --placement "$placement" --at 5 --screenshot "$png" --pixel "336,$pill_y" | tail -n 1) || got=error
+    if [ "$got" = "#ffffff" ]; then
+        echo "ok: Keep pill visible ($placement, pixel 336,$pill_y is $got)"
+    else
+        echo "error: Keep pill missing ($placement, pixel 336,$pill_y is $got, want #ffffff)" >&2
+        status=1
+    fi
+    got=$("$SIM" "$ROOT/themes/minimal" --contract "$ROOT/contract" --confirm-theme --placement "$placement" --at 5 --screenshot "$png" --pixel 104,200 | tail -n 1) || got=error
+    if [ "$got" != error ] && [ "$got" != "#f6f3ec" ]; then
+        echo "ok: live theme visible above Keep / Revert ($placement, pixel 104,200 is $got)"
+    else
+        echo "error: Keep / Revert hides the theme ($placement, pixel 104,200 is $got, must not be #f6f3ec)" >&2
+        status=1
+    fi
+done
 # Switching uses the host day background, above the theme and below the overlay.
 got=$("$SIM" "$ROOT/themes/minimal" --contract "$ROOT/contract" --switch default --at 5 --screenshot "$png" --pixel 104,104 | tail -n 1) || got=error
 if [ "$got" = "#f6f3ec" ]; then

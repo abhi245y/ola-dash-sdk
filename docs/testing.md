@@ -93,6 +93,8 @@ javac -d host/build-tests host/java/dev/olatool/dash/TrunkGate.java host/test/Tr
     && java -cp host/build-tests dev.olatool.dash.TrunkGateTest
 javac -d host/build-tests host/java/dev/olatool/dash/BadThemeGuard.java host/test/BadThemeGuardTest.java \
     && java -cp host/build-tests dev.olatool.dash.BadThemeGuardTest
+javac -d host/build-tests host/java/dev/olatool/dash/BundledThemes.java host/test/BundledThemesTest.java \
+    && java -cp host/build-tests dev.olatool.dash.BundledThemesTest
 ```
 
 The bad-theme guard (`files/themes/strikes`, `bad`): the file handling is covered by the test above. The start-up wiring needs a manual device test in session A: a theme that crashes the host at start must be replaced by `default` on the third start. A debug-only panic trigger (`debug.oladash.panic`, read in `load_ui` in `lib.rs`) is a follow-up. Until then, pushing `files/themes/strikes` as `<theme> 2` and restarting the app tests the swap without a crash.

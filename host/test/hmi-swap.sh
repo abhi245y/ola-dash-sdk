@@ -11,7 +11,7 @@ DASH=dev.olatool.dash/.MainActivity
 case "${1:-status}" in
     dash)
         "${A[@]}" "pm disable-user --user 0 com.olaelectric.hmiclient \
-            && cmd package set-home-activity $DASH && input keyevent KEYCODE_HOME"
+            && pm enable dev.olatool.dash && cmd package set-home-activity $DASH && input keyevent KEYCODE_HOME"
         ;;
     stock)
         "${A[@]}" "pm enable com.olaelectric.hmiclient && cmd package set-home-activity $STOCK \

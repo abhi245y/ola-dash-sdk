@@ -55,6 +55,7 @@ public final class MainActivity extends NativeActivity {
 
     /** Called synchronously by Rust before a theme-switch process exit. */
     public void onThemeExit() {
+        Trace.flush();
         BadThemeGuard.cleanExit();
     }
     private final Runnable clock = new Runnable() {
@@ -154,10 +155,15 @@ public final class MainActivity extends NativeActivity {
             // Missing or unreadable stamp: copy.
         }
         copyAssets("");
+        try {
+            BundledThemes.prune(new File(getFilesDir(), "themes"), getAssets().list("themes"));
+        } catch (IOException e) {
+            Log.w(TAG, "bundled theme prune failed, retrying at next APK update", e);
+        }
         if (update != null) Files.write(stamp.toPath(), update.getBytes(StandardCharsets.UTF_8));
     }
 
-    /** Copies bundled assets into files/, overwriting bundled theme ids on APK updates. */
+    /** Copies bundled assets into files/, overwriting bundled ids on APK updates; the caller prunes dropped ids. */
     private void copyAssets(String dir) throws IOException {
         String[] names = getAssets().list(dir);
         if (names == null) {

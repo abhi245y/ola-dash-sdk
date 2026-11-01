@@ -87,7 +87,7 @@ final class BadThemeGuard {
         themes = null;
     }
 
-    /** The theme survived its first seconds, or the app paused or is exiting on purpose (E0.S6 T1 calls this before exit(0)). */
+    /** The theme survived its first seconds, or the app paused or is exiting on purpose (theme restarts call this before _exit(0)). */
     static synchronized void cleanExit() {
         if (themes != null) new File(themes, "strikes").delete();
     }

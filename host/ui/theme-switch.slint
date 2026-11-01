@@ -1,8 +1,76 @@
+import { OverlayConfig } from "overlay.slint";
+import { OverlayPlacement } from "vehicle.slint";
+import { SwitchingScreen } from "switching.slint";
+export { SwitchingScreen }
+
 import { LockConfig } from "unlock.slint";
 import { HostText } from "hosttext.slint";
 import { Choice, PillButton } from "kit.slint";
 
 export struct ThemeInfo { id: string, name: string, description: string, preview: image, source: string }
+
+export component ThemeList inherits Flickable {
+    in property <[ThemeInfo]> themes;
+    in property <string> active-theme;
+    in-out property <string> selection;
+    content-width: self.width;
+    content-height: max(self.height, root.themes.length * 112px - 16px);
+    for theme[i] in root.themes : Rectangle {
+        x: 0px; y: i * 112px; width: parent.width; height: 96px;
+        border-radius: 24px;
+        border-width: 1px;
+        border-color: LockConfig.style.key-border;
+        property <bool> selected: root.selection == theme.id;
+        property <color> ink: self.selected ? LockConfig.on-accent : LockConfig.style.foreground;
+        property <color> secondary: self.selected ? LockConfig.on-accent : LockConfig.style.muted;
+        property <bool> has-tag: theme.id == root.active-theme || theme.source == "sideloaded";
+        property <length> text-width: self.width - 168px - (self.has-tag ? 168px : 24px);
+        background: self.selected ? LockConfig.style.accent : LockConfig.style.key-background;
+        accessible-role: button;
+        accessible-label: theme.name;
+        accessible-checkable: true;
+        accessible-checked: self.selected;
+        accessible-action-default => { root.selection = theme.id; }
+        Rectangle {
+            x: 24px; y: (parent.height - self.height) / 2; width: 128px; height: 77px;
+            border-radius: 12px;
+            border-width: 1px;
+            border-color: LockConfig.style.key-border;
+            background: LockConfig.style.key-border.with-alpha(0.5);
+            clip: true;
+            if theme.preview.width > 0 : Image {
+                x: 1px; y: 1px; width: parent.width - 2px; height: parent.height - 2px;
+                source: theme.preview;
+                image-fit: cover;
+            }
+        }
+        HostText {
+            x: 168px; y: 16px; width: parent.text-width; height: 32px;
+            text: theme.name;
+            color: parent.ink;
+            font-size: 26px;
+            font-weight: 700;
+            overflow: elide;
+        }
+        HostText {
+            x: 168px; y: 52px; width: parent.text-width; height: 24px;
+            text: theme.description;
+            color: parent.secondary;
+            font-size: 18px;
+            overflow: elide;
+        }
+        if theme.id == root.active-theme || theme.source == "sideloaded" : HostText {
+            x: parent.width - 152px; y: 0px; width: 128px; height: parent.height;
+            text: theme.id == root.active-theme ? "In use" : "Sideloaded";
+            color: parent.secondary;
+            font-size: 18px;
+            font-weight: 700;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+        }
+        TouchArea { clicked => { root.selection = theme.id; } }
+    }
+}
 
 export component FirstRunScreen inherits Rectangle {
     in property <[ThemeInfo]> themes;
@@ -12,22 +80,12 @@ export component FirstRunScreen inherits Rectangle {
     callback done(string);
     property <string> theme-selection;
     init => { root.theme-selection = root.active-theme; }
-    // Choice has up to four entries; keep an active theme outside that subset unchanged.
-    property <[string]> theme-names: root.themes.length == 0 ? []
-        : root.themes.length == 1 ? [root.themes[0].name]
-        : root.themes.length == 2 ? [root.themes[0].name, root.themes[1].name]
-        : root.themes.length == 3 ? [root.themes[0].name, root.themes[1].name, root.themes[2].name]
-        : [root.themes[0].name, root.themes[1].name, root.themes[2].name, root.themes[3].name];
-    property <int> theme-index: root.themes.length > 0 && root.themes[0].id == root.theme-selection ? 0
-        : root.themes.length > 1 && root.themes[1].id == root.theme-selection ? 1
-        : root.themes.length > 2 && root.themes[2].id == root.theme-selection ? 2
-        : root.themes.length > 3 && root.themes[3].id == root.theme-selection ? 3 : -1;
     background: LockConfig.style.background;
     TouchArea { }
     Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
-        width: 880px; height: 352px;
+        width: 880px; height: 600px;
         HostText {
             x: 0px; y: 0px; width: parent.width; height: 56px;
             text: "Set up your dash";
@@ -43,14 +101,14 @@ export component FirstRunScreen inherits Rectangle {
             font-weight: 700;
             vertical-alignment: center;
         }
-        Choice {
-            x: 192px; y: 96px; width: parent.width - 192px;
-            options: root.theme-names;
-            selected: root.theme-index;
-            chosen(index) => { root.theme-selection = root.themes[index].id; }
+        ThemeList {
+            x: 192px; y: 96px; width: parent.width - 192px; height: 320px;
+            themes: root.themes;
+            active-theme: root.active-theme;
+            selection <=> root.theme-selection;
         }
         HostText {
-            x: 0px; y: 192px; width: 168px; height: 64px;
+            x: 0px; y: 440px; width: 168px; height: 64px;
             text: "Night mode";
             color: LockConfig.style.foreground;
             font-size: 26px;
@@ -58,47 +116,16 @@ export component FirstRunScreen inherits Rectangle {
             vertical-alignment: center;
         }
         Choice {
-            x: 192px; y: 192px; width: parent.width - 192px;
+            x: 192px; y: 440px; width: parent.width - 192px;
             options: ["Off", "On"];
             selected: root.night ? 1 : 0;
             chosen(index) => { root.set-setting("night", index == 0 ? "off" : "on"); }
         }
         PillButton {
-            x: parent.width - self.width; y: 288px;
+            x: parent.width - self.width; y: 536px;
             label: "Done";
             pressed => { root.done(root.theme-selection); }
         }
-    }
-}
-
-export component SwitchingScreen inherits Rectangle {
-    in property <string> name;
-    background: LockConfig.style.background;
-    TouchArea { }
-    property <int> step: Math.mod(floor(animation-tick() / 125ms), 8);
-    Rectangle {
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        width: 80px; height: 80px;
-        for i in 8 : Rectangle {
-            x: 34px + 30px * Math.sin(i * 45deg);
-            y: 34px - 30px * Math.cos(i * 45deg);
-            width: 12px; height: 12px;
-            border-radius: 6px;
-            background: LockConfig.style.foreground;
-            opacity: 1 - Math.mod(root.step - i + 8, 8) * 0.1;
-        }
-    }
-    HostText {
-        x: 104px; y: parent.height / 2 + 64px;
-        width: parent.width - 208px; height: 48px;
-        text: "Switching to " + root.name;
-        color: LockConfig.style.foreground;
-        font-size: 32px;
-        font-weight: 800;
-        overflow: elide;
-        horizontal-alignment: center;
-        vertical-alignment: center;
     }
 }
 
@@ -106,31 +133,41 @@ export component ConfirmThemeScreen inherits Rectangle {
     in property <int> seconds: 10;
     callback keep();
     callback revert();
-    background: LockConfig.style.background;
+    background: transparent;
     TouchArea { }
-    VerticalLayout {
+    Rectangle {
         x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        width: 600px; height: 240px;
-        spacing: 24px;
-        HostText {
-            text: "Keep this theme?";
-            color: LockConfig.style.foreground;
-            font-size: 40px;
-            font-weight: 800;
-            horizontal-alignment: center;
-        }
-        HostText {
-            text: "Reverting in " + root.seconds + " s";
-            color: LockConfig.style.muted;
-            font-size: 22px;
-            horizontal-alignment: center;
-        }
-        Choice {
-            options: ["Keep", "Revert"];
-            selected: -1;
-            chosen(index) => {
-                if index == 0 { root.keep(); } else { root.revert(); }
+        y: parent.height - self.height - (OverlayConfig.placement == OverlayPlacement.bottom ? 80px : 32px);
+        width: 720px; height: 200px;
+        background: LockConfig.style.background;
+        border-radius: 24px;
+        border-width: 1px;
+        border-color: LockConfig.style.key-border;
+        VerticalLayout {
+            x: 32px; y: 20px;
+            width: parent.width - 64px; height: parent.height - 40px;
+            spacing: 8px;
+            HostText {
+                height: 48px;
+                text: "Keep this theme?";
+                color: LockConfig.style.foreground;
+                font-size: 40px;
+                font-weight: 800;
+                horizontal-alignment: center;
+            }
+            HostText {
+                height: 32px;
+                text: "Reverting in " + root.seconds + " s";
+                color: LockConfig.style.muted;
+                font-size: 22px;
+                horizontal-alignment: center;
+            }
+            Choice {
+                options: ["Keep", "Revert"];
+                selected: -1;
+                chosen(index) => {
+                    if index == 0 { root.keep(); } else { root.revert(); }
+                }
             }
         }
     }

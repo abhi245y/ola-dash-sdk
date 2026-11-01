@@ -517,8 +517,9 @@ fn wire(ui: &ComponentInstance, app: &AndroidApp) -> Result<(), String> {
     Ok(())
 }
 
-/// Leaves the restart marker, clears the bad-theme strike and exits; Android relaunches
-/// the home app. A failed bridge call still exits: the selection files are already written.
+/// Leaves the restart marker, flushes tracing and clears the bad-theme strike, then exits
+/// without C exit handlers that race Binder threads. Android relaunches the home app.
+/// A failed bridge call still exits: the selection files are already written.
 fn clean_restart(app: &AndroidApp, files: &Path, name: &str) -> ! {
     if let Err(e) = theme_switch::mark_restart(files, name) {
         log::warn!("theme restart marker: {e}");
@@ -533,7 +534,7 @@ fn clean_restart(app: &AndroidApp, files: &Path, name: &str) -> ! {
     }) {
         log::warn!("theme clean-exit bridge: {e}");
     }
-    std::process::exit(0)
+    unsafe { libc::_exit(0) }
 }
 
 /// Theme folder relative to `files/`; "default" is the bundled fallback copy.

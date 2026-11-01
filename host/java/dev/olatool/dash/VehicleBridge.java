@@ -79,11 +79,6 @@ final class VehicleBridge {
 
     // ponytail: fixed threshold for the low-battery popup. Calibrate against stock derate points.
     private static final int LOW_BATTERY_PCT = 10;
-    // ponytail: blinker lamp pulses on CAN; hold "off" this long so the host reports steady on
-    // while the stalk is active. Calibrate against the real blink period.
-    private static final long BLINKER_HOLD_MS = 1000L;
-    private static final Runnable LEFT_OFF = () -> setBool(LEFT_IND, false);
-    private static final Runnable RIGHT_OFF = () -> setBool(RIGHT_IND, false);
 
     private static native void nativeSet(int id, double value);
     private static native boolean nativeTakeTouched();
@@ -339,7 +334,7 @@ final class VehicleBridge {
 
     /**
      * Debug test channel: runs one parser callback as if the vehicle had sent it, so
-     * the same bridge logic (alerts, blinker hold, mode mapping) is exercised.
+     * the same bridge logic (alerts, mode mapping) is exercised.
      * target: display|motor|modes|alerts|info|commands|battery|charger|handlebar. Args are parsed by parameter
      * type (int, long, float, boolean, enum constant name); missing args are null.
      */
@@ -573,17 +568,6 @@ final class VehicleBridge {
         nativeSet(FAULT, faultBits != 0 ? 1 : 0);
     }
 
-    /** Steady-on indicator: a false is applied only after the hold window with no true. */
-    private static void indicator(int id, boolean on) {
-        Runnable off = id == LEFT_IND ? LEFT_OFF : RIGHT_OFF;
-        work.removeCallbacks(off);
-        if (on) {
-            setBool(id, true);
-        } else {
-            work.postDelayed(off, BLINKER_HOLD_MS);
-        }
-    }
-
     private static void setFault(int bit, boolean on) {
         synchronized (LOCK) {
             faultBits = on ? (faultBits | (1 << bit)) : (faultBits & ~(1 << bit));
@@ -607,13 +591,13 @@ final class VehicleBridge {
         @Override
         public void isLeftIndicatorOn(boolean on, IndicatorFault fault) {
             Trace.call("IDisplayInfoCallbacks.isLeftIndicatorOn", on, fault);
-            indicator(LEFT_IND, on);
+            setBool(LEFT_IND, on);
         }
 
         @Override
         public void isRightIndicatorOn(boolean on, IndicatorFault fault) {
             Trace.call("IDisplayInfoCallbacks.isRightIndicatorOn", on, fault);
-            indicator(RIGHT_IND, on);
+            setBool(RIGHT_IND, on);
         }
 
         @Override

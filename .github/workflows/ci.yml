@@ -104,7 +104,7 @@ jobs:
           export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$NDK_BIN/aarch64-linux-android29-clang"
           cargo check --manifest-path host/Cargo.toml --target aarch64-linux-android
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
